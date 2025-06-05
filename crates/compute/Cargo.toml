@@ -13,6 +13,9 @@ wgpu = { version = "0.19", features=["metal"], optional = true }
 pollster = "0.3"
 bytemuck = { version = "1.15", features = ["derive"] }
 tracing = "0.1"
+rand = "0.8"
+rand_distr = "0.4"
+rand_chacha = "0.3"
 
 [dev-dependencies]
 # No dev-dependencies needed for now beyond what the tests might use implicitly via std

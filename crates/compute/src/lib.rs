@@ -643,13 +643,39 @@ impl ComputeBackend for MockCpu {
                 }
             }
             Kernel::RngNormal => {
-                if binds.len() >= 1 { // Placeholder for output buffer
-                     let len = binds[0].shape.iter().product::<usize>();
-                     let out_bytes = vec![0u8; len * binds[0].element_size_in_bytes];
-                     Ok(vec![out_bytes])
-                } else {
-                    Err(ComputeError::ShapeMismatch("missing output buffer for RngNormal"))
+                if binds.len() < 2 {
+                    return Err(ComputeError::ShapeMismatch(
+                        "RngNormal expects 2 buffers (output, config)",
+                    ));
                 }
+
+                let out_view = &binds[0];
+                let config_view = &binds[1];
+
+                if out_view.element_size_in_bytes != std::mem::size_of::<f32>() {
+                    return Err(ComputeError::ShapeMismatch(
+                        "RngNormal output currently only supports f32",
+                    ));
+                }
+
+                use rand::SeedableRng;
+                use rand::Rng;
+                use rand_chacha::ChaCha8Rng;
+                use rand_distr::StandardNormal;
+
+                let mut seed = [0u8; 32];
+                let copy_len = seed.len().min(config_view.data.len());
+                seed[..copy_len].copy_from_slice(&config_view.data[..copy_len]);
+                let mut rng = ChaCha8Rng::from_seed(seed);
+
+                let num_elems = out_view.shape.iter().product::<usize>();
+                let mut vals: Vec<f32> = Vec::with_capacity(num_elems);
+                for _ in 0..num_elems {
+                    vals.push(rng.sample(StandardNormal));
+                }
+
+                let out_bytes = bytemuck::cast_slice(&vals).to_vec();
+                Ok(vec![out_bytes])
             }
         }
     }
@@ -1802,6 +1828,45 @@ mod tests {
         assert_eq!(output_bytes2.len(), std::mem::size_of::<f32>());
         let output_value2: f32 = *bytemuck::from_bytes(&output_bytes2);
         assert_eq!(output_value2, expected_max2, "Mismatch for ReduceMax (case 2). Got: {}, Expected: {}", output_value2, expected_max2);
+    }
+
+    #[test]
+    fn mock_rng_normal_generates_values() {
+        let cpu = MockCpu::default();
+        let len = 1000usize;
+
+        let out_placeholder: Arc<[u8]> = vec![0u8; len * std::mem::size_of::<f32>()].into();
+        let out_buffer_view = BufferView::new(
+            out_placeholder,
+            vec![len],
+            std::mem::size_of::<f32>(),
+        );
+
+        // Deterministic seed so test is reproducible
+        let seed = [42u8; 32];
+        let config_bytes: Arc<[u8]> = seed.to_vec().into();
+        let config_buffer_view = BufferView::new(config_bytes, vec![seed.len()], 1);
+
+        let result_buffers = cpu
+            .dispatch(&Kernel::RngNormal, &[out_buffer_view, config_buffer_view], [1, 1, 1])
+            .expect("Dispatch for RngNormal failed");
+
+        assert_eq!(result_buffers.len(), 1, "RngNormal should return one output buffer");
+        let output_bytes = &result_buffers[0];
+        assert_eq!(output_bytes.len(), len * std::mem::size_of::<f32>());
+
+        let output_values: &[f32] = bytemuck::cast_slice(output_bytes);
+        assert_eq!(output_values.len(), len);
+
+        let mean: f32 = output_values.iter().copied().sum::<f32>() / len as f32;
+        let var: f32 = output_values
+            .iter()
+            .map(|v| (v - mean).powi(2))
+            .sum::<f32>()
+            / len as f32;
+
+        assert!(mean.abs() < 0.1, "mean={mean}");
+        assert!((var - 1.0).abs() < 0.25, "var={var}");
     }
 } // Closing brace for the main tests module
 
