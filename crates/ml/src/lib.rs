@@ -42,7 +42,7 @@ impl Default for Graph { fn default() -> Self { Self { calls: Vec::new() } } }
 impl Graph {
     pub fn add_call(&mut self, call: OpCall) { self.calls.push(call); }
 
-    pub fn run(&mut self, backend: &impl ComputeBackend) -> Result<(), ComputeError> {
+    pub fn run<B: ComputeBackend + ?Sized>(&mut self, backend: &B) -> Result<(), ComputeError> {
         for call in &mut self.calls {
             let len = call.out.len();
             let a_view = upload(&mut call.a);

@@ -403,3 +403,30 @@ pub mod wgpu_metal_backend {
 // Re-export WgpuMetal at the crate root if the feature is enabled.
 #[cfg(all(target_os = "macos", feature = "metal"))]
 pub use wgpu_metal_backend::WgpuMetal;
+
+/// Returns a compute backend if available, falling back to the CPU implementation.
+///
+/// On macOS with the `metal` feature enabled this will attempt to create a
+/// [`WgpuMetal`] backend. If GPU initialization fails or the feature/OS is not
+/// available, a [`MockCpu`] backend is returned.
+#[must_use]
+pub fn default_backend() -> std::sync::Arc<dyn ComputeBackend> {
+    #[cfg(all(target_os = "macos", feature = "metal"))]
+    {
+        if let Ok(gpu) = WgpuMetal::try_new() {
+            return std::sync::Arc::new(gpu);
+        }
+    }
+
+    #[cfg(feature = "mock")]
+    {
+        return std::sync::Arc::new(MockCpu);
+    }
+
+    #[cfg(not(feature = "mock"))]
+    {
+        compile_error!("No compute backend available. Enable the `mock` feature or a GPU backend.");
+    }
+
+    unreachable!("default_backend configuration did not compile")
+}
