@@ -1,17 +1,8 @@
 [package]
-name = "physics"
+name = "ml"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 compute = { path = "../compute", features = ["mock"] }
 bytemuck = { version = "1.15", features = ["derive"] }
-
-[dev-dependencies]
-anyhow = "1.0"
-criterion = "0.5"
-ml = { path = "../ml" }
-
-[[bench]]
-name = "physics"
-harness = false

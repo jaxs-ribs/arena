@@ -10,4 +10,5 @@ metal = ["dep:wgpu"]
 [dependencies]
 thiserror = "1.0"
 wgpu = { version = "0.19", features=["metal"], optional = true }
-pollster = "0.3" 
+pollster = "0.3"
+bytemuck = { version = "1.15", features = ["derive"] }
