@@ -19,7 +19,12 @@ pub enum Kernel {
     // element-wise
     Add,
     Mul,
+    Sub,
+    Div,
     Where,
+    Exp,
+    Log,
+    Tanh,
     // reductions
     ReduceSum,
     // linear algebra
@@ -102,7 +107,7 @@ impl ComputeBackend for MockCpu {
                     Ok(Vec::new())
                 }
             }
-            Kernel::Add | Kernel::Mul | Kernel::Where => {
+            Kernel::Add | Kernel::Mul | Kernel::Sub | Kernel::Div | Kernel::Where => {
                 if binds.len() < 3 {
                     return Err(ComputeError::ShapeMismatch("missing buffers"));
                 }
@@ -116,7 +121,28 @@ impl ComputeBackend for MockCpu {
                     out[i] = match shader {
                         Kernel::Add => av + bv,
                         Kernel::Mul => av * bv,
+                        Kernel::Sub => av - bv,
+                        Kernel::Div => av / bv,
                         Kernel::Where => if bv == 0.0 { av } else { bv },
+                        _ => unreachable!(),
+                    };
+                }
+                let bytes = bytemuck::cast_slice(&out).to_vec();
+                Ok(vec![bytes])
+            }
+            Kernel::Exp | Kernel::Log | Kernel::Tanh => {
+                if binds.len() < 2 {
+                    return Err(ComputeError::ShapeMismatch("missing buffers"));
+                }
+                let len = binds[0].shape.iter().product::<usize>();
+                let a: &[f32] = bytemuck::cast_slice(&binds[0].data);
+                let mut out = vec![0f32; len];
+                for i in 0..len {
+                    let av = a[i];
+                    out[i] = match shader {
+                        Kernel::Exp => av.exp(),
+                        Kernel::Log => av.ln(),
+                        Kernel::Tanh => av.tanh(),
                         _ => unreachable!(),
                     };
                 }
@@ -244,7 +270,12 @@ mod tests {
         assert_eq!(binding_count(&Kernel::SphereStep), 2);
         assert_eq!(binding_count(&Kernel::Add), 4);
         assert_eq!(binding_count(&Kernel::Mul), 4);
+        assert_eq!(binding_count(&Kernel::Sub), 4);
+        assert_eq!(binding_count(&Kernel::Div), 4);
         assert_eq!(binding_count(&Kernel::Where), 4);
+        assert_eq!(binding_count(&Kernel::Exp), 3);
+        assert_eq!(binding_count(&Kernel::Log), 3);
+        assert_eq!(binding_count(&Kernel::Tanh), 3);
         assert_eq!(binding_count(&Kernel::ReduceSum), 3);
         assert_eq!(binding_count(&Kernel::MatMul), 3);
     }
