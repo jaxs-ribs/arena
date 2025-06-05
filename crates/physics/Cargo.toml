@@ -15,3 +15,7 @@ ml = { path = "../ml" }
 [[bench]]
 name = "physics"
 harness = false
+
+[[bench]]
+name = "scene"
+harness = false
