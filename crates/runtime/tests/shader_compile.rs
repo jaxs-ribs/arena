@@ -38,19 +38,19 @@ fn validate_wgsl_shader(shader_path_str: &str) {
 
 #[test]
 fn validate_noop_shader_compiles() {
-    let _mock_cpu_instance = compute::MockCpu;
+    let _backend = compute::default_backend();
     validate_wgsl_shader("../../shaders/noop.wgsl");
 }
 
 #[test]
 fn validate_integrate_euler_shader_compiles() {
-    let _mock_cpu_instance_2 = compute::MockCpu;
+    let _backend = compute::default_backend();
     validate_wgsl_shader("../../shaders/integrate_euler.wgsl");
 }
 
 #[test]
 fn validate_elementwise_shader_compiles() {
-    let _mock_cpu_instance_3 = compute::MockCpu;
+    let _backend = compute::default_backend();
     validate_wgsl_shader("../../shaders/elementwise.wgsl");
 }
 

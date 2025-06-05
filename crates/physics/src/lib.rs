@@ -90,7 +90,7 @@ impl PhysicsSim {
             force: [0.0, 0.0],
         };
 
-        let backend = Arc::new(compute::MockCpu);
+        let backend = compute::default_backend();
 
         Self {
             spheres,
@@ -197,12 +197,12 @@ mod tests {
 
     // Unit test for step_gpu (will fail or do nothing until step_gpu is implemented)
     #[test]
-    fn test_step_gpu_mock_ok_with_valid_buffers() {
+    fn test_step_gpu_default_backend_ok_with_valid_buffers() {
         let mut sim = PhysicsSim::new_single_sphere(5.0);
         let result = sim.step_gpu();
-        assert!(result.is_ok(), "step_gpu with MockCpu should return Ok if buffers are valid, got {result:?}");
-        // Further assertions could check if MockCpu (if it modified anything) did correctly.
-        // For now, MockCpu in compute crate only does shape checks and returns Ok if shapes are fine.
+        assert!(result.is_ok(), "step_gpu should return Ok if buffers are valid, got {result:?}");
+        // Further assertions could check if the backend (mock or real GPU) behaved correctly.
+        // For now, the mock backend only performs shape checks and returns Ok if shapes are fine.
         // The actual step_gpu implementation will involve creating BufferViews and calling dispatch.
         // This test will become more meaningful once step_gpu does that.
     }

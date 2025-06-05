@@ -1,10 +1,11 @@
 use ml::{Graph, Tensor, Op, OpCall};
-use compute::MockCpu;
+use compute::default_backend;
 
 fn run_single(call: OpCall) -> Tensor {
     let mut g = Graph::default();
     g.add_call(call);
-    g.run(&MockCpu).unwrap();
+    let backend = default_backend();
+    g.run(backend.as_ref()).unwrap();
     g.calls.pop().unwrap().out
 }
 
