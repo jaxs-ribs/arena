@@ -555,16 +555,185 @@ impl ComputeBackend for MockCpu {
                 let out_bytes = bytemuck::bytes_of(&max_value).to_vec();
                 Ok(vec![out_bytes])
             }
-            Kernel::SegmentedReduceSum | Kernel::ScatterAdd => {
-                // Reductions typically have input, output, and maybe axis/segment info
-                // For now, placeholder.
-                Ok(Vec::new()) // Placeholder, might need specific output shapes
+            Kernel::SegmentedReduceSum => {
+                if binds.len() < 4 { // DATA_IN, INDICES, OUT, CONFIG per layout.rs
+                    return Err(ComputeError::ShapeMismatch("SegmentedReduceSum kernel expects 4 buffers"));
+                }
+                let data_view = &binds[0];
+                let segments_view = &binds[1];
+                // binds[2] is output_placeholder, binds[3] is config
+
+                if data_view.element_size_in_bytes != std::mem::size_of::<f32>() {
+                    return Err(ComputeError::ShapeMismatch("SegmentedReduceSum kernel currently only supports f32 data input"));
+                }
+                if segments_view.element_size_in_bytes != std::mem::size_of::<u32>() { // Assuming u32 for segment indices as per test
+                    return Err(ComputeError::ShapeMismatch("SegmentedReduceSum kernel currently only supports u32 segment indices"));
+                }
+
+                let data_values: &[f32] = bytemuck::cast_slice(&data_view.data);
+                let segment_indices: &[u32] = bytemuck::cast_slice(&segments_view.data);
+
+                if segment_indices.is_empty() && !data_values.is_empty() {
+                    return Err(ComputeError::ShapeMismatch("SegmentedReduceSum received data but no segment indices"));
+                }
+                if segment_indices.is_empty() && data_values.is_empty() { // No segments, no data, output empty sums
+                    return Ok(vec![Vec::new()]);
+                }
+
+                let mut output_sums: Vec<f32> = Vec::with_capacity(segment_indices.len());
+
+                for i in 0..segment_indices.len() {
+                    let segment_start = segment_indices[i] as usize;
+                    let segment_end = if i + 1 < segment_indices.len() {
+                        segment_indices[i+1] as usize
+                    } else {
+                        data_values.len()
+                    };
+
+                    if segment_start > segment_end || segment_end > data_values.len() {
+                        return Err(ComputeError::ShapeMismatch("Segment indices out of bounds or invalid segment range"));
+                    }
+
+                    let segment_data = &data_values[segment_start..segment_end];
+                    output_sums.push(segment_data.iter().sum());
+                }
+                
+                let out_bytes = bytemuck::cast_slice(&output_sums).to_vec();
+                Ok(vec![out_bytes])
+            }
+            Kernel::ScatterAdd => {
+                if binds.len() < 4 { // DATA_IN, INDICES, OUT_ACCUMULATOR, CONFIG per layout.rs
+                    return Err(ComputeError::ShapeMismatch("ScatterAdd kernel expects 4 buffers"));
+                }
+                let values_view = &binds[0];    // Values to add
+                let indices_view = &binds[1];   // Indices in the accumulator
+                let accumulator_view = &binds[2]; // Buffer to add to
+                // binds[3] is config
+
+                if values_view.element_size_in_bytes != std::mem::size_of::<f32>() {
+                    return Err(ComputeError::ShapeMismatch("ScatterAdd kernel currently only supports f32 data for values to add"));
+                }
+                if indices_view.element_size_in_bytes != std::mem::size_of::<u32>() { // Assuming u32 for indices as per test
+                    return Err(ComputeError::ShapeMismatch("ScatterAdd kernel currently only supports u32 for indices"));
+                }
+                if accumulator_view.element_size_in_bytes != std::mem::size_of::<f32>() {
+                    return Err(ComputeError::ShapeMismatch("ScatterAdd kernel currently only supports f32 for the accumulator buffer"));
+                }
+
+                let values_to_add: &[f32] = bytemuck::cast_slice(&values_view.data);
+                let indices: &[u32] = bytemuck::cast_slice(&indices_view.data);
+                
+                if values_to_add.len() != indices.len() {
+                    return Err(ComputeError::ShapeMismatch("ScatterAdd requires the number of values to add to match the number of indices"));
+                }
+
+                // Create a mutable copy of the accumulator data to modify
+                let mut output_accumulator: Vec<f32> = bytemuck::cast_slice::<_, f32>(&accumulator_view.data).to_vec();
+
+                for (i, &value_to_add) in values_to_add.iter().enumerate() {
+                    let scatter_idx = indices[i] as usize;
+                    if scatter_idx >= output_accumulator.len() {
+                        return Err(ComputeError::ShapeMismatch("ScatterAdd index out of bounds for the output accumulator buffer"));
+                    }
+                    output_accumulator[scatter_idx] += value_to_add;
+                }
+                
+                let out_bytes = bytemuck::cast_slice(&output_accumulator).to_vec();
+                Ok(vec![out_bytes])
             }
             Kernel::Gather => {
-                Ok(Vec::new()) // Placeholder
+                if binds.len() < 4 { // DATA_IN, INDICES, OUT, CONFIG per layout.rs
+                    return Err(ComputeError::ShapeMismatch("Gather kernel expects 4 buffers"));
+                }
+                let source_data_view = &binds[0];
+                let indices_view = &binds[1];
+                // binds[2] is output_placeholder, binds[3] is config
+
+                if source_data_view.element_size_in_bytes != std::mem::size_of::<f32>() {
+                    return Err(ComputeError::ShapeMismatch("Gather kernel currently only supports f32 source data"));
+                }
+                if indices_view.element_size_in_bytes != std::mem::size_of::<u32>() { // Assuming u32 for indices as per test
+                    return Err(ComputeError::ShapeMismatch("Gather kernel currently only supports u32 for indices"));
+                }
+
+                let source_data: &[f32] = bytemuck::cast_slice(&source_data_view.data);
+                let indices_to_gather: &[u32] = bytemuck::cast_slice(&indices_view.data);
+
+                if source_data.is_empty() && !indices_to_gather.is_empty() {
+                     return Err(ComputeError::ShapeMismatch("Gather kernel received indices but no source data"));
+                }
+
+                let mut gathered_values: Vec<f32> = Vec::with_capacity(indices_to_gather.len());
+
+                for &index_to_gather_u32 in indices_to_gather {
+                    let index_to_gather = index_to_gather_u32 as usize;
+                    if index_to_gather >= source_data.len() {
+                        return Err(ComputeError::ShapeMismatch("Gather index out of bounds for source data"));
+                    }
+                    gathered_values.push(source_data[index_to_gather]);
+                }
+                
+                let out_bytes = bytemuck::cast_slice(&gathered_values).to_vec();
+                Ok(vec![out_bytes])
             }
             Kernel::MatMul => {
-                Ok(Vec::new()) // Placeholder
+                if binds.len() < 4 { // IN_A, IN_B, OUT, CONFIG per layout.rs
+                    return Err(ComputeError::ShapeMismatch("MatMul kernel expects 4 buffers"));
+                }
+                let a_view = &binds[0];
+                let b_view = &binds[1];
+                // binds[2] is output_placeholder
+                let config_view = &binds[3];
+
+                #[repr(C)]
+                #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+                struct MatMulConfig { m: u32, k: u32, n: u32 }
+
+                if config_view.data.len() != std::mem::size_of::<MatMulConfig>() {
+                    return Err(ComputeError::ShapeMismatch("MatMul config buffer has incorrect size"));
+                }
+                let config: &MatMulConfig = bytemuck::from_bytes(&config_view.data);
+                let m = config.m as usize;
+                let k = config.k as usize;
+                let n = config.n as usize;
+
+                if a_view.element_size_in_bytes != std::mem::size_of::<f32>() ||
+                   b_view.element_size_in_bytes != std::mem::size_of::<f32>() {
+                    return Err(ComputeError::ShapeMismatch("MatMul kernel currently only supports f32 data for matrices A and B"));
+                }
+
+                let a_data: &[f32] = bytemuck::cast_slice(&a_view.data);
+                let b_data: &[f32] = bytemuck::cast_slice(&b_view.data);
+
+                if a_data.len() != m * k {
+                    return Err(ComputeError::ShapeMismatch("Matrix A data length does not match M*K from config"));
+                }
+                if b_data.len() != k * n {
+                    return Err(ComputeError::ShapeMismatch("Matrix B data length does not match K*N from config"));
+                }
+                // Optional: Check a_view.shape and b_view.shape against m, k, n if they are set to e.g. vec![m,k]
+                if a_view.shape != vec![m,k] {
+                     return Err(ComputeError::ShapeMismatch("Matrix A shape in BufferView does not match M,K from config"));
+                }
+                 if b_view.shape != vec![k,n] {
+                     return Err(ComputeError::ShapeMismatch("Matrix B shape in BufferView does not match K,N from config"));
+                }
+
+
+                let mut output_data = vec![0.0f32; m * n];
+
+                for i in 0..m { // Iterate over rows of A / output C
+                    for j in 0..n { // Iterate over columns of B / output C
+                        let mut sum = 0.0f32;
+                        for l in 0..k { // Iterate over columns of A / rows of B (the common dimension)
+                            sum += a_data[i * k + l] * b_data[l * n + j];
+                        }
+                        output_data[i * n + j] = sum;
+                    }
+                }
+                
+                let out_bytes = bytemuck::cast_slice(&output_data).to_vec();
+                Ok(vec![out_bytes])
             }
             Kernel::IntegrateBodies => {
                 if binds.len() < 2 {
@@ -626,7 +795,7 @@ impl ComputeBackend for MockCpu {
                 let updated_spheres_bytes = bytemuck::cast_slice(&updated_spheres).to_vec();
                 Ok(vec![updated_spheres_bytes])
             }
-            Kernel::DetectContactsSDF | Kernel::SolveContactsPBD | Kernel::ExpandInstances => {
+            Kernel::DetectContactsSDF | Kernel::SolveContactsPBD => { // Removed ExpandInstances from here
                 // Physics & helper ops - placeholder
                 // These might have specific data expectations, e.g., returning updated body data.
                 if !binds.is_empty() {
@@ -643,13 +812,55 @@ impl ComputeBackend for MockCpu {
                 }
             }
             Kernel::RngNormal => {
-                if binds.len() >= 1 { // Placeholder for output buffer
-                     let len = binds[0].shape.iter().product::<usize>();
-                     let out_bytes = vec![0u8; len * binds[0].element_size_in_bytes];
-                     Ok(vec![out_bytes])
-                } else {
-                    Err(ComputeError::ShapeMismatch("missing output buffer for RngNormal"))
+                if binds.len() < 2 { // OUT, CONFIG per layout.rs
+                    return Err(ComputeError::ShapeMismatch("RngNormal kernel expects 2 buffers (output_placeholder, config)"));
                 }
+                let output_view = &binds[0];
+                // binds[1] is config, currently unused for deterministic sequence generation
+
+                if output_view.element_size_in_bytes != std::mem::size_of::<f32>() {
+                    return Err(ComputeError::ShapeMismatch("RngNormal kernel currently only supports f32 output"));
+                }
+
+                let num_values_to_generate = output_view.shape.iter().product::<usize>();
+                
+                let output_values: Vec<f32> = (0..num_values_to_generate)
+                    .map(|i| i as f32 * 0.1) // Deterministic sequence for testing
+                    .collect();
+
+                let out_bytes = bytemuck::cast_slice(&output_values).to_vec();
+                Ok(vec![out_bytes])
+            }
+            Kernel::ExpandInstances => {
+                if binds.len() < 3 { // IN, OUT_placeholder, CONFIG per layout.rs
+                    return Err(ComputeError::ShapeMismatch("ExpandInstances kernel expects 3 buffers"));
+                }
+                let template_view = &binds[0];
+                // binds[1] is output_placeholder, its data/shape not directly used by CPU impl beyond initial validation
+                let config_view = &binds[2];
+
+                #[repr(C)]
+                #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+                struct ExpandConfig { count: u32 }
+
+                if config_view.data.len() != std::mem::size_of::<ExpandConfig>() {
+                    return Err(ComputeError::ShapeMismatch("ExpandInstances config buffer has incorrect size"));
+                }
+                let config: &ExpandConfig = bytemuck::from_bytes(&config_view.data);
+                let repetition_count = config.count as usize;
+
+                if repetition_count == 0 {
+                    return Ok(vec![Vec::new()]); // Expand 0 times results in an empty buffer
+                }
+
+                let template_bytes = &template_view.data;
+                let mut output_bytes = Vec::with_capacity(template_bytes.len() * repetition_count);
+
+                for _ in 0..repetition_count {
+                    output_bytes.extend_from_slice(template_bytes);
+                }
+                
+                Ok(vec![output_bytes])
             }
         }
     }
@@ -1864,6 +2075,311 @@ mod tests {
                 i, got, expected);
         }
     }
+
+    #[test]
+    fn mock_scatter_add_adds_values_to_indices() {
+        let cpu = MockCpu::default();
+
+        // Initial output/accumulator: [0, 0, 0, 0, 0]
+        // Values to add: [1.0, 2.0, 3.0]
+        // Indices for additions: [1, 0, 3] (0-indexed)
+        // Expected result:
+        // output[0] = 0 + 2.0 = 2.0
+        // output[1] = 0 + 1.0 = 1.0
+        // output[2] = 0 (unchanged)
+        // output[3] = 0 + 3.0 = 3.0
+        // output[4] = 0 (unchanged)
+        // Expected: [2.0, 1.0, 0.0, 3.0, 0.0]
+
+        let initial_output_data = vec![0.0f32; 5];
+        let values_to_add_data = vec![1.0f32, 2.0, 3.0];
+        let indices_data = vec![1u32, 0, 3]; // Indices in the output buffer
+        let expected_final_output_data = vec![2.0f32, 1.0, 0.0, 3.0, 0.0];
+
+        let values_to_add_bytes: Arc<[u8]> = bytemuck::cast_slice(&values_to_add_data).to_vec().into();
+        let values_buffer_view = BufferView::new(
+            values_to_add_bytes, vec![values_to_add_data.len()], std::mem::size_of::<f32>()
+        );
+
+        let indices_bytes: Arc<[u8]> = bytemuck::cast_slice(&indices_data).to_vec().into();
+        let indices_buffer_view = BufferView::new(
+            indices_bytes, vec![indices_data.len()], std::mem::size_of::<u32>()
+        );
+
+        // This is the buffer that will be updated. For MockCpu, it acts as INOUT or IN + separate OUT.
+        // The convention for MockCpu is that the kernel returns the *new* state of this buffer.
+        let initial_output_bytes: Arc<[u8]> = bytemuck::cast_slice(&initial_output_data).to_vec().into();
+        let output_accumulator_buffer_view = BufferView::new(
+            initial_output_bytes, vec![initial_output_data.len()], std::mem::size_of::<f32>()
+        );
+
+        let config_data = vec![0u32]; // Dummy config
+        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
+        let config_buffer_view = BufferView::new(
+            config_bytes, vec![config_data.len()], std::mem::size_of::<u32>()
+        );
+
+        // Order for ScatterAdd: DATA_IN (values_to_add), INDICES, OUT_ACCUMULATOR, CONFIG
+        let dispatch_binds = [
+            values_buffer_view, 
+            indices_buffer_view, 
+            output_accumulator_buffer_view, // This is binds[2]
+            config_buffer_view
+        ];
+
+        let workgroups = [1, 1, 1];
+        let result_buffers = cpu.dispatch(&Kernel::ScatterAdd, &dispatch_binds, workgroups)
+            .expect("Dispatch for ScatterAdd failed");
+
+        assert_eq!(result_buffers.len(), 1, "ScatterAdd should return one output buffer (the updated accumulator)");
+        let output_bytes = &result_buffers[0];
+        assert_eq!(output_bytes.len(), expected_final_output_data.len() * std::mem::size_of::<f32>(), "Output buffer size mismatch for ScatterAdd");
+
+        let output_values: &[f32] = bytemuck::cast_slice(output_bytes);
+        assert_eq!(output_values.len(), expected_final_output_data.len(), "Output values length mismatch for ScatterAdd");
+
+        for (i, (got, expected)) in output_values.iter().zip(expected_final_output_data.iter()).enumerate() {
+            assert!((got - expected).abs() < 1e-6, 
+                "Mismatch for ScatterAdd at index {}. Got: {}, Expected: {}", 
+                i, got, expected);
+        }
+    }
+
+    #[test]
+    fn mock_gather_collects_values_from_indices() {
+        let cpu = MockCpu::default();
+
+        // Source Data: [10.0, 11.0, 12.0, 13.0, 14.0]
+        // Indices to Gather: [3, 0, 2, 2, 4]
+        // Expected Output: [13.0, 10.0, 12.0, 12.0, 14.0]
+
+        let source_data = vec![10.0f32, 11.0, 12.0, 13.0, 14.0];
+        let indices_to_gather = vec![3u32, 0, 2, 2, 4];
+        let expected_output_data = vec![13.0f32, 10.0, 12.0, 12.0, 14.0];
+
+        let source_data_bytes: Arc<[u8]> = bytemuck::cast_slice(&source_data).to_vec().into();
+        let source_buffer_view = BufferView::new(
+            source_data_bytes, vec![source_data.len()], std::mem::size_of::<f32>()
+        );
+
+        let indices_bytes: Arc<[u8]> = bytemuck::cast_slice(&indices_to_gather).to_vec().into();
+        let indices_buffer_view = BufferView::new(
+            indices_bytes, vec![indices_to_gather.len()], std::mem::size_of::<u32>()
+        );
+
+        // Output buffer placeholder - its size is determined by the number of indices
+        let output_buffer_placeholder_bytes: Arc<[u8]> = vec![0u8; expected_output_data.len() * std::mem::size_of::<f32>()].into();
+        let output_buffer_view = BufferView::new(
+            output_buffer_placeholder_bytes, vec![expected_output_data.len()], std::mem::size_of::<f32>()
+        );
+
+        let config_data = vec![0u32]; // Dummy config
+        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
+        let config_buffer_view = BufferView::new(
+            config_bytes, vec![config_data.len()], std::mem::size_of::<u32>()
+        );
+
+        // Order for Gather: DATA_IN (source_data), INDICES, OUT, CONFIG
+        let dispatch_binds = [
+            source_buffer_view, 
+            indices_buffer_view, 
+            output_buffer_view, 
+            config_buffer_view
+        ];
+
+        let workgroups = [1, 1, 1];
+        let result_buffers = cpu.dispatch(&Kernel::Gather, &dispatch_binds, workgroups)
+            .expect("Dispatch for Gather failed");
+
+        assert_eq!(result_buffers.len(), 1, "Gather should return one output buffer");
+        let output_bytes = &result_buffers[0];
+        assert_eq!(output_bytes.len(), expected_output_data.len() * std::mem::size_of::<f32>(), "Output buffer size mismatch for Gather");
+
+        let output_values: &[f32] = bytemuck::cast_slice(output_bytes);
+        assert_eq!(output_values.len(), expected_output_data.len(), "Output values length mismatch for Gather");
+
+        for (i, (got, expected)) in output_values.iter().zip(expected_output_data.iter()).enumerate() {
+            assert!((got - expected).abs() < 1e-6, 
+                "Mismatch for Gather at index {}. Got: {}, Expected: {}", 
+                i, got, expected);
+        }
+    }
+
+    #[repr(C)]
+    #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+    struct TestMatMulConfig { m: u32, k: u32, n: u32 }
+
+    #[test]
+    fn mock_matmul_multiplies_matrices() {
+        let cpu = MockCpu::default();
+
+        // Matrix A (2x3):
+        // [1.0, 2.0, 3.0]
+        // [4.0, 5.0, 6.0]
+        let a_data = vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0];
+        let m = 2u32; // rows_A
+        let k = 3u32; // cols_A / rows_B
+
+        // Matrix B (3x2):
+        // [7.0,  8.0]
+        // [9.0, 10.0]
+        // [11.0, 12.0]
+        let b_data = vec![7.0f32, 8.0, 9.0, 10.0, 11.0, 12.0];
+        let n = 2u32; // cols_B
+
+        // Expected Output C (2x2) = A * B:
+        // C[0,0] = 1*7 + 2*9 + 3*11 = 7 + 18 + 33 = 58
+        // C[0,1] = 1*8 + 2*10 + 3*12 = 8 + 20 + 36 = 64
+        // C[1,0] = 4*7 + 5*9 + 6*11 = 28 + 45 + 66 = 139
+        // C[1,1] = 4*8 + 5*10 + 6*12 = 32 + 50 + 72 = 154
+        // Expected: [58.0, 64.0, 139.0, 154.0]
+        let expected_output_data = vec![58.0f32, 64.0, 139.0, 154.0];
+
+        let a_bytes: Arc<[u8]> = bytemuck::cast_slice(&a_data).to_vec().into();
+        let a_buffer_view = BufferView::new(
+            a_bytes, vec![m as usize, k as usize], std::mem::size_of::<f32>()
+        );
+
+        let b_bytes: Arc<[u8]> = bytemuck::cast_slice(&b_data).to_vec().into();
+        let b_buffer_view = BufferView::new(
+            b_bytes, vec![k as usize, n as usize], std::mem::size_of::<f32>()
+        );
+
+        let output_buffer_placeholder_bytes: Arc<[u8]> = vec![0u8; (m * n) as usize * std::mem::size_of::<f32>()].into();
+        let output_buffer_view = BufferView::new(
+            output_buffer_placeholder_bytes, vec![m as usize, n as usize], std::mem::size_of::<f32>()
+        );
+
+        let matmul_config = TestMatMulConfig { m, k, n };
+        let config_bytes: Arc<[u8]> = bytemuck::bytes_of(&matmul_config).to_vec().into();
+        let config_buffer_view = BufferView::new(
+            config_bytes, vec![1], std::mem::size_of::<TestMatMulConfig>()
+        );
+
+        // Order for MatMul: IN_A, IN_B, OUT, CONFIG
+        let dispatch_binds = [
+            a_buffer_view, 
+            b_buffer_view, 
+            output_buffer_view, 
+            config_buffer_view
+        ];
+
+        let workgroups = [1, 1, 1]; 
+        let result_buffers = cpu.dispatch(&Kernel::MatMul, &dispatch_binds, workgroups)
+            .expect("Dispatch for MatMul failed");
+
+        assert_eq!(result_buffers.len(), 1, "MatMul should return one output buffer");
+        let output_bytes = &result_buffers[0];
+        assert_eq!(output_bytes.len(), expected_output_data.len() * std::mem::size_of::<f32>(), "Output buffer size mismatch for MatMul");
+
+        let output_values: &[f32] = bytemuck::cast_slice(output_bytes);
+        assert_eq!(output_values.len(), expected_output_data.len(), "Output values length mismatch for MatMul");
+
+        for (i, (got, expected)) in output_values.iter().zip(expected_output_data.iter()).enumerate() {
+            assert!((got - expected).abs() < 1e-6, 
+                "Mismatch for MatMul at index {}. Got: {}, Expected: {}", 
+                i, got, expected);
+        }
+    }
+
+    #[test]
+    fn mock_rng_normal_produces_deterministic_sequence() {
+        let cpu = MockCpu::default();
+
+        let num_values_to_generate = 5usize;
+        let expected_output_data: Vec<f32> = (0..num_values_to_generate).map(|i| i as f32 * 0.1).collect(); // e.g., [0.0, 0.1, 0.2, 0.3, 0.4]
+
+        // Output buffer placeholder - its shape determines how many numbers are generated.
+        let output_buffer_placeholder_bytes: Arc<[u8]> = vec![0u8; num_values_to_generate * std::mem::size_of::<f32>()].into();
+        let output_buffer_view = BufferView::new(
+            output_buffer_placeholder_bytes, vec![num_values_to_generate], std::mem::size_of::<f32>()
+        );
+
+        // Config buffer (e.g., for seed, mean, stddev - unused in this simple mock version)
+        // For this test, the config isn't strictly driving the generation logic beyond basic presence.
+        let config_data = vec![0u32]; // Dummy config, could represent a seed or other params
+        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
+        let config_buffer_view = BufferView::new(
+            config_bytes, vec![config_data.len()], std::mem::size_of::<u32>()
+        );
+
+        // Order for RngNormal: OUT, CONFIG (as per layout.rs)
+        let dispatch_binds = [output_buffer_view, config_buffer_view];
+
+        let workgroups = [1, 1, 1];
+        let result_buffers = cpu.dispatch(&Kernel::RngNormal, &dispatch_binds, workgroups)
+            .expect("Dispatch for RngNormal failed");
+
+        assert_eq!(result_buffers.len(), 1, "RngNormal should return one output buffer");
+        let output_bytes = &result_buffers[0];
+        assert_eq!(output_bytes.len(), expected_output_data.len() * std::mem::size_of::<f32>(), "Output buffer size mismatch for RngNormal");
+
+        let output_values: &[f32] = bytemuck::cast_slice(output_bytes);
+        assert_eq!(output_values.len(), expected_output_data.len(), "Output values length mismatch for RngNormal");
+
+        for (i, (got, expected)) in output_values.iter().zip(expected_output_data.iter()).enumerate() {
+            assert!((got - expected).abs() < 1e-6, 
+                "Mismatch for RngNormal at index {}. Got: {}, Expected: {}", 
+                i, got, expected);
+        }
+    }
+
+    #[repr(C)]
+    #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+    struct TestExpandConfig { count: u32 }
+
+    #[test]
+    fn mock_expand_instances_repeats_template() {
+        let cpu = MockCpu::default();
+
+        let template_data = vec![1.0f32, 2.0, 3.0]; // A simple template of three f32s
+        let repetition_count = 3u32;
+
+        let mut expected_output_data = Vec::with_capacity(template_data.len() * repetition_count as usize);
+        for _ in 0..repetition_count {
+            expected_output_data.extend_from_slice(&template_data);
+        }
+
+        let template_bytes: Arc<[u8]> = bytemuck::cast_slice(&template_data).to_vec().into();
+        let template_buffer_view = BufferView::new(
+            template_bytes, 
+            vec![template_data.len()], // Shape of the template instance itself
+            std::mem::size_of::<f32>()
+        );
+
+        let expected_total_elements = template_data.len() * repetition_count as usize;
+        let output_placeholder_total_bytes = expected_total_elements * std::mem::size_of::<f32>();
+        let output_buffer_placeholder_bytes: Arc<[u8]> = vec![0u8; output_placeholder_total_bytes].into();
+
+        let output_buffer_view = BufferView::new(
+            output_buffer_placeholder_bytes, 
+            vec![repetition_count as usize, template_data.len()], // Shape of output: [count, elements_per_template]
+            std::mem::size_of::<f32>()
+        );
+
+        let expand_config = TestExpandConfig { count: repetition_count };
+        let config_bytes: Arc<[u8]> = bytemuck::bytes_of(&expand_config).to_vec().into();
+        let config_buffer_view = BufferView::new(
+            config_bytes, vec![1], std::mem::size_of::<TestExpandConfig>()
+        );
+
+        // Order for ExpandInstances: IN (template), OUT_placeholder, CONFIG
+        let dispatch_binds = [template_buffer_view, output_buffer_view, config_buffer_view];
+
+        let workgroups = [1, 1, 1];
+        let result_buffers = cpu.dispatch(&Kernel::ExpandInstances, &dispatch_binds, workgroups)
+            .expect("Dispatch for ExpandInstances failed");
+
+        assert_eq!(result_buffers.len(), 1, "ExpandInstances should return one output buffer");
+        let output_bytes = &result_buffers[0];
+        
+        let expected_output_as_bytes: Vec<u8> = bytemuck::cast_slice(&expected_output_data).to_vec();
+        assert_eq!(output_bytes.len(), expected_output_as_bytes.len(), "Output buffer byte length mismatch for ExpandInstances");
+
+        let output_values: &[f32] = bytemuck::cast_slice(output_bytes);
+        assert_eq!(output_values, expected_output_data.as_slice(), "Output values mismatch for ExpandInstances");
+    }
+
 } // Closing brace for the main tests module
 
 #[cfg(all(target_os = "macos", feature = "metal"))]
