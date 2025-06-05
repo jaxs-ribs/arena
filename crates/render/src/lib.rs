@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use physics::Sphere;
-use wgpu::util::DeviceExt;
 use winit::event::{Event, WindowEvent};
 use std::time::Duration;
 use winit::event_loop::{EventLoop};
@@ -16,6 +15,7 @@ pub struct Renderer<'w> {
     config: wgpu::SurfaceConfiguration,
     pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
+    vertex_capacity: u64,
     vertices: Vec<[f32; 2]>,
 }
 
@@ -109,11 +109,14 @@ impl<'w> Renderer<'w> {
         });
 
         let vertices: Vec<[f32; 2]> = Vec::new();
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("vertices"),
-            contents: bytemuck::cast_slice(&vertices),
+            size: 0,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
         });
+
+        let vertex_capacity = 0;
 
         Ok(Renderer {
             event_loop,
@@ -124,6 +127,7 @@ impl<'w> Renderer<'w> {
             config,
             pipeline,
             vertex_buffer,
+            vertex_capacity,
             vertices,
         })
     }
@@ -133,9 +137,23 @@ impl<'w> Renderer<'w> {
         for s in spheres {
             self.vertices.push([s.pos.x * 0.1, -s.pos.y * 0.1]);
         }
-        if !self.vertices.is_empty() {
-            self.queue
-                .write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&self.vertices));
+        let required_bytes = (self.vertices.len() * std::mem::size_of::<[f32; 2]>()) as u64;
+        if required_bytes > self.vertex_capacity {
+            self.vertex_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("vertices"),
+                size: required_bytes,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.vertex_capacity = required_bytes;
+        }
+
+        if required_bytes > 0 {
+            self.queue.write_buffer(
+                &self.vertex_buffer,
+                0,
+                bytemuck::cast_slice(&self.vertices),
+            );
         }
     }
 
