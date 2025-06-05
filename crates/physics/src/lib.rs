@@ -6,6 +6,9 @@ use compute::{ComputeBackend, ComputeError}; // BufferView and Kernel will be fu
 use std::sync::Arc;
 use std::mem::size_of; // Specific import for size_of
 
+mod shapes;
+pub use shapes::Cube;
+
 // --- Data Structures ---
 
 #[repr(C)]
@@ -65,6 +68,7 @@ impl From<ComputeError> for PhysicsError {
 
 pub struct PhysicsSim {
     pub spheres: Vec<Sphere>, // Host-side copy of sphere data
+    pub cubes: Vec<Cube>,
     pub params: PhysParams,
     backend: Arc<dyn ComputeBackend>, // Using Arc for flexibility, could be Box
                                       // The test calls sim.run() so sim needs to be mutable or run needs &mut self
@@ -94,6 +98,7 @@ impl PhysicsSim {
 
         Self {
             spheres,
+            cubes: Vec::new(),
             params,
             backend,
         }
