@@ -1,0 +1,12 @@
+[package]
+name = "render"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+wgpu = "0.19"
+winit = { version = "0.29", features = ["wayland"] }
+anyhow = "1.0"
+pollster = "0.3"
+bytemuck = { version = "1.15", features=["derive"] }
+physics = { path = "../physics" }
