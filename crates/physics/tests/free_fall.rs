@@ -16,5 +16,5 @@ fn sphere_free_fall_matches_analytic() {
     let expected = 10.0 - 0.5 * 9.81 * (dt * steps as f32).powi(2);
     let diff = (final_state.pos.y - expected).abs();
     assert!(diff < 1e-4, "diff={diff}"); // Corrected: Exact assert message
-}
+} 
 */ 
