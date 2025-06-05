@@ -6,3 +6,5 @@ edition = "2021"
 [dependencies]
 compute = { path = "../compute", features = ["mock"] }
 bytemuck = { version = "1.15", features = ["derive"] }
+anyhow = "1.0"
+fastrand = "1.9"
