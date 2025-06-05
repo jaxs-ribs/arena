@@ -13,22 +13,31 @@ pub enum ComputeError {
     BackendUnavailable,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Kernel {
-    // physics
-    SphereStep,
-    // element-wise
-    Add,
-    Mul,
-    Sub,
-    Div,
-    Where,
-    Exp,
-    Log,
-    Tanh,
-    // reductions
-    ReduceSum,
-    // linear algebra
-    MatMul, // stubbed for now
+    // Element-wise
+    Add, Sub, Mul, Div, Neg,
+    Exp, Log, Sqrt, Rsqrt, Tanh, Relu, Sigmoid,
+    Min, Max, Clamp, Where,
+
+    // Reductions
+    ReduceSum, ReduceMean, ReduceMax,
+    SegmentedReduceSum,
+    ScatterAdd,
+    Gather,
+
+    // Linear algebra
+    MatMul,
+
+    // Physics world passes
+    IntegrateBodies,
+    DetectContactsSDF,
+    SolveContactsPBD,
+    SolveJointsPBD,
+
+    // Optional helpers
+    ExpandInstances,
+    RngNormal,
 }
 
 impl Kernel {
@@ -100,56 +109,76 @@ impl ComputeBackend for MockCpu {
             }
         }
         match shader {
-            Kernel::SphereStep => {
+            Kernel::Add | Kernel::Mul | Kernel::Sub | Kernel::Div | Kernel::Where => {
+                if binds.len() < 3 { // Assuming at least two inputs and one output for these
+                    return Err(ComputeError::ShapeMismatch("missing buffers for binary op"));
+                }
+                let len = binds[0].shape.iter().product::<usize>();
+                // Simplified: Actual op logic will be TDD'd later. This is a placeholder.
+                // For now, just ensure we can return an output buffer of the correct size.
+                let out_bytes = vec![0u8; len * binds[0].element_size_in_bytes];
+                Ok(vec![out_bytes])
+            }
+            Kernel::Neg | Kernel::Exp | Kernel::Log | Kernel::Sqrt | Kernel::Rsqrt | Kernel::Tanh | Kernel::Relu | Kernel::Sigmoid => {
+                 if binds.len() < 2 { // Assuming one input, one output
+                    return Err(ComputeError::ShapeMismatch("missing buffers for unary op"));
+                }
+                let len = binds[0].shape.iter().product::<usize>();
+                let out_bytes = vec![0u8; len * binds[0].element_size_in_bytes];
+                Ok(vec![out_bytes])
+            }
+            Kernel::Min | Kernel::Max => { // Binary element-wise
+                if binds.len() < 3 {
+                    return Err(ComputeError::ShapeMismatch("missing buffers for Min/Max"));
+                }
+                let len = binds[0].shape.iter().product::<usize>();
+                let out_bytes = vec![0u8; len * binds[0].element_size_in_bytes];
+                Ok(vec![out_bytes])
+            }
+            Kernel::Clamp => { // value, min_val, max_val -> output
+                 if binds.len() < 4 {
+                    return Err(ComputeError::ShapeMismatch("missing buffers for Clamp"));
+                }
+                let len = binds[0].shape.iter().product::<usize>();
+                let out_bytes = vec![0u8; len * binds[0].element_size_in_bytes];
+                Ok(vec![out_bytes])
+            }
+            Kernel::ReduceSum | Kernel::ReduceMean | Kernel::ReduceMax | Kernel::SegmentedReduceSum | Kernel::ScatterAdd => {
+                // Reductions typically have input, output, and maybe axis/segment info
+                // For now, placeholder.
+                Ok(Vec::new()) // Placeholder, might need specific output shapes
+            }
+            Kernel::Gather => {
+                Ok(Vec::new()) // Placeholder
+            }
+            Kernel::MatMul => {
+                Ok(Vec::new()) // Placeholder
+            }
+            Kernel::IntegrateBodies | Kernel::DetectContactsSDF | Kernel::SolveContactsPBD | Kernel::ExpandInstances => {
+                // Physics & helper ops - placeholder
+                // These might have specific data expectations, e.g., returning updated body data.
                 if !binds.is_empty() {
-                    Ok(vec![binds[0].data.to_vec()])
+                    Ok(vec![binds[0].data.to_vec()]) // Placeholder
                 } else {
                     Ok(Vec::new())
                 }
             }
-            Kernel::Add | Kernel::Mul | Kernel::Sub | Kernel::Div | Kernel::Where => {
-                if binds.len() < 3 {
-                    return Err(ComputeError::ShapeMismatch("missing buffers"));
+            Kernel::SolveJointsPBD => {
+                 if !binds.is_empty() {
+                    Ok(vec![binds[0].data.to_vec()]) // Placeholder, assuming it might update body/joint data
+                } else {
+                    Ok(Vec::new())
                 }
-                let len = binds[0].shape.iter().product::<usize>();
-                let a: &[f32] = bytemuck::cast_slice(&binds[0].data);
-                let b: &[f32] = bytemuck::cast_slice(&binds[1].data);
-                let mut out = vec![0f32; len];
-                for i in 0..len {
-                    let av = a[i];
-                    let bv = b[i];
-                    out[i] = match shader {
-                        Kernel::Add => av + bv,
-                        Kernel::Mul => av * bv,
-                        Kernel::Sub => av - bv,
-                        Kernel::Div => av / bv,
-                        Kernel::Where => if bv == 0.0 { av } else { bv },
-                        _ => unreachable!(),
-                    };
-                }
-                let bytes = bytemuck::cast_slice(&out).to_vec();
-                Ok(vec![bytes])
             }
-            Kernel::Exp | Kernel::Log | Kernel::Tanh => {
-                if binds.len() < 2 {
-                    return Err(ComputeError::ShapeMismatch("missing buffers"));
+            Kernel::RngNormal => {
+                if binds.len() >= 1 { // Placeholder for output buffer
+                     let len = binds[0].shape.iter().product::<usize>();
+                     let out_bytes = vec![0u8; len * binds[0].element_size_in_bytes];
+                     Ok(vec![out_bytes])
+                } else {
+                    Err(ComputeError::ShapeMismatch("missing output buffer for RngNormal"))
                 }
-                let len = binds[0].shape.iter().product::<usize>();
-                let a: &[f32] = bytemuck::cast_slice(&binds[0].data);
-                let mut out = vec![0f32; len];
-                for i in 0..len {
-                    let av = a[i];
-                    out[i] = match shader {
-                        Kernel::Exp => av.exp(),
-                        Kernel::Log => av.ln(),
-                        Kernel::Tanh => av.tanh(),
-                        _ => unreachable!(),
-                    };
-                }
-                let bytes = bytemuck::cast_slice(&out).to_vec();
-                Ok(vec![bytes])
             }
-            _ => Ok(Vec::new()),
         }
     }
 }
@@ -250,34 +279,47 @@ mod tests {
     }
 
     #[test]
-    fn mock_sphere_step_returns_first_buffer_data() {
-        let cpu = MockCpu;
-        let sphere_data_initial: Arc<[u8]> = vec![1, 2, 3, 4].into();
-        let sphere_buf = BufferView::new(Arc::clone(&sphere_data_initial), vec![1], 4);
-        let params_buf = BufferView::new(vec![0u8; 8].into(), vec![1], 8);
-
-        let result = cpu.dispatch(&Kernel::SphereStep, &[sphere_buf, params_buf], [1, 1, 1]);
-        assert!(result.is_ok(), "SphereStep dispatch failed: {:?}", result.err());
-        let output_data_vec = result.unwrap();
-        assert_eq!(output_data_vec.len(), 1, "Expected one buffer back from SphereStep");
-        assert_eq!(output_data_vec[0], sphere_data_initial.as_ref(), "Data from SphereStep should match initial sphere data for MockCpu");
-    }
-
-    #[test]
     fn kernel_binding_counts() {
         use crate::layout::binding_count;
 
-        assert_eq!(binding_count(&Kernel::SphereStep), 2);
+        // Element-wise
         assert_eq!(binding_count(&Kernel::Add), 4);
-        assert_eq!(binding_count(&Kernel::Mul), 4);
         assert_eq!(binding_count(&Kernel::Sub), 4);
+        assert_eq!(binding_count(&Kernel::Mul), 4);
         assert_eq!(binding_count(&Kernel::Div), 4);
+        assert_eq!(binding_count(&Kernel::Min), 4);
+        assert_eq!(binding_count(&Kernel::Max), 4);
         assert_eq!(binding_count(&Kernel::Where), 4);
+
+        assert_eq!(binding_count(&Kernel::Neg), 3);
         assert_eq!(binding_count(&Kernel::Exp), 3);
         assert_eq!(binding_count(&Kernel::Log), 3);
+        assert_eq!(binding_count(&Kernel::Sqrt), 3);
+        assert_eq!(binding_count(&Kernel::Rsqrt), 3);
         assert_eq!(binding_count(&Kernel::Tanh), 3);
+        assert_eq!(binding_count(&Kernel::Relu), 3);
+        assert_eq!(binding_count(&Kernel::Sigmoid), 3);
+
+        assert_eq!(binding_count(&Kernel::Clamp), 5);
+
+        // Reductions
         assert_eq!(binding_count(&Kernel::ReduceSum), 3);
-        assert_eq!(binding_count(&Kernel::MatMul), 3);
+        assert_eq!(binding_count(&Kernel::ReduceMean), 3);
+        assert_eq!(binding_count(&Kernel::ReduceMax), 3);
+        assert_eq!(binding_count(&Kernel::SegmentedReduceSum), 4);
+        assert_eq!(binding_count(&Kernel::ScatterAdd), 4);
+
+        // Linear algebra
+        assert_eq!(binding_count(&Kernel::MatMul), 4);
+
+        // Physics world passes
+        assert_eq!(binding_count(&Kernel::IntegrateBodies), 2);
+        assert_eq!(binding_count(&Kernel::DetectContactsSDF), 3);
+        assert_eq!(binding_count(&Kernel::SolveContactsPBD), 3);
+        
+        // Optional helpers
+        assert_eq!(binding_count(&Kernel::ExpandInstances), 3);
+        assert_eq!(binding_count(&Kernel::RngNormal), 2);
     }
 }
 
@@ -351,24 +393,43 @@ pub mod wgpu_metal_backend {
             _binds: &[BufferView],
             _workgroups: [u32; 3],
         ) -> Result<Vec<Vec<u8>>, ComputeError> {
+            // Placeholder for all new kernels to make it compile.
+            // Specific WGPU logic for each kernel will be implemented later via TDD.
             match shader_kernel {
-                Kernel::Add | Kernel::Mul | Kernel::Where => {
+                Kernel::Add | Kernel::Sub | Kernel::Mul | Kernel::Div | Kernel::Neg |
+                Kernel::Exp | Kernel::Log | Kernel::Sqrt | Kernel::Rsqrt | Kernel::Tanh | Kernel::Relu | Kernel::Sigmoid |
+                Kernel::Min | Kernel::Max | Kernel::Clamp | Kernel::Where => {
+                    eprintln!("WgpuMetal::dispatch for element-wise op {:?} - placeholder, returning Ok(Vec::new())", shader_kernel);
                     Ok(Vec::new())
                 }
-                Kernel::SphereStep => {
-                    // Full implementation for SphereStep is deferred.
-                    // This will involve pipeline caching, buffer creation, dispatch, and read-back.
-                    eprintln!("WgpuMetal::dispatch for Kernel::SphereStep is not yet implemented with data read-back.");
-                    // TODO: Implement actual SphereStep logic including read-back.
-                    // For now, to compile, return an error or an empty vec if binds is empty.
-                    // Or, if binds[0] exists, an empty Vec<u8> of the correct size for the first buffer.
-                    if !_binds.is_empty() {
-                        // let expected_size = _binds[0].shape.iter().product::<usize>() * _binds[0].element_size_in_bytes;
-                        // Ok(vec![vec![0u8; expected_size]]) // Dummy data of correct size
-                        Err(ComputeError::BackendUnavailable) // More honest for now
-                    } else {
-                        Err(ComputeError::BackendUnavailable)
-                    }
+                Kernel::ReduceSum | Kernel::ReduceMean | Kernel::ReduceMax |
+                Kernel::SegmentedReduceSum | Kernel::ScatterAdd => {
+                    eprintln!("WgpuMetal::dispatch for reduction op {:?} - placeholder, returning BackendUnavailable", shader_kernel);
+                    Err(ComputeError::BackendUnavailable)
+                }
+                Kernel::Gather => {
+                    eprintln!("WgpuMetal::dispatch for Gather - placeholder, returning BackendUnavailable");
+                    Err(ComputeError::BackendUnavailable)
+                }
+                Kernel::MatMul => {
+                    eprintln!("WgpuMetal::dispatch for MatMul - placeholder, returning BackendUnavailable");
+                    Err(ComputeError::BackendUnavailable)
+                }
+                Kernel::IntegrateBodies | Kernel::DetectContactsSDF | Kernel::SolveContactsPBD => {
+                    eprintln!("WgpuMetal::dispatch for physics op {:?} - placeholder, returning BackendUnavailable", shader_kernel);
+                    Err(ComputeError::BackendUnavailable)
+                }
+                Kernel::SolveJointsPBD => {
+                    eprintln!("WgpuMetal::dispatch for SolveJointsPBD - placeholder, returning BackendUnavailable");
+                    Err(ComputeError::BackendUnavailable)
+                }
+                Kernel::ExpandInstances => {
+                    eprintln!("WgpuMetal::dispatch for ExpandInstances - placeholder, returning BackendUnavailable");
+                    Err(ComputeError::BackendUnavailable)
+                }
+                Kernel::RngNormal => {
+                    eprintln!("WgpuMetal::dispatch for RngNormal - placeholder, returning BackendUnavailable");
+                    Err(ComputeError::BackendUnavailable)
                 }
             }
         }

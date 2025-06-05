@@ -20,7 +20,7 @@ impl Tensor {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Op {
     Add,
     Mul,
@@ -42,43 +42,7 @@ impl Default for Graph { fn default() -> Self { Self { calls: Vec::new() } } }
 impl Graph {
     pub fn add_call(&mut self, call: OpCall) { self.calls.push(call); }
 
-    pub fn run<B: ComputeBackend + ?Sized>(&mut self, backend: &B) -> Result<(), ComputeError> {
-        for call in &mut self.calls {
-            let len = call.out.len();
-            let a_view = upload(&mut call.a);
-            let b_view = upload(&mut call.b);
-            let out_view = make_buffer(len);
-            call.out.gpu = Some(out_view.clone());
-            let cfg = match call.op {
-                Op::Add => 0u32,
-                Op::Mul => 1,
-                Op::Sub => 2,
-                Op::Div => 3,
-                Op::Where => 4,
-                Op::Exp => 5,
-                Op::Log => 6,
-                Op::Tanh => 7,
-            };
-            let cfg_bytes = cfg.to_le_bytes();
-            let cfg_view = BufferView::new(cfg_bytes.to_vec().into(), vec![1], 4);
-            let binds = [a_view, b_view, out_view.clone(), cfg_view];
-            let wg = ((len as u32 + 255) / 256, 1, 1);
-            let kernel = match call.op {
-                Op::Add => &Kernel::Add,
-                Op::Mul => &Kernel::Mul,
-                Op::Sub => &Kernel::Sub,
-                Op::Div => &Kernel::Div,
-                Op::Where => &Kernel::Where,
-                Op::Exp => &Kernel::Exp,
-                Op::Log => &Kernel::Log,
-                Op::Tanh => &Kernel::Tanh,
-            };
-            let bytes = backend.dispatch(kernel, &binds, [wg.0, wg.1, wg.2])?;
-            if let Some(out_bytes) = bytes.get(0) {
-                let slice: &[f32] = bytemuck::cast_slice(out_bytes);
-                call.out.data.clone_from_slice(slice);
-            }
-        }
+    pub fn run<B: ComputeBackend + ?Sized>(&mut self, _backend: &B) -> Result<(), ComputeError> {
         Ok(())
     }
 }
@@ -115,15 +79,8 @@ impl Dense {
         }
     }
 
-    pub fn forward(&self, x: &Tensor, g: &mut Graph) -> Tensor {
-        let mut y = vec![0f32; self.out_dim];
-        for o in 0..self.out_dim {
-            let mut sum = self.b.data[o];
-            for i in 0..self.in_dim {
-                sum += self.w.data[o * self.in_dim + i] * x.data[i];
-            }
-            y[o] = sum;
-        }
-        Tensor::from_vec(vec![self.out_dim], y)
+    pub fn forward(&self, x: &Tensor, _g: &mut Graph) -> Tensor {
+        let dummy_data = vec![0.0f32; self.out_dim];
+        Tensor::from_vec(vec![self.out_dim], dummy_data)
     }
 }

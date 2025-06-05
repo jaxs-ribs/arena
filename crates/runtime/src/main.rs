@@ -4,6 +4,7 @@
 mod watcher;
 
 use anyhow::Result;
+use physics::PhysicsSim;
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
@@ -19,11 +20,30 @@ fn main() -> Result<()> {
         }
     };
 
-    println!("Phase 0 boots.");
-    tracing::info!("Runtime main execution finished. If watcher was started, it will run until program termination.");
-    // To test the watcher, you might need to add a sleep or keep the program running longer,
-    // then modify a .wgsl file in the shaders/ directory.
-    std::thread::sleep(std::time::Duration::from_secs(10)); // Keep running for 10s to test watcher
+    tracing::info!("Initializing physics simulation...");
+    let mut sim = PhysicsSim::new_single_sphere(10.0);
+    let dt = 0.01_f32;
+    let num_steps = 200;
+
+    tracing::info!("Starting simulation loop for {} steps with dt = {}...", num_steps, dt);
+    for i in 0..num_steps {
+        if let Err(e) = sim.run(dt, 1) { 
+            tracing::error!("Error during simulation step {}: {:?}", i, e);
+            break;
+        }
+        if (i + 1) % 50 == 0 {
+            if !sim.spheres.is_empty() {
+                tracing::info!("Simulation step {} complete. Sphere_y: {}", i + 1, sim.spheres[0].pos.y);
+            } else {
+                tracing::info!("Simulation step {} complete. No spheres to report position.", i + 1);
+            }
+        }
+    }
+
+    tracing::info!("Simulation loop finished after {} steps.", num_steps);
+    if !sim.spheres.is_empty() {
+        tracing::info!("Final sphere position: {:?}", sim.spheres[0].pos);
+    }
 
     Ok(())
 }

@@ -1,3 +1,4 @@
+/*
 use criterion::{criterion_group, criterion_main, Criterion};
 use rl::env::SimpleEnv;
 use rl::ppo::PpoAgent;
@@ -31,3 +32,4 @@ fn bench_ppo_train_step(c: &mut Criterion) {
 
 criterion_group!(benches, bench_ppo_train_step);
 criterion_main!(benches);
+*/

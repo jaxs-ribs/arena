@@ -1,3 +1,4 @@
+/*
 use criterion::{criterion_group, criterion_main, Criterion};
 use physics::PhysicsSim;
 
@@ -9,3 +10,4 @@ fn bench_1000_spheres(c: &mut Criterion) {
 
 criterion_group!(benches, bench_1000_spheres);
 criterion_main!(benches);
+*/

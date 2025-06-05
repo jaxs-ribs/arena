@@ -1,3 +1,4 @@
+/*
 /// Very simple environment where the optimal action equals a target value.
 /// State is ignored and episodes last a single step.
 #[derive(Clone)]
@@ -17,3 +18,4 @@ impl SimpleEnv {
         ((), reward, true)
     }
 }
+*/

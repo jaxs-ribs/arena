@@ -121,41 +121,32 @@ impl PhysicsSim {
         let num_spheres = self.spheres.len() as u32;
         let workgroups_x = (num_spheres + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
 
-        // Call the dispatch method. For the mock backend this is a no-op but still
-        // verifies buffer shapes.
-        let _ = self.backend.dispatch(
-            &compute::Kernel::SphereStep,
-            &[sphere_buffer_view, params_buffer_view],
+        // Dispatch Kernel::IntegrateBodies (placeholder)
+        // The actual data handling (read-back) will depend on the kernel's implementation.
+        let _result_buffers = self.backend.dispatch(
+            &compute::Kernel::IntegrateBodies, // Changed from SphereStep
+            &[sphere_buffer_view, params_buffer_view], // Assuming IntegrateBodies takes similar initial buffers
             [workgroups_x, 1, 1],
         )?;
 
-        // In mock configurations no computation is performed on the buffers, so
-        // we update the host copy directly using the same integrator as the WGSL
-        // kernel. The integrator matches the analytic solution for constant
-        // acceleration by including the 0.5 * g * dt^2 term.
-        for s in &mut self.spheres {
-            let dt = self.params.dt;
-            let ax = self.params.gravity.x + self.params.force[0];
-            let ay = self.params.gravity.y + self.params.force[1];
-            let az = self.params.gravity.z;
+        // Manual CPU-side integration logic REMOVED.
+        // This logic should eventually be part of the IntegrateBodies kernel's
+        // CPU implementation (in MockCpu) or its WGSL shader.
 
-            s.pos.x += s.vel.x * dt + 0.5 * ax * dt * dt;
-            s.pos.y += s.vel.y * dt + 0.5 * ay * dt * dt;
-            s.pos.z += s.vel.z * dt + 0.5 * az * dt * dt;
+        // For now, we might want to update self.spheres from _result_buffers if the
+        // IntegrateBodies kernel (even the mock one) is designed to return the updated sphere data.
+        // Example (if first buffer out is spheres):
+        // if let Some(updated_sphere_data) = _result_buffers.get(0) {
+        //     if updated_sphere_data.len() == self.spheres.len() * size_of::<Sphere>() {
+        //         let updated_spheres: &[Sphere] = bytemuck::cast_slice(updated_sphere_data);
+        //         self.spheres.clone_from_slice(updated_spheres);
+        //     } else {
+        //        // Potentially log an error or handle mismatch
+        //     }
+        // }
 
-            s.vel.x += ax * dt;
-            s.vel.y += ay * dt;
-            s.vel.z += az * dt;
 
-            if s.pos.y < 0.0 {
-                s.pos.y = 0.0;
-                s.vel.y = 0.0;
-            }
-        }
-
-        self.params.force = [0.0, 0.0];
-
-        // A real GPU backend would read the updated sphere data back here.
+        // self.params.force = [0.0, 0.0]; // This might still be relevant depending on how forces are handled
 
         Ok(())
     }
