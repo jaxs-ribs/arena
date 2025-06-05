@@ -384,12 +384,20 @@ impl ComputeBackend for MockCpu {
                 let out_bytes = bytemuck::cast_slice(&output_values).to_vec();
                 Ok(vec![out_bytes])
             }
-            Kernel::Sigmoid => { // Now only Sigmoid is left in this placeholder group
-                 if binds.len() < 3 { // Corrected: Should be 3 based on layout (IN1, OUT, CONFIG)
-                    return Err(ComputeError::ShapeMismatch("missing buffers for unary op (expected 3: In, Out, Config)"));
+            Kernel::Sigmoid => {
+                if binds.len() < 3 { // IN, OUT_placeholder, CONFIG per layout.rs
+                    return Err(ComputeError::ShapeMismatch("Sigmoid kernel expects 3 buffers"));
                 }
-                let len = binds[0].shape.iter().product::<usize>();
-                let out_bytes = vec![0u8; len * binds[0].element_size_in_bytes];
+                let input_view = &binds[0];
+                // binds[1] is output_placeholder, binds[2] is config
+
+                if input_view.element_size_in_bytes != std::mem::size_of::<f32>() {
+                    return Err(ComputeError::ShapeMismatch("Sigmoid kernel currently only supports f32 data"));
+                }
+
+                let input_values: &[f32] = bytemuck::cast_slice(&input_view.data);
+                let output_values: Vec<f32> = input_values.iter().map(|&x| 1.0 / (1.0 + (-x).exp())).collect();
+                let out_bytes = bytemuck::cast_slice(&output_values).to_vec();
                 Ok(vec![out_bytes])
             }
             Kernel::Min => {
@@ -491,7 +499,63 @@ impl ComputeBackend for MockCpu {
                 let out_bytes = bytemuck::cast_slice(&output_values).to_vec();
                 Ok(vec![out_bytes])
             }
-            Kernel::ReduceSum | Kernel::ReduceMean | Kernel::ReduceMax | Kernel::SegmentedReduceSum | Kernel::ScatterAdd => {
+            Kernel::ReduceSum => {
+                if binds.len() < 3 { // IN, OUT_placeholder, CONFIG per layout.rs
+                    return Err(ComputeError::ShapeMismatch("ReduceSum kernel expects 3 buffers"));
+                }
+                let input_view = &binds[0];
+                // binds[1] is output_placeholder, binds[2] is config
+
+                if input_view.element_size_in_bytes != std::mem::size_of::<f32>() {
+                    return Err(ComputeError::ShapeMismatch("ReduceSum kernel currently only supports f32 input data"));
+                }
+
+                let input_values: &[f32] = bytemuck::cast_slice(&input_view.data);
+                let sum_value: f32 = input_values.iter().sum();
+                
+                let out_bytes = bytemuck::bytes_of(&sum_value).to_vec();
+                Ok(vec![out_bytes])
+            }
+            Kernel::ReduceMean => {
+                if binds.len() < 3 { // IN, OUT_placeholder, CONFIG per layout.rs
+                    return Err(ComputeError::ShapeMismatch("ReduceMean kernel expects 3 buffers"));
+                }
+                let input_view = &binds[0];
+                // binds[1] is output_placeholder, binds[2] is config
+
+                if input_view.element_size_in_bytes != std::mem::size_of::<f32>() {
+                    return Err(ComputeError::ShapeMismatch("ReduceMean kernel currently only supports f32 input data"));
+                }
+
+                let input_values: &[f32] = bytemuck::cast_slice(&input_view.data);
+                let count = input_values.len();
+                let mean_value: f32 = if count == 0 {
+                    0.0f32
+                } else {
+                    input_values.iter().sum::<f32>() / (count as f32)
+                };
+                
+                let out_bytes = bytemuck::bytes_of(&mean_value).to_vec();
+                Ok(vec![out_bytes])
+            }
+            Kernel::ReduceMax => {
+                if binds.len() < 3 { // IN, OUT_placeholder, CONFIG per layout.rs
+                    return Err(ComputeError::ShapeMismatch("ReduceMax kernel expects 3 buffers"));
+                }
+                let input_view = &binds[0];
+                // binds[1] is output_placeholder, binds[2] is config
+
+                if input_view.element_size_in_bytes != std::mem::size_of::<f32>() {
+                    return Err(ComputeError::ShapeMismatch("ReduceMax kernel currently only supports f32 input data"));
+                }
+
+                let input_values: &[f32] = bytemuck::cast_slice(&input_view.data);
+                let max_value: f32 = input_values.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+                
+                let out_bytes = bytemuck::bytes_of(&max_value).to_vec();
+                Ok(vec![out_bytes])
+            }
+            Kernel::SegmentedReduceSum | Kernel::ScatterAdd => {
                 // Reductions typically have input, output, and maybe axis/segment info
                 // For now, placeholder.
                 Ok(Vec::new()) // Placeholder, might need specific output shapes
@@ -1590,7 +1654,147 @@ mod tests {
             assert!((got - expected).abs() < 1e-6, "Mismatch for Sigmoid. Got: {}, Expected: {}", got, expected);
         }
     }
-}
+
+    #[test]
+    fn mock_reduce_sum_computes_sum() {
+        let cpu = MockCpu::default();
+        let input_data = vec![1.0f32, 2.0, 3.0, 4.0, 5.0, -2.0];
+        let expected_sum: f32 = input_data.iter().sum();
+        
+        let input_bytes: Arc<[u8]> = bytemuck::cast_slice(&input_data).to_vec().into();
+        let input_buffer_view = BufferView::new(
+            input_bytes, vec![input_data.len()], std::mem::size_of::<f32>()
+        );
+
+        // Output buffer placeholder for a single f32 value
+        let output_buffer_placeholder_bytes: Arc<[u8]> = vec![0u8; std::mem::size_of::<f32>()].into();
+        let output_buffer_view = BufferView::new(
+            output_buffer_placeholder_bytes, vec![1], std::mem::size_of::<f32>()
+        );
+
+        let config_data = vec![0u32]; // Dummy config
+        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
+        let config_buffer_view = BufferView::new(
+            config_bytes, vec![config_data.len()], std::mem::size_of::<u32>()
+        );
+
+        let workgroups = [1, 1, 1];
+        let dispatch_binds = [input_buffer_view, output_buffer_view, config_buffer_view];
+        let result_buffers = cpu.dispatch(&Kernel::ReduceSum, &dispatch_binds, workgroups)
+            .expect("Dispatch for ReduceSum failed");
+
+        assert_eq!(result_buffers.len(), 1, "ReduceSum should return one output buffer");
+        let output_bytes = &result_buffers[0];
+        assert_eq!(output_bytes.len(), std::mem::size_of::<f32>(), "Output buffer size should be size of f32");
+
+        let output_value: f32 = *bytemuck::from_bytes(&output_bytes); // Corrected: dereference
+        assert!((output_value - expected_sum).abs() < 1e-6, "Mismatch for ReduceSum. Got: {}, Expected: {}", output_value, expected_sum);
+    }
+
+    #[test]
+    fn mock_reduce_mean_computes_mean() {
+        let cpu = MockCpu::default();
+        
+        // Test case 1: Non-empty input
+        let input_data1 = vec![1.0f32, 2.0, 3.0, 4.0, 5.0, -2.0]; // sum = 13, count = 6
+        let expected_mean1: f32 = input_data1.iter().sum::<f32>() / (input_data1.len() as f32);
+        
+        let input_bytes1: Arc<[u8]> = bytemuck::cast_slice(&input_data1).to_vec().into();
+        let input_buffer_view1 = BufferView::new(
+            input_bytes1, vec![input_data1.len()], std::mem::size_of::<f32>()
+        );
+
+        let output_placeholder_bytes: Arc<[u8]> = vec![0u8; std::mem::size_of::<f32>()].into();
+        let output_buffer_view = BufferView::new(
+            output_placeholder_bytes.clone(), vec![1], std::mem::size_of::<f32>()
+        );
+        let config_data = vec![0u32];
+        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
+        let config_buffer_view = BufferView::new(
+            config_bytes.clone(), vec![config_data.len()], std::mem::size_of::<u32>()
+        );
+
+        let dispatch_binds1 = [input_buffer_view1, output_buffer_view.clone(), config_buffer_view.clone()];
+        let result_buffers1 = cpu.dispatch(&Kernel::ReduceMean, &dispatch_binds1, [1,1,1])
+            .expect("Dispatch for ReduceMean (case 1) failed");
+
+        assert_eq!(result_buffers1.len(), 1, "ReduceMean (case 1) should return one output buffer");
+        let output_bytes1 = &result_buffers1[0];
+        assert_eq!(output_bytes1.len(), std::mem::size_of::<f32>());
+        let output_value1: f32 = *bytemuck::from_bytes(&output_bytes1);
+        assert!((output_value1 - expected_mean1).abs() < 1e-6, "Mismatch for ReduceMean (case 1). Got: {}, Expected: {}", output_value1, expected_mean1);
+
+        // Test case 2: Empty input
+        let input_data2: Vec<f32> = Vec::new();
+        let expected_mean2: f32 = 0.0; // Define mean of empty set as 0 for this mock
+        
+        let input_bytes2: Arc<[u8]> = bytemuck::cast_slice(&input_data2).to_vec().into();
+        let input_buffer_view2 = BufferView::new(
+            input_bytes2, vec![input_data2.len()], std::mem::size_of::<f32>()
+        );
+        let dispatch_binds2 = [input_buffer_view2, output_buffer_view, config_buffer_view];
+        let result_buffers2 = cpu.dispatch(&Kernel::ReduceMean, &dispatch_binds2, [1,1,1])
+            .expect("Dispatch for ReduceMean (case 2) failed");
+
+        assert_eq!(result_buffers2.len(), 1, "ReduceMean (case 2) should return one output buffer");
+        let output_bytes2 = &result_buffers2[0];
+        assert_eq!(output_bytes2.len(), std::mem::size_of::<f32>());
+        let output_value2: f32 = *bytemuck::from_bytes(&output_bytes2);
+        assert!((output_value2 - expected_mean2).abs() < 1e-6, "Mismatch for ReduceMean (case 2). Got: {}, Expected: {}", output_value2, expected_mean2);
+    }
+
+    #[test]
+    fn mock_reduce_max_computes_max_value() {
+        let cpu = MockCpu::default();
+        
+        // Test case 1: Non-empty input
+        let input_data1 = vec![1.0f32, -2.0, 5.0, 0.0, 4.5, -10.0];
+        let expected_max1: f32 = input_data1.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+        
+        let input_bytes1: Arc<[u8]> = bytemuck::cast_slice(&input_data1).to_vec().into();
+        let input_buffer_view1 = BufferView::new(
+            input_bytes1, vec![input_data1.len()], std::mem::size_of::<f32>()
+        );
+
+        let output_placeholder_bytes: Arc<[u8]> = vec![0u8; std::mem::size_of::<f32>()].into();
+        let output_buffer_view = BufferView::new(
+            output_placeholder_bytes.clone(), vec![1], std::mem::size_of::<f32>()
+        );
+        let config_data = vec![0u32];
+        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
+        let config_buffer_view = BufferView::new(
+            config_bytes.clone(), vec![config_data.len()], std::mem::size_of::<u32>()
+        );
+
+        let dispatch_binds1 = [input_buffer_view1, output_buffer_view.clone(), config_buffer_view.clone()];
+        let result_buffers1 = cpu.dispatch(&Kernel::ReduceMax, &dispatch_binds1, [1,1,1])
+            .expect("Dispatch for ReduceMax (case 1) failed");
+
+        assert_eq!(result_buffers1.len(), 1, "ReduceMax (case 1) should return one output buffer");
+        let output_bytes1 = &result_buffers1[0];
+        assert_eq!(output_bytes1.len(), std::mem::size_of::<f32>());
+        let output_value1: f32 = *bytemuck::from_bytes(&output_bytes1);
+        assert_eq!(output_value1, expected_max1, "Mismatch for ReduceMax (case 1). Got: {}, Expected: {}", output_value1, expected_max1);
+
+        // Test case 2: Empty input
+        let input_data2: Vec<f32> = Vec::new();
+        let expected_max2: f32 = f32::NEG_INFINITY; // Max of empty set
+        
+        let input_bytes2: Arc<[u8]> = bytemuck::cast_slice(&input_data2).to_vec().into();
+        let input_buffer_view2 = BufferView::new(
+            input_bytes2, vec![input_data2.len()], std::mem::size_of::<f32>()
+        );
+        let dispatch_binds2 = [input_buffer_view2, output_buffer_view, config_buffer_view];
+        let result_buffers2 = cpu.dispatch(&Kernel::ReduceMax, &dispatch_binds2, [1,1,1])
+            .expect("Dispatch for ReduceMax (case 2) failed");
+
+        assert_eq!(result_buffers2.len(), 1, "ReduceMax (case 2) should return one output buffer");
+        let output_bytes2 = &result_buffers2[0];
+        assert_eq!(output_bytes2.len(), std::mem::size_of::<f32>());
+        let output_value2: f32 = *bytemuck::from_bytes(&output_bytes2);
+        assert_eq!(output_value2, expected_max2, "Mismatch for ReduceMax (case 2). Got: {}, Expected: {}", output_value2, expected_max2);
+    }
+} // Closing brace for the main tests module
 
 #[cfg(all(target_os = "macos", feature = "metal"))]
 pub mod wgpu_metal_backend {
@@ -1694,8 +1898,8 @@ pub mod wgpu_metal_backend {
                 }
                 Kernel::ExpandInstances => {
                     eprintln!("WgpuMetal::dispatch for ExpandInstances - placeholder, returning BackendUnavailable");
-                    Err(ComputeError::BackendUnavailable)
-                }
+                        Err(ComputeError::BackendUnavailable)
+                    }
                 Kernel::RngNormal => {
                     eprintln!("WgpuMetal::dispatch for RngNormal - placeholder, returning BackendUnavailable");
                     Err(ComputeError::BackendUnavailable)
