@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use physics::Sphere;
+use wgpu::util::DeviceExt;
 use winit::event::{Event, WindowEvent};
 use std::time::Duration;
 use winit::event_loop::{EventLoop};
@@ -8,15 +9,19 @@ use winit::platform::pump_events::{EventLoopExtPumpEvents, PumpStatus};
 
 pub struct Renderer<'w> {
     event_loop: EventLoop<()>,
+    #[allow(dead_code)]
     window: winit::window::Window,
     surface: wgpu::Surface<'w>,
     device: wgpu::Device,
     queue: wgpu::Queue,
+    #[allow(dead_code)]
     config: wgpu::SurfaceConfiguration,
     pipeline: wgpu::RenderPipeline,
-    vertex_buffer: wgpu::Buffer,
-    vertex_capacity: u64,
-    vertices: Vec<[f32; 2]>,
+    sphere_buffer: wgpu::Buffer,
+    sphere_capacity: u64,
+    bind_group: wgpu::BindGroup,
+    bind_group_layout: wgpu::BindGroupLayout,
+    num_spheres: u32,
 }
 
 impl<'w> Renderer<'w> {
@@ -67,10 +72,26 @@ impl<'w> Renderer<'w> {
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
         });
 
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("bind group layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }
+            ],
+        });
+
         let pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("layout"),
-                bind_group_layouts: &[],
+                bind_group_layouts: &[&bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -80,15 +101,7 @@ impl<'w> Renderer<'w> {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<[f32; 2]>() as u64,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &[wgpu::VertexAttribute {
-                        format: wgpu::VertexFormat::Float32x2,
-                        offset: 0,
-                        shader_location: 0,
-                    }],
-                }],
+                buffers: &[],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -100,7 +113,7 @@ impl<'w> Renderer<'w> {
                 })],
             }),
             primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::PointList,
+                topology: wgpu::PrimitiveTopology::TriangleList,
                 ..Default::default()
             },
             depth_stencil: None,
@@ -108,15 +121,25 @@ impl<'w> Renderer<'w> {
             multiview: None,
         });
 
-        let vertices: Vec<[f32; 2]> = Vec::new();
-        let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("vertices"),
-            size: 0,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        let sphere_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("spheres"),
+            size: 16,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let vertex_capacity = 0;
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("bind group"),
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: sphere_buffer.as_entire_binding(),
+                }
+            ],
+        });
+
+        let sphere_capacity = 0;
 
         Ok(Renderer {
             event_loop,
@@ -126,35 +149,47 @@ impl<'w> Renderer<'w> {
             queue,
             config,
             pipeline,
-            vertex_buffer,
-            vertex_capacity,
-            vertices,
+            sphere_buffer,
+            sphere_capacity,
+            bind_group,
+            bind_group_layout,
+            num_spheres: 0,
         })
     }
 
     pub fn update_spheres(&mut self, spheres: &[Sphere]) {
-        self.vertices.clear();
-        for s in spheres {
-            self.vertices.push([s.pos.x * 0.1, -s.pos.y * 0.1]);
-        }
-        let required_bytes = (self.vertices.len() * std::mem::size_of::<[f32; 2]>()) as u64;
-        if required_bytes > self.vertex_capacity {
-            self.vertex_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("vertices"),
+        let sphere_data = bytemuck::cast_slice(spheres);
+        let required_bytes = sphere_data.len() as u64;
+
+        if required_bytes > self.sphere_capacity {
+            self.sphere_buffer.destroy();
+            self.sphere_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("spheres"),
                 size: required_bytes,
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
-            self.vertex_capacity = required_bytes;
+            self.sphere_capacity = required_bytes;
+            self.bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("bind group"),
+                layout: &self.bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.sphere_buffer.as_entire_binding(),
+                    }
+                ],
+            });
         }
 
         if required_bytes > 0 {
             self.queue.write_buffer(
-                &self.vertex_buffer,
+                &self.sphere_buffer,
                 0,
-                bytemuck::cast_slice(&self.vertices),
+                sphere_data,
             );
         }
+        self.num_spheres = spheres.len() as u32;
     }
 
     pub fn render(&mut self) -> Result<()> {
@@ -194,8 +229,8 @@ impl<'w> Renderer<'w> {
                 occlusion_query_set: None,
             });
             rpass.set_pipeline(&self.pipeline);
-            rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            rpass.draw(0..self.vertices.len() as u32, 0..1);
+            rpass.set_bind_group(0, &self.bind_group, &[]);
+            rpass.draw(0..6, 0..self.num_spheres);
         }
         self.queue.submit(Some(encoder.finish()));
         output.present();

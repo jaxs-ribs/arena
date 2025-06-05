@@ -13,6 +13,7 @@ pub fn handle_integrate_bodies(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
         x: f32,
         y: f32,
         z: f32,
+        _pad: u32,
     }
     #[repr(C)]
     #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
@@ -25,8 +26,7 @@ pub fn handle_integrate_bodies(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
     struct TestPhysParams {
         gravity: TestVec3,
         dt: f32,
-        _padding1: f32,
-        _padding2: f32,
+        _pad: [u32; 3],
     }
 
     let spheres_data_view = &binds[0];
@@ -89,6 +89,7 @@ mod tests {
             x: f32,
             y: f32,
             z: f32,
+            _pad: u32,
         }
         #[repr(C)]
         #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
@@ -101,8 +102,7 @@ mod tests {
         struct TestPhysParams {
             gravity: TestVec3,
             dt: f32,
-            _padding1: f32,
-            _padding2: f32,
+            _pad: [u32; 3],
         }
 
         let cpu = MockCpu::default();
@@ -112,11 +112,13 @@ mod tests {
                 x: 0.0,
                 y: 10.0,
                 z: 0.0,
+                _pad: 0,
             },
             vel: TestVec3 {
                 x: 1.0,
                 y: 0.0,
                 z: 0.0,
+                _pad: 0,
             },
         };
         let spheres_data = vec![initial_sphere];
@@ -132,10 +134,10 @@ mod tests {
                 x: 0.0,
                 y: -9.81,
                 z: 0.0,
+                _pad: 0,
             },
             dt: 0.1,
-            _padding1: 0.0,
-            _padding2: 0.0,
+            _pad: [0; 3],
         };
         let params_bytes: StdArc<[u8]> = bytemuck::bytes_of(&params).to_vec().into();
         let params_buffer_view =

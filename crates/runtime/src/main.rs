@@ -73,5 +73,12 @@ fn main() -> Result<()> {
         tracing::info!("Final sphere position: {:?}", sim.spheres[0].pos);
     }
 
+    #[cfg(feature = "render")]
+    if let Some(r) = renderer.as_mut() {
+        loop {
+            r.render()?;
+        }
+    }
+
     Ok(())
 }

@@ -14,12 +14,13 @@ pub struct Vec3 {
     pub x: f32,
     pub y: f32,
     pub z: f32,
+    pub _pad: u32,
 }
 
 impl Vec3 {
     #[must_use]
-    pub const fn new(x: f32, y: f32, z: f32) -> Self {
-        Self { x, y, z }
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        Self { x, y, z, _pad: 0 }
     }
 }
 
@@ -35,9 +36,9 @@ pub struct Sphere {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct PhysParams {
-    pub gravity: Vec3, // Mapped to params.xyz in shader
-    pub dt: f32,       // Mapped to params.w in shader
-    pub force: [f32; 2],
+    pub gravity: Vec3,
+    pub dt: f32,
+    pub _pad: [u32; 3],
 }
 
 #[repr(C)]
@@ -103,9 +104,9 @@ impl PhysicsSim {
         let spheres = vec![sphere];
 
         let params = PhysParams {
-            gravity: Vec3::new(0.0, -9.81, 0.0), // Default gravity, will be used by step_gpu
-            dt: 0.01, // Default dt, will be overridden by run method's dt
-            force: [0.0, 0.0],
+            gravity: Vec3::new(0.0, -9.81, 0.0),
+            dt: 0.01,
+            _pad: [0; 3],
         };
 
         let backend = compute::default_backend();
@@ -163,6 +164,7 @@ impl PhysicsSim {
             x: f32,
             y: f32,
             z: f32,
+            _pad: u32,
         }
         #[repr(C)]
         #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -189,6 +191,7 @@ impl PhysicsSim {
                     x: s.pos.x,
                     y: s.pos.y,
                     z: s.pos.z,
+                    _pad: 0,
                 },
             })
             .collect();
@@ -237,6 +240,7 @@ impl PhysicsSim {
                     x: 0.0,
                     y: 1.0,
                     z: 0.0,
+                    _pad: 0,
                 },
                 depth: c.penetration,
             })
@@ -281,6 +285,7 @@ impl PhysicsSim {
             x: f32,
             y: f32,
             z: f32,
+            _pad: u32,
         }
         #[repr(C)]
         #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -296,6 +301,7 @@ impl PhysicsSim {
                     x: s.pos.x,
                     y: s.pos.y,
                     z: s.pos.z,
+                    _pad: 0,
                 },
             })
             .collect();
@@ -340,11 +346,12 @@ impl PhysicsSim {
             return Err(PhysicsError::NoSpheres);
         }
         self.params.dt = dt;
-
         for _ in 0..steps {
             self.step_gpu()?;
         }
 
+        // It is assumed that there is at least one sphere.
+        // The test expects run to return a SphereState.
         Ok(SphereState {
             pos: self.spheres[0].pos,
         })
