@@ -33,6 +33,19 @@ cargo test
 
 Unit tests cover the CPU compute backend, physics stepping, shader compilation and a simple integration test verifying that a falling sphere matches analytic physics. More GPU‑specific tests will be added as the WebGPU backend matures.
 
+## Visualizing the simulation
+
+The project includes a minimal renderer based on `wgpu`. To see a live sphere
+falling under gravity, build the runtime with the `render` feature and pass the
+`--draw` flag to the binary:
+
+```bash
+cargo run -p runtime --features render -- --draw
+```
+
+This will open a window and draw the sphere positions after each simulation
+step.
+
 ## Status
 
 The codebase is early and experimental. Right now it demonstrates the core pieces needed to integrate physics simulation with GPU kernels compiled from WGSL. The intention is to evolve this into a Brax‑like environment where reinforcement learning policies can be trained directly on a differentiable WebGPU simulator.

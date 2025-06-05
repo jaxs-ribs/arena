@@ -6,6 +6,9 @@ mod watcher;
 use anyhow::Result;
 use physics::PhysicsSim;
 
+#[cfg(feature = "render")]
+use render::Renderer;
+
 fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
@@ -18,6 +21,15 @@ fn main() -> Result<()> {
             tracing::error!("Failed to start shader watcher: {e:?}");
             None
         }
+    };
+
+    let enable_render = std::env::args().any(|a| a == "--draw");
+
+    #[cfg(feature = "render")]
+    let mut renderer = if enable_render {
+        Some(Renderer::new()?)
+    } else {
+        None
     };
 
     tracing::info!("Initializing physics simulation...");
@@ -34,6 +46,11 @@ fn main() -> Result<()> {
         if let Err(e) = sim.run(dt, 1) {
             tracing::error!("Error during simulation step {}: {:?}", i, e);
             break;
+        }
+        #[cfg(feature = "render")]
+        if let Some(r) = renderer.as_mut() {
+            r.update_spheres(&sim.spheres);
+            r.render()?;
         }
         if (i + 1) % 50 == 0 {
             if !sim.spheres.is_empty() {
