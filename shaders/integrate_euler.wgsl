@@ -12,8 +12,10 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
   if (idx >= arrayLength(&spheres)) { return; }
 
   var s = spheres[idx];
-  s.vel += params.xyz * params.w; // gravity_vec * dt
-  s.pos += s.vel * params.w;      // vel * dt
+  let dt = params.w;
+  let g = params.xyz;
+  s.pos += s.vel * dt + 0.5 * g * dt * dt;
+  s.vel += g * dt;
   
   // floor at y=0
   if (s.pos.y < 0.0) {
