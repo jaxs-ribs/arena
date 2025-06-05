@@ -1,0 +1,31 @@
+# Rust specific
+**/target/
+**/Cargo.lock
+**/*.rs.bk
+**/*.pdb
+
+# IDE specific
+**/.idea/
+**/.vscode/
+**/*.swp
+**/*.swo
+
+# Build artifacts
+**/debug/
+**/release/
+**/*.exe
+**/*.dll
+**/*.so
+**/*.dylib
+
+# Generated files
+**/generated/
+**/out/
+
+# Test coverage
+**/coverage/
+**/*.profraw
+
+# Misc
+**/.DS_Store
+**/Thumbs.db
