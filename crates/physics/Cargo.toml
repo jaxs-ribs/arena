@@ -5,8 +5,12 @@ edition = "2021"
 
 [dependencies]
 compute = { path = "../compute", features = ["mock"] }
-bytemuck = { version = "1.15", features = ["derive"] } # For struct to byte slice conversion
-# Add other dependencies as needed, e.g., for Vec3 if not custom
+bytemuck = { version = "1.15", features = ["derive"] }
 
 [dev-dependencies]
-anyhow = "1.0" # For test results if needed 
+anyhow = "1.0"
+criterion = "0.5"
+
+[[bench]]
+name = "physics"
+harness = false
