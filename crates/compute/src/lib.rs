@@ -626,14 +626,49 @@ impl ComputeBackend for MockCpu {
                 let updated_spheres_bytes = bytemuck::cast_slice(&updated_spheres).to_vec();
                 Ok(vec![updated_spheres_bytes])
             }
-            Kernel::DetectContactsSDF | Kernel::SolveContactsPBD | Kernel::ExpandInstances => {
-                // Physics & helper ops - placeholder
-                // These might have specific data expectations, e.g., returning updated body data.
+            Kernel::DetectContactsSDF | Kernel::SolveContactsPBD => {
+                // Physics ops - placeholder
                 if !binds.is_empty() {
-                    Ok(vec![binds[0].data.to_vec()]) // Placeholder
+                    Ok(vec![binds[0].data.to_vec()])
                 } else {
                     Ok(Vec::new())
                 }
+            }
+            Kernel::ExpandInstances => {
+                if binds.len() < 3 {
+                    return Err(ComputeError::ShapeMismatch(
+                        "ExpandInstances expects IN, OUT placeholder, CONFIG",
+                    ));
+                }
+
+                let input_view = &binds[0];
+                let config_view = &binds[2];
+
+                if config_view.data.len() != std::mem::size_of::<u32>() {
+                    return Err(ComputeError::ShapeMismatch(
+                        "ExpandInstances config must be one u32",
+                    ));
+                }
+
+                let repeat = u32::from_ne_bytes(
+                    config_view.data[..4]
+                        .try_into()
+                        .expect("slice with incorrect length"),
+                ) as usize;
+
+                let element_size = input_view.element_size_in_bytes;
+                let num_elements = input_view.shape.iter().product::<usize>();
+                let mut out_bytes = Vec::with_capacity(num_elements * repeat * element_size);
+
+                for idx in 0..num_elements {
+                    let start = idx * element_size;
+                    let slice = &input_view.data[start..start + element_size];
+                    for _ in 0..repeat {
+                        out_bytes.extend_from_slice(slice);
+                    }
+                }
+
+                Ok(vec![out_bytes])
             }
             Kernel::SolveJointsPBD => {
                  if !binds.is_empty() {
@@ -1802,6 +1837,54 @@ mod tests {
         assert_eq!(output_bytes2.len(), std::mem::size_of::<f32>());
         let output_value2: f32 = *bytemuck::from_bytes(&output_bytes2);
         assert_eq!(output_value2, expected_max2, "Mismatch for ReduceMax (case 2). Got: {}, Expected: {}", output_value2, expected_max2);
+    }
+
+    #[test]
+    fn mock_expand_instances_repeats_input() {
+        let cpu = MockCpu::default();
+
+        let input_data = vec![1u32, 2u32, 3u32];
+        let repeat = 3u32;
+        let expected_output: Vec<u32> = input_data
+            .iter()
+            .flat_map(|&v| std::iter::repeat(v).take(repeat as usize))
+            .collect();
+
+        let input_bytes: Arc<[u8]> = bytemuck::cast_slice(&input_data).to_vec().into();
+        let input_view = BufferView::new(
+            input_bytes,
+            vec![input_data.len()],
+            std::mem::size_of::<u32>(),
+        );
+
+        let output_placeholder_bytes: Arc<[u8]> =
+            vec![0u8; expected_output.len() * std::mem::size_of::<u32>()].into();
+        let output_view = BufferView::new(
+            output_placeholder_bytes,
+            vec![expected_output.len()],
+            std::mem::size_of::<u32>(),
+        );
+
+        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&[repeat]).to_vec().into();
+        let config_view = BufferView::new(config_bytes, vec![1], std::mem::size_of::<u32>());
+
+        let result = cpu
+            .dispatch(
+                &Kernel::ExpandInstances,
+                &[input_view, output_view, config_view],
+                [1, 1, 1],
+            )
+            .expect("Dispatch for ExpandInstances failed");
+
+        assert_eq!(result.len(), 1);
+        let output_bytes = &result[0];
+        assert_eq!(
+            output_bytes.len(),
+            expected_output.len() * std::mem::size_of::<u32>()
+        );
+
+        let output_values: &[u32] = bytemuck::cast_slice(output_bytes);
+        assert_eq!(output_values, expected_output.as_slice());
     }
 } // Closing brace for the main tests module
 
