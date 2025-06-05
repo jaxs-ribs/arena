@@ -41,8 +41,7 @@ pub fn handle_solve_joints_pbd(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
     let joints_view = &binds[1];
     let params_view = &binds[2];
 
-    if params_view.data.len() != std::mem::size_of::<SolveParams>()
-        || params_view.shape != vec![1]
+    if params_view.data.len() != std::mem::size_of::<SolveParams>() || params_view.shape != vec![1]
     {
         return Err(ComputeError::ShapeMismatch(
             "Params buffer for SolveJointsPBD has incorrect size or shape",
@@ -80,9 +79,7 @@ pub fn handle_solve_joints_pbd(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
         let a = joint.body_a as usize;
         let b = joint.body_b as usize;
         if a >= bodies.len() || b >= bodies.len() {
-            return Err(ComputeError::ShapeMismatch(
-                "Joint body index out of range",
-            ));
+            return Err(ComputeError::ShapeMismatch("Joint body index out of range"));
         }
 
         let pa = bodies[a].pos;
@@ -154,22 +151,54 @@ mod tests {
         let cpu = MockCpu::default();
 
         let bodies = vec![
-            TestBody { pos: TestVec3 { x: 0.0, y: 0.0, z: 0.0 } },
-            TestBody { pos: TestVec3 { x: 1.5, y: 0.0, z: 0.0 } },
+            TestBody {
+                pos: TestVec3 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                },
+            },
+            TestBody {
+                pos: TestVec3 {
+                    x: 1.5,
+                    y: 0.0,
+                    z: 0.0,
+                },
+            },
         ];
-        let joints = vec![TestJoint { body_a: 0, body_b: 1, rest_length: 1.0, _padding: 0 }];
-        let params = SolveParams { compliance: 0.0, _pad: [0.0; 3] };
+        let joints = vec![TestJoint {
+            body_a: 0,
+            body_b: 1,
+            rest_length: 1.0,
+            _padding: 0,
+        }];
+        let params = SolveParams {
+            compliance: 0.0,
+            _pad: [0.0; 3],
+        };
 
         let body_bytes: StdArc<[u8]> = bytemuck::cast_slice(&bodies).to_vec().into();
         let joint_bytes: StdArc<[u8]> = bytemuck::cast_slice(&joints).to_vec().into();
         let param_bytes: StdArc<[u8]> = bytemuck::bytes_of(&params).to_vec().into();
 
-        let body_view = BufferView::new(body_bytes, vec![bodies.len()], std::mem::size_of::<TestBody>());
-        let joint_view = BufferView::new(joint_bytes, vec![joints.len()], std::mem::size_of::<TestJoint>());
+        let body_view = BufferView::new(
+            body_bytes,
+            vec![bodies.len()],
+            std::mem::size_of::<TestBody>(),
+        );
+        let joint_view = BufferView::new(
+            joint_bytes,
+            vec![joints.len()],
+            std::mem::size_of::<TestJoint>(),
+        );
         let param_view = BufferView::new(param_bytes, vec![1], std::mem::size_of::<SolveParams>());
 
         let result = cpu
-            .dispatch(&Kernel::SolveJointsPBD, &[body_view, joint_view, param_view], [1, 1, 1])
+            .dispatch(
+                &Kernel::SolveJointsPBD,
+                &[body_view, joint_view, param_view],
+                [1, 1, 1],
+            )
             .expect("dispatch failed");
 
         assert_eq!(result.len(), 1);

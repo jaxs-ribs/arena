@@ -1,14 +1,10 @@
-use ml::*;
-use ml::tape::Tape;
 use ml::nn::Dense;
+use ml::tape::Tape;
+use ml::*;
 use std::collections::HashMap;
 
-fn finite_diff_check<F>(
-    w_with_grad: &Tensor,
-    x: &Tensor,
-    f: &F,
-    epsilon: f32,
-) where
+fn finite_diff_check<F>(w_with_grad: &Tensor, x: &Tensor, f: &F, epsilon: f32)
+where
     F: Fn(&Tensor, &Tensor) -> Tensor,
 {
     let mut w_plus = w_with_grad.clone();
@@ -37,25 +33,22 @@ fn dense_backward_fd() {
     let mut tensors = HashMap::new();
 
     let mut layer = Dense::random(3, 2, 0);
-    layer.w = layer.w.clone().with_grad();
-    layer.b = layer.b.clone().with_grad();
+    layer.w.set_requires_grad();
+    layer.b.set_requires_grad();
     tensors.insert(layer.w.id, layer.w.clone());
     tensors.insert(layer.b.id, layer.b.clone());
 
-    let x = Tensor::from_vec(vec![3], vec![0.9, -0.1, 0.3]);
+    let x = Tensor::from_vec(vec![1, 3], vec![0.9, -0.1, 0.3]);
     tensors.insert(x.id, x.clone());
 
     let mut tape = Tape::new();
-    let (y, wx) = layer.forward(&x, &mut tape);
-    tensors.insert(y.id, y.clone());
-    tensors.insert(wx.id, wx.clone());
+    let y = layer.forward(&x, &mut tape, &mut tensors);
 
-    let loss = y.reduce_sum(&mut tape);
-    tensors.insert(loss.id, loss.clone());
+    let loss = y.reduce_sum(&mut tape, &mut tensors);
 
     tape.backward(&loss, &mut tensors).unwrap();
 
-    let updated_w = tensors.get(&layer.w.id).unwrap();
+    let updated_w = tensors.get(&layer.w.id).unwrap().clone();
 
-    finite_diff_check(updated_w, &x, &|w,x| layer.fd_loss(w,x), 1e-3);
-} 
+    finite_diff_check(&updated_w, &x, &|w, x| layer.fd_loss(w, x), 1e-3);
+}

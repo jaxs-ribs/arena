@@ -1,5 +1,6 @@
 use crate::Tensor;
 
+/// The Adam optimizer.
 pub struct Adam {
     lr: f32,
     beta1: f32,
@@ -11,6 +12,7 @@ pub struct Adam {
 }
 
 impl Adam {
+    /// Creates a new `Adam` optimizer.
     pub fn new(params: &[&Tensor]) -> Self {
         Self {
             lr: 0.001,
@@ -23,17 +25,20 @@ impl Adam {
         }
     }
 
+    /// Performs a single optimization step.
     pub fn step(&mut self, params: &mut [&mut Tensor]) {
         self.t += 1;
-        let lr_t = self.lr * (1.0 - self.beta2.powi(self.t as i32)).sqrt() / (1.0 - self.beta1.powi(self.t as i32)).sqrt();
-
         for (i, p) in params.iter_mut().enumerate() {
             let grad = p.grad.as_ref().unwrap();
             for j in 0..p.data.len() {
                 self.m[i][j] = self.beta1 * self.m[i][j] + (1.0 - self.beta1) * grad[j];
                 self.v[i][j] = self.beta2 * self.v[i][j] + (1.0 - self.beta2) * grad[j].powi(2);
-                p.data[j] -= lr_t * self.m[i][j] / (self.v[i][j].sqrt() + self.eps);
+
+                let m_hat = self.m[i][j] / (1.0 - self.beta1.powi(self.t as i32));
+                let v_hat = self.v[i][j] / (1.0 - self.beta2.powi(self.t as i32));
+
+                p.data[j] -= self.lr * m_hat / (v_hat.sqrt() + self.eps);
             }
         }
     }
-} 
+}

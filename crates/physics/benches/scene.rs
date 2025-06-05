@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use physics::{PhysicsSim, Sphere, Vec3, Joint};
+use physics::{Joint, PhysicsSim, Sphere, Vec3};
 
 fn bench_scene_run(c: &mut Criterion) {
     c.bench_function("scene_run", |b| {

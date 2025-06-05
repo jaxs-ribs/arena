@@ -1,6 +1,6 @@
+use compute;
 use std::fs;
-use std::path::Path;
-use compute; // This should be resolvable as `runtime` depends on `compute`
+use std::path::Path; // This should be resolvable as `runtime` depends on `compute`
 
 // Helper function to validate a WGSL shader file using naga
 fn validate_wgsl_shader(shader_path_str: &str) {
@@ -53,4 +53,3 @@ fn validate_elementwise_shader_compiles() {
     let _backend = compute::default_backend();
     validate_wgsl_shader("../../shaders/elementwise.wgsl");
 }
-

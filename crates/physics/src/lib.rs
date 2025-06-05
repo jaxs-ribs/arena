@@ -17,8 +17,8 @@ pub struct Vec3 {
 }
 
 impl Vec3 {
-    #[must_use] 
-pub const fn new(x: f32, y: f32, z: f32) -> Self {
+    #[must_use]
+    pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
     }
 }
@@ -114,7 +114,10 @@ impl PhysicsSim {
             spheres,
             params,
             joints: Vec::new(),
-            joint_params: JointParams { compliance: 0.0, _pad: [0.0; 3] },
+            joint_params: JointParams {
+                compliance: 0.0,
+                _pad: [0.0; 3],
+            },
             backend,
         }
     }
@@ -131,7 +134,8 @@ impl PhysicsSim {
         );
 
         let params_bytes_arc: Arc<[u8]> = bytemuck::bytes_of(&self.params).to_vec().into();
-        let params_buffer_view = compute::BufferView::new(params_bytes_arc, vec![1], size_of::<PhysParams>());
+        let params_buffer_view =
+            compute::BufferView::new(params_bytes_arc, vec![1], size_of::<PhysParams>());
 
         let num_spheres = self.spheres.len() as u32;
         let workgroups_x = (num_spheres + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
@@ -190,14 +194,16 @@ impl PhysicsSim {
             .collect();
 
         let bodies_bytes: Arc<[u8]> = bytemuck::cast_slice(&bodies).to_vec().into();
-        let bodies_view = compute::BufferView::new(bodies_bytes, vec![bodies.len()], size_of::<SdfBody>());
+        let bodies_view =
+            compute::BufferView::new(bodies_bytes, vec![bodies.len()], size_of::<SdfBody>());
 
         let plane = SdfPlane { height: 0.0 };
         let plane_bytes: Arc<[u8]> = bytemuck::bytes_of(&plane).to_vec().into();
         let plane_view = compute::BufferView::new(plane_bytes, vec![1], size_of::<SdfPlane>());
 
         let placeholder: Arc<[u8]> = vec![0u8; bodies.len() * size_of::<SdfContact>()].into();
-        let contacts_view = compute::BufferView::new(placeholder, vec![bodies.len()], size_of::<SdfContact>());
+        let contacts_view =
+            compute::BufferView::new(placeholder, vec![bodies.len()], size_of::<SdfContact>());
 
         let contact_buffers = self.backend.dispatch(
             &compute::Kernel::DetectContactsSDF,
@@ -227,16 +233,28 @@ impl PhysicsSim {
             .iter()
             .map(|c| PbdContact {
                 body_index: c.index,
-                normal: SdfVec3 { x: 0.0, y: 1.0, z: 0.0 },
+                normal: SdfVec3 {
+                    x: 0.0,
+                    y: 1.0,
+                    z: 0.0,
+                },
                 depth: c.penetration,
             })
             .collect();
 
         let contacts_bytes: Arc<[u8]> = bytemuck::cast_slice(&contacts_pbd).to_vec().into();
-        let contacts_view = compute::BufferView::new(contacts_bytes, vec![contacts_pbd.len()], size_of::<PbdContact>());
+        let contacts_view = compute::BufferView::new(
+            contacts_bytes,
+            vec![contacts_pbd.len()],
+            size_of::<PbdContact>(),
+        );
 
         let sphere_bytes_arc: Arc<[u8]> = bytemuck::cast_slice(&self.spheres).to_vec().into();
-        let spheres_view = compute::BufferView::new(sphere_bytes_arc.clone(), vec![self.spheres.len()], size_of::<Sphere>());
+        let spheres_view = compute::BufferView::new(
+            sphere_bytes_arc.clone(),
+            vec![self.spheres.len()],
+            size_of::<Sphere>(),
+        );
         let params_placeholder: Arc<[u8]> = vec![0u8; 4].into();
         let params_view = compute::BufferView::new(params_placeholder, vec![1], 4);
 
@@ -283,13 +301,16 @@ impl PhysicsSim {
             .collect();
 
         let body_bytes: Arc<[u8]> = bytemuck::cast_slice(&joint_bodies).to_vec().into();
-        let body_view = compute::BufferView::new(body_bytes, vec![joint_bodies.len()], size_of::<JointBody>());
+        let body_view =
+            compute::BufferView::new(body_bytes, vec![joint_bodies.len()], size_of::<JointBody>());
 
         let joint_bytes: Arc<[u8]> = bytemuck::cast_slice(&self.joints).to_vec().into();
-        let joint_view = compute::BufferView::new(joint_bytes, vec![self.joints.len()], size_of::<Joint>());
+        let joint_view =
+            compute::BufferView::new(joint_bytes, vec![self.joints.len()], size_of::<Joint>());
 
         let joint_param_bytes: Arc<[u8]> = bytemuck::bytes_of(&self.joint_params).to_vec().into();
-        let joint_param_view = compute::BufferView::new(joint_param_bytes, vec![1], size_of::<JointParams>());
+        let joint_param_view =
+            compute::BufferView::new(joint_param_bytes, vec![1], size_of::<JointParams>());
 
         let solved = self.backend.dispatch(
             &compute::Kernel::SolveJointsPBD,
@@ -324,7 +345,9 @@ impl PhysicsSim {
             self.step_gpu()?;
         }
 
-        Ok(SphereState { pos: self.spheres[0].pos })
+        Ok(SphereState {
+            pos: self.spheres[0].pos,
+        })
     }
 }
 
@@ -354,7 +377,10 @@ mod tests {
     fn test_step_gpu_default_backend_ok_with_valid_buffers() {
         let mut sim = PhysicsSim::new_single_sphere(5.0);
         let result = sim.step_gpu();
-        assert!(result.is_ok(), "step_gpu should return Ok if buffers are valid, got {result:?}");
+        assert!(
+            result.is_ok(),
+            "step_gpu should return Ok if buffers are valid, got {result:?}"
+        );
         // Further assertions could check if the backend (mock or real GPU) behaved correctly.
         // For now, the mock backend only performs shape checks and returns Ok if shapes are fine.
         // The actual step_gpu implementation will involve creating BufferViews and calling dispatch.

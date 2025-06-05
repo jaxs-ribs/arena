@@ -3,8 +3,8 @@
 use std::sync::Arc;
 use thiserror::Error;
 
-pub mod layout;
-mod kernels; // New module declaration
+mod kernels;
+pub mod layout; // New module declaration
 
 #[derive(Error, Debug)]
 pub enum ComputeError {
@@ -17,12 +17,27 @@ pub enum ComputeError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Kernel {
     // Element-wise
-    Add, Sub, Mul, Div, Neg,
-    Exp, Log, Sqrt, Rsqrt, Tanh, Relu, Sigmoid,
-    Min, Max, Clamp, Where,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Neg,
+    Exp,
+    Log,
+    Sqrt,
+    Rsqrt,
+    Tanh,
+    Relu,
+    Sigmoid,
+    Min,
+    Max,
+    Clamp,
+    Where,
 
     // Reductions
-    ReduceSum, ReduceMean, ReduceMax,
+    ReduceSum,
+    ReduceMean,
+    ReduceMax,
     SegmentedReduceSum,
     ScatterAdd,
     Gather,
@@ -51,14 +66,18 @@ impl Kernel {
 #[derive(Clone)]
 pub struct BufferView {
     pub data: Arc<[u8]>,
-    pub shape: Vec<usize>, // Number of elements per dimension
+    pub shape: Vec<usize>,            // Number of elements per dimension
     pub element_size_in_bytes: usize, // Size of a single element described by the innermost dimension of shape
 }
 
 impl BufferView {
     #[must_use]
     pub fn new(data: Arc<[u8]>, shape: Vec<usize>, element_size_in_bytes: usize) -> Self {
-        Self { data, shape, element_size_in_bytes }
+        Self {
+            data,
+            shape,
+            element_size_in_bytes,
+        }
     }
 }
 
@@ -129,13 +148,19 @@ impl ComputeBackend for MockCpu {
             Kernel::ReduceSum => kernels::reduce_sum_op::handle_reduce_sum(binds),
             Kernel::ReduceMean => kernels::reduce_mean_op::handle_reduce_mean(binds),
             Kernel::ReduceMax => kernels::reduce_max_op::handle_reduce_max(binds),
-            Kernel::SegmentedReduceSum => kernels::segmented_reduce_sum_op::handle_segmented_reduce_sum(binds),
+            Kernel::SegmentedReduceSum => {
+                kernels::segmented_reduce_sum_op::handle_segmented_reduce_sum(binds)
+            }
             Kernel::ScatterAdd => kernels::scatter_add_op::handle_scatter_add(binds),
             Kernel::Gather => kernels::gather_op::handle_gather(binds),
             Kernel::MatMul => kernels::matmul_op::handle_matmul(binds),
             Kernel::IntegrateBodies => kernels::integrate_bodies_op::handle_integrate_bodies(binds),
-            Kernel::DetectContactsSDF => kernels::detect_contacts_sdf_op::handle_detect_contacts_sdf(binds),
-            Kernel::SolveContactsPBD => kernels::solve_contacts_pbd_op::handle_solve_contacts_pbd(binds),
+            Kernel::DetectContactsSDF => {
+                kernels::detect_contacts_sdf_op::handle_detect_contacts_sdf(binds)
+            }
+            Kernel::SolveContactsPBD => {
+                kernels::solve_contacts_pbd_op::handle_solve_contacts_pbd(binds)
+            }
             Kernel::SolveJointsPBD => kernels::solve_joints_pbd_op::handle_solve_joints_pbd(binds),
             Kernel::RngNormal => kernels::rng_normal_op::handle_rng_normal(binds),
             Kernel::ExpandInstances => kernels::expand_instances_op::handle_expand_instances(binds),
@@ -153,7 +178,7 @@ mod tests {
         let bad_buf = BufferView::new(vec![0u8; 12].into(), vec![4], 4);
         let good_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
         let out_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
-        let cfg = BufferView::new(vec![0u8;4].into(), vec![1],4);
+        let cfg = BufferView::new(vec![0u8; 4].into(), vec![1], 4);
         let result = cpu.dispatch(&Kernel::Add, &[bad_buf, good_buf, out_buf, cfg], [1, 1, 1]);
         assert!(
             matches!(result, Err(ComputeError::ShapeMismatch(_))),
@@ -166,24 +191,36 @@ mod tests {
         let cpu = MockCpu;
         let good_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
         let out_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
-        let cfg = BufferView::new(vec![0u8;4].into(), vec![1],4);
-        let result = cpu.dispatch(&Kernel::Add, &[good_buf.clone(), good_buf.clone(), out_buf, cfg], [1, 1, 1]);
+        let cfg = BufferView::new(vec![0u8; 4].into(), vec![1], 4);
+        let result = cpu.dispatch(
+            &Kernel::Add,
+            &[good_buf.clone(), good_buf.clone(), out_buf, cfg],
+            [1, 1, 1],
+        );
         assert!(result.is_ok(), "Expected Ok, got {result:?}");
     }
 
     #[test]
     fn correct_shape_with_larger_elements() {
         let cpu = MockCpu;
-        let data_f32_x4 = vec![0u8; 16]; 
+        let data_f32_x4 = vec![0u8; 16];
         let good_buf = BufferView::new(data_f32_x4.into(), vec![4], 4);
         let out_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
-        let config_buf = BufferView::new(vec![0u8;4].into(), vec![1], 4);
-        let result = cpu.dispatch(&Kernel::Exp, &[good_buf.clone(), out_buf.clone(), config_buf.clone()], [1, 1, 1]);
+        let config_buf = BufferView::new(vec![0u8; 4].into(), vec![1], 4);
+        let result = cpu.dispatch(
+            &Kernel::Exp,
+            &[good_buf.clone(), out_buf.clone(), config_buf.clone()],
+            [1, 1, 1],
+        );
         assert!(result.is_ok(), "Expected Ok for 4x f32s, got {result:?}");
 
         let data_f32_x3 = vec![0u8; 12];
         let bad_buf = BufferView::new(data_f32_x3.into(), vec![4], 4);
-        let result_bad = cpu.dispatch(&Kernel::Exp, &[bad_buf, out_buf.clone(), config_buf], [1,1,1]);
+        let result_bad = cpu.dispatch(
+            &Kernel::Exp,
+            &[bad_buf, out_buf.clone(), config_buf],
+            [1, 1, 1],
+        );
         assert!(
             matches!(result_bad, Err(ComputeError::ShapeMismatch(_))),
             "Expected ShapeMismatch for 3x f32s with shape [4], got {result_bad:?}"
@@ -196,9 +233,16 @@ mod tests {
         let good_buf1 = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
         let good_buf2 = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
         let out_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
-        let cfg = BufferView::new(vec![0u8;4].into(), vec![1],4);
-        let result = cpu.dispatch(&Kernel::Add, &[good_buf1, good_buf2, out_buf, cfg], [1, 1, 1]);
-        assert!(result.is_ok(), "Expected Ok for multiple buffers, got {result:?}");
+        let cfg = BufferView::new(vec![0u8; 4].into(), vec![1], 4);
+        let result = cpu.dispatch(
+            &Kernel::Add,
+            &[good_buf1, good_buf2, out_buf, cfg],
+            [1, 1, 1],
+        );
+        assert!(
+            result.is_ok(),
+            "Expected Ok for multiple buffers, got {result:?}"
+        );
     }
 
     #[test]
@@ -207,7 +251,7 @@ mod tests {
         let good_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
         let bad_buf = BufferView::new(vec![0u8; 7].into(), vec![4], 4);
         let out_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
-        let cfg = BufferView::new(vec![0u8;4].into(), vec![1],4);
+        let cfg = BufferView::new(vec![0u8; 4].into(), vec![1], 4);
         let result = cpu.dispatch(&Kernel::Add, &[good_buf, bad_buf, out_buf, cfg], [1, 1, 1]);
         assert!(
             matches!(result, Err(ComputeError::ShapeMismatch(_))),
@@ -227,12 +271,24 @@ mod tests {
         let cpu = MockCpu;
         // Use f32 element size to match Exp kernel's expectation
         let element_size = std::mem::size_of::<f32>();
-        let buf_zero_data_zero_prod = BufferView::new(vec![0u8; 0].into(), vec![0, 4], element_size); // Input
+        let buf_zero_data_zero_prod =
+            BufferView::new(vec![0u8; 0].into(), vec![0, 4], element_size); // Input
         let out_zero = BufferView::new(vec![0u8; 0].into(), vec![0], element_size); // Output placeholder
-        let config_buf = BufferView::new(vec![0u8;4].into(), vec![1], 4); // Dummy config (size doesn't strictly matter for placeholder)
-        
-        let result1 = cpu.dispatch(&Kernel::Exp, &[buf_zero_data_zero_prod.clone(), out_zero.clone(), config_buf.clone()], [1, 1, 1]);
-        assert!(result1.is_ok(), "Expected Ok for zero-product shape with zero data, got {result1:?}");
+        let config_buf = BufferView::new(vec![0u8; 4].into(), vec![1], 4); // Dummy config (size doesn't strictly matter for placeholder)
+
+        let result1 = cpu.dispatch(
+            &Kernel::Exp,
+            &[
+                buf_zero_data_zero_prod.clone(),
+                out_zero.clone(),
+                config_buf.clone(),
+            ],
+            [1, 1, 1],
+        );
+        assert!(
+            result1.is_ok(),
+            "Expected Ok for zero-product shape with zero data, got {result1:?}"
+        );
 
         // For the non-zero data case, the data length must still mismatch the shape product for the error to trigger.
         // If shape is [0,4] (product 0), element_size is 4, then expected_bytes is 0.
@@ -240,9 +296,14 @@ mod tests {
         // The original check was: data.len() != (shape.iter().product() * element_size)
         // With data.len() = 4 (e.g. one f32), product = 0, element_size = 4 => 4 != 0 * 4 => 4 != 0, which is true.
         let non_zero_data_bytes: Vec<u8> = bytemuck::cast_slice(&[0.0f32]).to_vec(); // One f32 element
-        let buf_nonzero_data_zero_prod = BufferView::new(non_zero_data_bytes.into(), vec![0, 4], element_size); // Bad input
-        
-        let result2 = cpu.dispatch(&Kernel::Exp, &[buf_nonzero_data_zero_prod, out_zero.clone(), config_buf], [1, 1, 1]);
+        let buf_nonzero_data_zero_prod =
+            BufferView::new(non_zero_data_bytes.into(), vec![0, 4], element_size); // Bad input
+
+        let result2 = cpu.dispatch(
+            &Kernel::Exp,
+            &[buf_nonzero_data_zero_prod, out_zero.clone(), config_buf],
+            [1, 1, 1],
+        );
         assert!(
             matches!(result2, Err(ComputeError::ShapeMismatch(_))),
             "Expected ShapeMismatch for zero-product shape with non-zero data, got {result2:?}"
@@ -287,10 +348,10 @@ mod tests {
         assert_eq!(binding_count(&Kernel::IntegrateBodies), 2);
         assert_eq!(binding_count(&Kernel::DetectContactsSDF), 3);
         assert_eq!(binding_count(&Kernel::SolveContactsPBD), 3);
-        
+
         // Optional helpers
-    assert_eq!(binding_count(&Kernel::ExpandInstances), 3);
-    assert_eq!(binding_count(&Kernel::RngNormal), 2);
+        assert_eq!(binding_count(&Kernel::ExpandInstances), 3);
+        assert_eq!(binding_count(&Kernel::RngNormal), 2);
     }
 }
 
@@ -332,7 +393,7 @@ pub mod wgpu_metal_backend {
                     eprintln!("Failed to find a suitable Metal adapter.");
                     ComputeError::BackendUnavailable
                 })?;
-            
+
             let (device, queue) = pollster::block_on(adapter.request_device(
                 &wgpu::DeviceDescriptor {
                     label: Some("WgpuMetal Device"),
@@ -367,17 +428,33 @@ pub mod wgpu_metal_backend {
             // Placeholder for all new kernels to make it compile.
             // Specific WGPU logic for each kernel will be implemented later via TDD.
             match shader_kernel {
-                Kernel::Add | Kernel::Sub | Kernel::Mul | Kernel::Div | Kernel::Neg |
-                Kernel::Exp | Kernel::Log | Kernel::Sqrt | Kernel::Rsqrt | Kernel::Tanh | Kernel::Relu | Kernel::Sigmoid |
-                Kernel::Min | Kernel::Max | Kernel::Clamp | Kernel::Where => {
+                Kernel::Add
+                | Kernel::Sub
+                | Kernel::Mul
+                | Kernel::Div
+                | Kernel::Neg
+                | Kernel::Exp
+                | Kernel::Log
+                | Kernel::Sqrt
+                | Kernel::Rsqrt
+                | Kernel::Tanh
+                | Kernel::Relu
+                | Kernel::Sigmoid
+                | Kernel::Min
+                | Kernel::Max
+                | Kernel::Clamp
+                | Kernel::Where => {
                     eprintln!("WgpuMetal::dispatch for element-wise op {:?} - placeholder, returning Ok(Vec::new())", shader_kernel);
                     Ok(Vec::new())
                 }
-                Kernel::ReduceSum | Kernel::ReduceMean | Kernel::ReduceMax |
-                Kernel::SegmentedReduceSum | Kernel::ScatterAdd => {
+                Kernel::ReduceSum
+                | Kernel::ReduceMean
+                | Kernel::ReduceMax
+                | Kernel::SegmentedReduceSum
+                | Kernel::ScatterAdd => {
                     eprintln!("WgpuMetal::dispatch for reduction op {:?} - placeholder, returning BackendUnavailable", shader_kernel);
-                        Err(ComputeError::BackendUnavailable)
-                    }
+                    Err(ComputeError::BackendUnavailable)
+                }
                 Kernel::Gather => {
                     eprintln!("WgpuMetal::dispatch for Gather - placeholder, returning BackendUnavailable");
                     Err(ComputeError::BackendUnavailable)
@@ -396,8 +473,8 @@ pub mod wgpu_metal_backend {
                 }
                 Kernel::ExpandInstances => {
                     eprintln!("WgpuMetal::dispatch for ExpandInstances - placeholder, returning BackendUnavailable");
-                        Err(ComputeError::BackendUnavailable)
-                    }
+                    Err(ComputeError::BackendUnavailable)
+                }
                 Kernel::RngNormal => {
                     eprintln!("WgpuMetal::dispatch for RngNormal - placeholder, returning BackendUnavailable");
                     Err(ComputeError::BackendUnavailable)
@@ -419,8 +496,14 @@ pub mod wgpu_metal_backend {
                     // BufferView::new expects data, shape, and element_size_in_bytes
                     let ok_buf = BufferView::new(dummy_data, vec![4], 1);
                     let result = backend.dispatch(&Kernel::Add, &[ok_buf], [1, 1, 1]);
-                    assert!(result.is_ok(), "Dispatching Add on WgpuMetal backend failed: {result:?}");
-                    assert!(result.unwrap().is_empty(), "Expected no data back from WgpuMetal Add");
+                    assert!(
+                        result.is_ok(),
+                        "Dispatching Add on WgpuMetal backend failed: {result:?}"
+                    );
+                    assert!(
+                        result.unwrap().is_empty(),
+                        "Expected no data back from WgpuMetal Add"
+                    );
                 }
                 Err(e) => {
                     // This test runs only on macOS due to cfg(all(target_os = "macos", feature = "metal")).

@@ -24,4 +24,3 @@ fn zero_force_network_behaves_like_free_fall() {
     assert!((sim.spheres[0].pos.y - baseline).abs() < 1e-4);
 }
 */
-

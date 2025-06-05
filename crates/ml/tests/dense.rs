@@ -29,5 +29,3 @@ fn dense_bias_only() {
     assert!((y.data[1] + 0.5).abs() < 1e-6);
 }
 */
-
-

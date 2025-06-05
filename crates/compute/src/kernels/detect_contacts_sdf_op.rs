@@ -32,15 +32,12 @@ pub struct TestContact {
 /// The SDF data is interpreted as a single plane parallel to the XZ plane with a
 /// `height` field describing its Y position. Bodies penetrating the plane
 /// generate contact records containing the body index and the penetration depth.
-pub fn handle_detect_contacts_sdf(
-    binds: &[BufferView],
-) -> Result<Vec<Vec<u8>>, ComputeError> {
+pub fn handle_detect_contacts_sdf(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 3 {
         return Err(ComputeError::ShapeMismatch(
             "DetectContactsSDF kernel expects 3 buffers (bodies, sdf, contacts)",
         ));
     }
-
 
     let bodies_view = &binds[0];
     let sdf_view = &binds[1];
@@ -99,10 +96,18 @@ mod tests {
 
         let bodies = vec![
             TestBody {
-                pos: TestVec3 { x: 0.0, y: -1.0, z: 0.0 },
+                pos: TestVec3 {
+                    x: 0.0,
+                    y: -1.0,
+                    z: 0.0,
+                },
             },
             TestBody {
-                pos: TestVec3 { x: 0.0, y: 1.0, z: 0.0 },
+                pos: TestVec3 {
+                    x: 0.0,
+                    y: 1.0,
+                    z: 0.0,
+                },
             },
         ];
 
@@ -144,7 +149,11 @@ mod tests {
         let cpu = MockCpu::default();
 
         let bodies = vec![TestBody {
-            pos: TestVec3 { x: 0.0, y: 0.5, z: 0.0 },
+            pos: TestVec3 {
+                x: 0.0,
+                y: 0.5,
+                z: 0.0,
+            },
         }];
 
         let bodies_bytes: StdArc<[u8]> = bytemuck::cast_slice(&bodies).to_vec().into();
@@ -159,7 +168,8 @@ mod tests {
         let plane_view = BufferView::new(plane_bytes, vec![1], std::mem::size_of::<TestPlane>());
 
         let out_placeholder: StdArc<[u8]> = vec![0u8; 8].into();
-        let out_view = BufferView::new(out_placeholder, vec![1], std::mem::size_of::<TestContact>());
+        let out_view =
+            BufferView::new(out_placeholder, vec![1], std::mem::size_of::<TestContact>());
 
         let result = cpu
             .dispatch(

@@ -1,8 +1,8 @@
-use std::process::{Command, Stdio};
 use std::io::{BufRead, BufReader};
-use std::time::Duration;
+use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 
 // Helper function to find the project root and then the target binary
 fn get_binary_path() -> Result<std::path::PathBuf, String> {
@@ -37,7 +37,6 @@ fn get_binary_path() -> Result<std::path::PathBuf, String> {
     Err("Could not find executable path from cargo build output".to_string())
 }
 
-
 #[test]
 fn test_runtime_main_executes_successfully() {
     let binary_path = match get_binary_path() {
@@ -50,7 +49,7 @@ fn test_runtime_main_executes_successfully() {
     let mut cmd = Command::new(binary_path);
     cmd.stdout(Stdio::piped()); // Capture stdout
     cmd.stderr(Stdio::piped()); // Capture stderr
-    
+
     // Set environment variables if necessary, e.g., for tracing
     cmd.env("RUST_LOG", "info");
     // Ensure the mock compute backend is used if not specified by default in runtime's Cargo.toml
@@ -90,24 +89,37 @@ fn test_runtime_main_executes_successfully() {
             }
         })
     };
-    
+
     // Wait for the process to complete, with a timeout
     let timeout = Duration::from_secs(30); // Adjust timeout as needed
     match child.wait_timeout_secs(timeout) {
         Ok(Some(status)) => {
             stdout_handle.join().expect("Stdout reader thread panicked");
             stderr_handle.join().expect("Stderr reader thread panicked");
-            
+
             let stdout_output = stdout_captured.lock().unwrap();
             let stderr_output = stderr_captured.lock().unwrap();
 
-            eprintln!("--- runtime_main STDOUT ---
-{}", *stdout_output);
-            eprintln!("--- runtime_main STDERR ---
-{}", *stderr_output);
+            eprintln!(
+                "--- runtime_main STDOUT ---
+{}",
+                *stdout_output
+            );
+            eprintln!(
+                "--- runtime_main STDERR ---
+{}",
+                *stderr_output
+            );
 
-            assert!(status.success(), "runtime_main process exited with error: {:?}", status.code());
-            assert!(stdout_output.contains("Simulation loop finished"), "Expected log output not found in stdout.");
+            assert!(
+                status.success(),
+                "runtime_main process exited with error: {:?}",
+                status.code()
+            );
+            assert!(
+                stdout_output.contains("Simulation loop finished"),
+                "Expected log output not found in stdout."
+            );
         }
         Ok(None) => {
             child.kill().expect("Failed to kill timed-out process");
@@ -121,11 +133,17 @@ fn test_runtime_main_executes_successfully() {
 
 // A helper trait and impl to use wait_timeout_secs (not in std Command on all Rust versions)
 trait ChildExt {
-    fn wait_timeout_secs(&mut self, duration: Duration) -> std::io::Result<Option<std::process::ExitStatus>>;
+    fn wait_timeout_secs(
+        &mut self,
+        duration: Duration,
+    ) -> std::io::Result<Option<std::process::ExitStatus>>;
 }
 
 impl ChildExt for std::process::Child {
-    fn wait_timeout_secs(&mut self, duration: Duration) -> std::io::Result<Option<std::process::ExitStatus>> {
+    fn wait_timeout_secs(
+        &mut self,
+        duration: Duration,
+    ) -> std::io::Result<Option<std::process::ExitStatus>> {
         // This is a simplified cross-platform way.
         // For a more robust solution, consider using platform-specific APIs or crates like `wait-timeout`.
         let start_time = std::time::Instant::now();
@@ -145,4 +163,4 @@ impl ChildExt for std::process::Child {
 
 // We need to add serde_json to dev-dependencies of runtime crate for get_binary_path
 // And potentially wait-timeout or similar if the simplified ChildExt is not robust enough.
-// For now, this test setup is a good start. 
+// For now, this test setup is a good start.

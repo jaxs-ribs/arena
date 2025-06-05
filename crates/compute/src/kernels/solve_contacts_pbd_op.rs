@@ -57,8 +57,7 @@ pub fn handle_solve_contacts_pbd(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, C
         ));
     }
 
-    let mut bodies =
-        bytemuck::cast_slice::<_, TestSphere>(&bodies_view.data).to_vec();
+    let mut bodies = bytemuck::cast_slice::<_, TestSphere>(&bodies_view.data).to_vec();
     let contacts: &[TestContact] = bytemuck::cast_slice(&contacts_view.data);
 
     for contact in contacts {
@@ -81,7 +80,7 @@ pub fn handle_solve_contacts_pbd(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, C
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{MockCpu, ComputeBackend, Kernel};
+    use crate::{ComputeBackend, Kernel, MockCpu};
     use std::sync::Arc as StdArc;
 
     #[repr(C)]
@@ -112,27 +111,33 @@ mod tests {
         let cpu = MockCpu::default();
 
         let sphere = TestSphere {
-            pos: TestVec3 { x: 0.0, y: -0.1, z: 0.0 },
-            vel: TestVec3 { x: 0.0, y: 0.0, z: 0.0 },
+            pos: TestVec3 {
+                x: 0.0,
+                y: -0.1,
+                z: 0.0,
+            },
+            vel: TestVec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
         };
         let spheres_bytes: StdArc<[u8]> = bytemuck::bytes_of(&sphere).to_vec().into();
-        let spheres_view = BufferView::new(
-            spheres_bytes,
-            vec![1],
-            std::mem::size_of::<TestSphere>(),
-        );
+        let spheres_view =
+            BufferView::new(spheres_bytes, vec![1], std::mem::size_of::<TestSphere>());
 
         let contact = TestContact {
             body_index: 0,
-            normal: TestVec3 { x: 0.0, y: 1.0, z: 0.0 },
+            normal: TestVec3 {
+                x: 0.0,
+                y: 1.0,
+                z: 0.0,
+            },
             depth: 0.1,
         };
         let contacts_bytes: StdArc<[u8]> = bytemuck::bytes_of(&contact).to_vec().into();
-        let contacts_view = BufferView::new(
-            contacts_bytes,
-            vec![1],
-            std::mem::size_of::<TestContact>(),
-        );
+        let contacts_view =
+            BufferView::new(contacts_bytes, vec![1], std::mem::size_of::<TestContact>());
 
         let params_bytes: StdArc<[u8]> = vec![0u8; 4].into();
         let params_view = BufferView::new(params_bytes, vec![1], 4);
