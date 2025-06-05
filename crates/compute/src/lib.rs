@@ -475,19 +475,20 @@ pub fn default_backend() -> std::sync::Arc<dyn ComputeBackend> {
     #[cfg(all(target_os = "macos", feature = "metal"))]
     {
         if let Ok(gpu) = WgpuMetal::try_new() {
+            tracing::info!("Using WgpuMetal backend.");
             return std::sync::Arc::new(gpu);
         }
+        tracing::warn!("WgpuMetal backend initialization failed, falling back...");
     }
 
     #[cfg(feature = "mock")]
     {
-        return std::sync::Arc::new(MockCpu);
+        tracing::info!("Using MockCpu backend.");
+        return std::sync::Arc::new(MockCpu::default());
     }
 
     #[cfg(not(feature = "mock"))]
     {
-        compile_error!("No compute backend available. Enable the `mock` feature or a GPU backend.");
+        compile_error!("No compute backend available. Enable the 'mock' feature or ensure a GPU backend can initialize.");
     }
-
-    unreachable!("default_backend configuration did not compile")
 }
