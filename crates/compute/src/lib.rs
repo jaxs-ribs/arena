@@ -1803,6 +1803,67 @@ mod tests {
         let output_value2: f32 = *bytemuck::from_bytes(&output_bytes2);
         assert_eq!(output_value2, expected_max2, "Mismatch for ReduceMax (case 2). Got: {}, Expected: {}", output_value2, expected_max2);
     }
+
+    #[test]
+    fn mock_segmented_reduce_sum_computes_segment_sums() {
+        let cpu = MockCpu::default();
+        
+        // Input data: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        // Segments (start indices): [0, 3, 7]
+        // Expected sums:
+        // Segment 1 (indices 0-2): 1 + 2 + 3 = 6
+        // Segment 2 (indices 3-6): 4 + 5 + 6 + 7 = 22
+        // Segment 3 (indices 7-9): 8 + 9 + 10 = 27
+        let input_data = vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let segment_indices = vec![0u32, 3, 7]; // Start indices of segments
+        let expected_sums = vec![6.0f32, 22.0, 27.0];
+
+        let input_bytes: Arc<[u8]> = bytemuck::cast_slice(&input_data).to_vec().into();
+        let input_buffer_view = BufferView::new(
+            input_bytes, vec![input_data.len()], std::mem::size_of::<f32>()
+        );
+
+        let segment_indices_bytes: Arc<[u8]> = bytemuck::cast_slice(&segment_indices).to_vec().into();
+        let segment_indices_buffer_view = BufferView::new(
+            segment_indices_bytes, vec![segment_indices.len()], std::mem::size_of::<u32>()
+        );
+
+        // Output buffer placeholder for the sums
+        let output_buffer_placeholder_bytes: Arc<[u8]> = vec![0u8; expected_sums.len() * std::mem::size_of::<f32>()].into();
+        let output_buffer_view = BufferView::new(
+            output_buffer_placeholder_bytes, vec![expected_sums.len()], std::mem::size_of::<f32>()
+        );
+
+        // Dummy config buffer
+        let config_data = vec![0u32]; 
+        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
+        let config_buffer_view = BufferView::new(
+            config_bytes, vec![config_data.len()], std::mem::size_of::<u32>()
+        );
+
+        let workgroups = [1, 1, 1];
+        let dispatch_binds = [
+            input_buffer_view, 
+            segment_indices_buffer_view, 
+            output_buffer_view, 
+            config_buffer_view
+        ];
+        let result_buffers = cpu.dispatch(&Kernel::SegmentedReduceSum, &dispatch_binds, workgroups)
+            .expect("Dispatch for SegmentedReduceSum failed");
+
+        assert_eq!(result_buffers.len(), 1, "SegmentedReduceSum should return one output buffer");
+        let output_bytes = &result_buffers[0];
+        assert_eq!(output_bytes.len(), expected_sums.len() * std::mem::size_of::<f32>(), "Output buffer size mismatch");
+
+        let output_values: &[f32] = bytemuck::cast_slice(output_bytes);
+        assert_eq!(output_values.len(), expected_sums.len(), "Output values length mismatch");
+
+        for (i, (got, expected)) in output_values.iter().zip(expected_sums.iter()).enumerate() {
+            assert!((got - expected).abs() < 1e-6, 
+                "Mismatch for SegmentedReduceSum at segment index {}. Got: {}, Expected: {}", 
+                i, got, expected);
+        }
+    }
 } // Closing brace for the main tests module
 
 #[cfg(all(target_os = "macos", feature = "metal"))]
