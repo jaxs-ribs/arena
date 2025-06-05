@@ -46,4 +46,11 @@ fn validate_noop_shader_compiles() {
 fn validate_integrate_euler_shader_compiles() {
     let _mock_cpu_instance_2 = compute::MockCpu;
     validate_wgsl_shader("../../shaders/integrate_euler.wgsl");
-} 
+}
+
+#[test]
+fn validate_elementwise_shader_compiles() {
+    let _mock_cpu_instance_3 = compute::MockCpu;
+    validate_wgsl_shader("../../shaders/elementwise.wgsl");
+}
+

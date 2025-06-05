@@ -3,6 +3,8 @@
 use std::sync::Arc;
 use thiserror::Error;
 
+pub mod layout;
+
 #[derive(Error, Debug)]
 pub enum ComputeError {
     #[error("buffer shape mismatch: {0}")]
@@ -12,9 +14,23 @@ pub enum ComputeError {
 }
 
 pub enum Kernel {
-    Noop,
-    SphereStep, // Added for physics simulation
-    // Will be extended later
+    // physics
+    SphereStep,
+    // element-wise
+    Add,
+    Mul,
+    Where,
+    // reductions
+    ReduceSum,
+    // linear algebra
+    MatMul, // stubbed for now
+}
+
+impl Kernel {
+    #[must_use]
+    pub const fn binding_count(&self) -> u32 {
+        layout::binding_count(self)
+    }
 }
 
 #[derive(Clone)]
@@ -86,7 +102,28 @@ impl ComputeBackend for MockCpu {
                     Ok(Vec::new())
                 }
             }
-            Kernel::Noop => Ok(Vec::new()),
+            Kernel::Add | Kernel::Mul | Kernel::Where => {
+                if binds.len() < 3 {
+                    return Err(ComputeError::ShapeMismatch("missing buffers"));
+                }
+                let len = binds[0].shape.iter().product::<usize>();
+                let a: &[f32] = bytemuck::cast_slice(&binds[0].data);
+                let b: &[f32] = bytemuck::cast_slice(&binds[1].data);
+                let mut out = vec![0f32; len];
+                for i in 0..len {
+                    let av = a[i];
+                    let bv = b[i];
+                    out[i] = match shader {
+                        Kernel::Add => av + bv,
+                        Kernel::Mul => av * bv,
+                        Kernel::Where => if bv == 0.0 { av } else { bv },
+                        _ => unreachable!(),
+                    };
+                }
+                let bytes = bytemuck::cast_slice(&out).to_vec();
+                Ok(vec![bytes])
+            }
+            _ => Ok(Vec::new()),
         }
     }
 }
@@ -98,8 +135,11 @@ mod tests {
     #[test]
     fn mismatch_shape_fails() {
         let cpu = MockCpu;
-        let bad_buf = BufferView::new(vec![0u8; 12].into(), vec![4, 4], 1);
-        let result = cpu.dispatch(&Kernel::Noop, &[bad_buf], [1, 1, 1]);
+        let bad_buf = BufferView::new(vec![0u8; 12].into(), vec![4], 4);
+        let good_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
+        let out_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
+        let cfg = BufferView::new(vec![0u8;4].into(), vec![1],4);
+        let result = cpu.dispatch(&Kernel::Add, &[bad_buf, good_buf, out_buf, cfg], [1, 1, 1]);
         assert!(
             matches!(result, Err(ComputeError::ShapeMismatch(_))),
             "Expected ShapeMismatch error, got {result:?}"
@@ -109,10 +149,11 @@ mod tests {
     #[test]
     fn correct_shape_succeeds() {
         let cpu = MockCpu;
-        let good_buf = BufferView::new(vec![0u8; 16].into(), vec![4, 4], 1);
-        let result = cpu.dispatch(&Kernel::Noop, &[good_buf], [1, 1, 1]);
+        let good_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
+        let out_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
+        let cfg = BufferView::new(vec![0u8;4].into(), vec![1],4);
+        let result = cpu.dispatch(&Kernel::Add, &[good_buf.clone(), good_buf.clone(), out_buf, cfg], [1, 1, 1]);
         assert!(result.is_ok(), "Expected Ok, got {result:?}");
-        assert!(result.unwrap().is_empty(), "Expected no data back from Noop");
     }
 
     #[test]
@@ -120,13 +161,13 @@ mod tests {
         let cpu = MockCpu;
         let data_f32_x4 = vec![0u8; 16]; 
         let good_buf = BufferView::new(data_f32_x4.into(), vec![4], 4);
-        let result = cpu.dispatch(&Kernel::Noop, &[good_buf], [1, 1, 1]);
+        let out_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
+        let result = cpu.dispatch(&Kernel::Add, &[good_buf.clone(), good_buf.clone(), out_buf.clone()], [1, 1, 1]);
         assert!(result.is_ok(), "Expected Ok for 4x f32s, got {result:?}");
-        assert!(result.unwrap().is_empty(), "Expected no data back from Noop");
 
         let data_f32_x3 = vec![0u8; 12];
         let bad_buf = BufferView::new(data_f32_x3.into(), vec![4], 4);
-        let result_bad = cpu.dispatch(&Kernel::Noop, &[bad_buf], [1,1,1]);
+        let result_bad = cpu.dispatch(&Kernel::Add, &[bad_buf, out_buf.clone(), out_buf], [1,1,1]);
         assert!(
             matches!(result_bad, Err(ComputeError::ShapeMismatch(_))),
             "Expected ShapeMismatch for 3x f32s with shape [4], got {result_bad:?}"
@@ -136,19 +177,22 @@ mod tests {
     #[test]
     fn multiple_buffers_correct_shape_succeeds() {
         let cpu = MockCpu;
-        let good_buf1 = BufferView::new(vec![0u8; 16].into(), vec![4, 4], 1);
-        let good_buf2 = BufferView::new(vec![0u8; 8].into(), vec![2, 4], 1);
-        let result = cpu.dispatch(&Kernel::Noop, &[good_buf1, good_buf2], [1, 1, 1]);
+        let good_buf1 = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
+        let good_buf2 = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
+        let out_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
+        let cfg = BufferView::new(vec![0u8;4].into(), vec![1],4);
+        let result = cpu.dispatch(&Kernel::Add, &[good_buf1, good_buf2, out_buf, cfg], [1, 1, 1]);
         assert!(result.is_ok(), "Expected Ok for multiple buffers, got {result:?}");
-        assert!(result.unwrap().is_empty(), "Expected no data back from Noop");
     }
 
     #[test]
     fn multiple_buffers_one_bad_shape_fails() {
         let cpu = MockCpu;
-        let good_buf = BufferView::new(vec![0u8; 16].into(), vec![4, 4], 1);
-        let bad_buf = BufferView::new(vec![0u8; 7].into(), vec![2, 4], 1);
-        let result = cpu.dispatch(&Kernel::Noop, &[good_buf, bad_buf], [1, 1, 1]);
+        let good_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
+        let bad_buf = BufferView::new(vec![0u8; 7].into(), vec![4], 4);
+        let out_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
+        let cfg = BufferView::new(vec![0u8;4].into(), vec![1],4);
+        let result = cpu.dispatch(&Kernel::Add, &[good_buf, bad_buf, out_buf, cfg], [1, 1, 1]);
         assert!(
             matches!(result, Err(ComputeError::ShapeMismatch(_))),
             "Expected ShapeMismatch error for multiple buffers, got {result:?}"
@@ -158,21 +202,21 @@ mod tests {
     #[test]
     fn empty_binds_succeeds() {
         let cpu = MockCpu;
-        let result = cpu.dispatch(&Kernel::Noop, &[], [1, 1, 1]);
-        assert!(result.is_ok(), "Expected Ok for empty binds, got {result:?}");
-        assert!(result.unwrap().is_empty(), "Expected no data back from Noop");
+        let result = cpu.dispatch(&Kernel::Add, &[], [1, 1, 1]);
+        assert!(matches!(result, Err(ComputeError::ShapeMismatch(_))));
     }
 
     #[test]
     fn shape_product_is_zero() {
         let cpu = MockCpu;
         let buf_zero_data_zero_prod = BufferView::new(vec![0u8; 0].into(), vec![0, 4], 1);
-        let result1 = cpu.dispatch(&Kernel::Noop, &[buf_zero_data_zero_prod], [1, 1, 1]);
+        let out_zero = BufferView::new(vec![0u8; 0].into(), vec![0], 1);
+        let cfg = BufferView::new(vec![0u8;4].into(), vec![1],4);
+        let result1 = cpu.dispatch(&Kernel::Add, &[buf_zero_data_zero_prod, out_zero.clone(), out_zero.clone(), cfg.clone()], [1, 1, 1]);
         assert!(result1.is_ok(), "Expected Ok for zero-product shape with zero data, got {result1:?}");
-        assert!(result1.unwrap().is_empty(), "Expected no data back from Noop");
 
         let buf_nonzero_data_zero_prod = BufferView::new(vec![0u8; 1].into(), vec![0, 4], 1);
-        let result2 = cpu.dispatch(&Kernel::Noop, &[buf_nonzero_data_zero_prod], [1, 1, 1]);
+        let result2 = cpu.dispatch(&Kernel::Add, &[buf_nonzero_data_zero_prod, out_zero.clone(), out_zero, cfg], [1, 1, 1]);
         assert!(
             matches!(result2, Err(ComputeError::ShapeMismatch(_))),
             "Expected ShapeMismatch for zero-product shape with non-zero data, got {result2:?}"
@@ -192,6 +236,18 @@ mod tests {
         assert_eq!(output_data_vec.len(), 1, "Expected one buffer back from SphereStep");
         assert_eq!(output_data_vec[0], sphere_data_initial.as_ref(), "Data from SphereStep should match initial sphere data for MockCpu");
     }
+
+    #[test]
+    fn kernel_binding_counts() {
+        use crate::layout::binding_count;
+
+        assert_eq!(binding_count(&Kernel::SphereStep), 2);
+        assert_eq!(binding_count(&Kernel::Add), 4);
+        assert_eq!(binding_count(&Kernel::Mul), 4);
+        assert_eq!(binding_count(&Kernel::Where), 4);
+        assert_eq!(binding_count(&Kernel::ReduceSum), 3);
+        assert_eq!(binding_count(&Kernel::MatMul), 3);
+    }
 }
 
 #[cfg(all(target_os = "macos", feature = "metal"))]
@@ -201,7 +257,7 @@ pub mod wgpu_metal_backend {
     use std::sync::{Arc, Mutex};
 
     pub struct WgpuMetal {
-        #[allow(dead_code)] // instance might not be used directly after init for basic Noop
+        #[allow(dead_code)] // instance might not be used directly after init for basic elementwise
         instance: wgpu::Instance,
         #[allow(dead_code)] // adapter might not be used directly after init for basic Noop
         adapter: wgpu::Adapter,
@@ -265,10 +321,7 @@ pub mod wgpu_metal_backend {
             _workgroups: [u32; 3],
         ) -> Result<Vec<Vec<u8>>, ComputeError> {
             match shader_kernel {
-                Kernel::Noop => {
-                    // Device and queue are initialized in try_new. If try_new succeeded, they are valid.
-                    // A simple way to check if the device is still operational (not strictly necessary for Noop).
-                    // self.device.poll(wgpu::Maintain::Poll);
+                Kernel::Add | Kernel::Mul | Kernel::Where => {
                     Ok(Vec::new())
                 }
                 Kernel::SphereStep => {
@@ -302,9 +355,9 @@ pub mod wgpu_metal_backend {
                     let dummy_data: Arc<[u8]> = vec![0u8; 4].into();
                     // BufferView::new expects data, shape, and element_size_in_bytes
                     let ok_buf = BufferView::new(dummy_data, vec![4], 1);
-                    let result = backend.dispatch(&Kernel::Noop, &[ok_buf], [1, 1, 1]);
-                    assert!(result.is_ok(), "Dispatching Noop on WgpuMetal backend failed: {result:?}");
-                    assert!(result.unwrap().is_empty(), "Expected no data back from WgpuMetal Noop");
+                    let result = backend.dispatch(&Kernel::Add, &[ok_buf], [1, 1, 1]);
+                    assert!(result.is_ok(), "Dispatching Add on WgpuMetal backend failed: {result:?}");
+                    assert!(result.unwrap().is_empty(), "Expected no data back from WgpuMetal Add");
                 }
                 Err(e) => {
                     // This test runs only on macOS due to cfg(all(target_os = "macos", feature = "metal")).

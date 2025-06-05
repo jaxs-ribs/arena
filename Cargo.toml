@@ -3,6 +3,7 @@ members = [
     "crates/compute",
     "crates/runtime",
     "crates/physics",
+    "crates/ml",
 ]
 resolver = "2"
 

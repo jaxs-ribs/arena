@@ -37,6 +37,7 @@ pub struct Sphere {
 pub struct PhysParams {
     pub gravity: Vec3, // Mapped to params.xyz in shader
     pub dt: f32,       // Mapped to params.w in shader
+    pub force: [f32; 2],
 }
 
 // Structure to return from sim.run() to satisfy the test
@@ -63,8 +64,8 @@ impl From<ComputeError> for PhysicsError {
 // --- Physics Simulator ---
 
 pub struct PhysicsSim {
-    spheres: Vec<Sphere>, // Host-side copy of sphere data
-    params: PhysParams,
+    pub spheres: Vec<Sphere>, // Host-side copy of sphere data
+    pub params: PhysParams,
     backend: Arc<dyn ComputeBackend>, // Using Arc for flexibility, could be Box
                                       // The test calls sim.run() so sim needs to be mutable or run needs &mut self
                                       // If run is &mut self, then backend doesn't strictly need Arc unless sim is cloned
@@ -86,6 +87,7 @@ impl PhysicsSim {
         let params = PhysParams {
             gravity: Vec3::new(0.0, -9.81, 0.0), // Default gravity, will be used by step_gpu
             dt: 0.01, // Default dt, will be overridden by run method's dt
+            force: [0.0, 0.0],
         };
 
         let backend = Arc::new(compute::MockCpu);
@@ -133,8 +135,8 @@ impl PhysicsSim {
         // acceleration by including the 0.5 * g * dt^2 term.
         for s in &mut self.spheres {
             let dt = self.params.dt;
-            let ax = self.params.gravity.x;
-            let ay = self.params.gravity.y;
+            let ax = self.params.gravity.x + self.params.force[0];
+            let ay = self.params.gravity.y + self.params.force[1];
             let az = self.params.gravity.z;
 
             s.pos.x += s.vel.x * dt + 0.5 * ax * dt * dt;
@@ -150,6 +152,8 @@ impl PhysicsSim {
                 s.vel.y = 0.0;
             }
         }
+
+        self.params.force = [0.0, 0.0];
 
         // A real GPU backend would read the updated sphere data back here.
 
