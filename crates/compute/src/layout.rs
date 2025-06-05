@@ -9,7 +9,8 @@ const _: () = assert!(STORAGE_OUT == 2);
 pub const fn binding_count(kernel: &crate::Kernel) -> u32 {
     match kernel {
         crate::Kernel::SphereStep => 2,
-        crate::Kernel::Add | crate::Kernel::Mul | crate::Kernel::Where => 4,
+        crate::Kernel::Add | crate::Kernel::Mul | crate::Kernel::Sub | crate::Kernel::Div | crate::Kernel::Where => 4,
+        crate::Kernel::Exp | crate::Kernel::Log | crate::Kernel::Tanh => 3,
         crate::Kernel::ReduceSum => 3,
         crate::Kernel::MatMul => 3,
     }

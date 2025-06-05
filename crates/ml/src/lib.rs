@@ -21,7 +21,16 @@ impl Tensor {
 }
 
 #[derive(Clone, Copy)]
-pub enum Op { Add, Mul, Where }
+pub enum Op {
+    Add,
+    Mul,
+    Sub,
+    Div,
+    Where,
+    Exp,
+    Log,
+    Tanh,
+}
 
 #[derive(Clone)]
 pub struct OpCall { pub op: Op, pub a: Tensor, pub b: Tensor, pub out: Tensor }
@@ -40,12 +49,31 @@ impl Graph {
             let b_view = upload(&mut call.b);
             let out_view = make_buffer(len);
             call.out.gpu = Some(out_view.clone());
-            let cfg = match call.op { Op::Add => 0u32, Op::Mul => 1, Op::Where => 2 };
+            let cfg = match call.op {
+                Op::Add => 0u32,
+                Op::Mul => 1,
+                Op::Sub => 2,
+                Op::Div => 3,
+                Op::Where => 4,
+                Op::Exp => 5,
+                Op::Log => 6,
+                Op::Tanh => 7,
+            };
             let cfg_bytes = cfg.to_le_bytes();
             let cfg_view = BufferView::new(cfg_bytes.to_vec().into(), vec![1], 4);
             let binds = [a_view, b_view, out_view.clone(), cfg_view];
             let wg = ((len as u32 + 255) / 256, 1, 1);
-            let bytes = backend.dispatch(match call.op { Op::Add => &Kernel::Add, Op::Mul => &Kernel::Mul, Op::Where => &Kernel::Where }, &binds, [wg.0, wg.1, wg.2])?;
+            let kernel = match call.op {
+                Op::Add => &Kernel::Add,
+                Op::Mul => &Kernel::Mul,
+                Op::Sub => &Kernel::Sub,
+                Op::Div => &Kernel::Div,
+                Op::Where => &Kernel::Where,
+                Op::Exp => &Kernel::Exp,
+                Op::Log => &Kernel::Log,
+                Op::Tanh => &Kernel::Tanh,
+            };
+            let bytes = backend.dispatch(kernel, &binds, [wg.0, wg.1, wg.2])?;
             if let Some(out_bytes) = bytes.get(0) {
                 let slice: &[f32] = bytemuck::cast_slice(out_bytes);
                 call.out.data.clone_from_slice(slice);
@@ -69,8 +97,8 @@ fn make_buffer(len: usize) -> BufferView {
 }
 
 pub struct Dense {
-    w: Tensor,
-    b: Tensor,
+    pub w: Tensor,
+    pub b: Tensor,
     in_dim: usize,
     out_dim: usize,
 }
