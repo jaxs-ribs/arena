@@ -28,4 +28,25 @@ fn dense_bias_only() {
     assert!((y.data[1] + 0.5).abs() < 1e-6);
 }
 
+#[test]
+fn dense_xavier_init_stats() {
+    use rand::SeedableRng;
+    use rand::rngs::StdRng;
+
+    let mut rng = StdRng::seed_from_u64(42);
+    let dense = Dense::xavier(4, 3, &mut rng);
+    assert_eq!(dense.w.shape, vec![3, 4]);
+    assert_eq!(dense.b.shape, vec![3]);
+    assert_eq!(dense.w.data.len(), 12);
+    assert_eq!(dense.b.data.len(), 3);
+
+    let mean: f32 = dense.w.data.iter().copied().sum::<f32>() / dense.w.data.len() as f32;
+    assert!(mean.abs() < 0.1);
+    let var: f32 = dense.w.data.iter().map(|&x| (x - mean).powi(2)).sum::<f32>() / dense.w.data.len() as f32;
+    let limit = (6.0f32 / (4.0 + 3.0)).sqrt();
+    let expected_var = limit * limit / 3.0;
+    let rel_diff = (var - expected_var).abs() / expected_var;
+    assert!(rel_diff < 0.5);
+}
+
 
