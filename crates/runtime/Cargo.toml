@@ -1,0 +1,19 @@
+[package]
+name = "runtime"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt"] }
+notify = "6.1" # Using a slightly newer version if available, or 6.0 as per earlier thought
+
+compute = { path = "../compute", features = ["mock"] }
+
+[dev-dependencies]
+naga = { workspace = true } # Added naga for shader compilation tests
+
+[[bin]]
+name = "runtime_main"
+path = "src/main.rs" 

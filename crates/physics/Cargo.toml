@@ -1,0 +1,12 @@
+[package]
+name = "physics"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+compute = { path = "../compute", features = ["mock"] }
+bytemuck = { version = "1.15", features = ["derive"] } # For struct to byte slice conversion
+# Add other dependencies as needed, e.g., for Vec3 if not custom
+
+[dev-dependencies]
+anyhow = "1.0" # For test results if needed 

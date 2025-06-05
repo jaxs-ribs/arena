@@ -1,0 +1,13 @@
+[package]
+name = "compute"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+mock = []
+metal = ["dep:wgpu"]
+
+[dependencies]
+thiserror = "1.0"
+wgpu = { version = "0.19", features=["metal"], optional = true }
+pollster = "0.3" 
