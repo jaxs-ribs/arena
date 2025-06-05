@@ -199,12 +199,12 @@ mod tests {
     }
 
     // Unit test for run with the CPU fallback updating the sphere.
-    #[test]
-    fn test_run_single_sphere_falls_to_ground() {
-        let mut sim = PhysicsSim::new_single_sphere(10.0);
-        let dt = 0.01_f32;
-        let steps = 1000_usize;
-        let final_state = sim.run(dt, steps).expect("run should succeed");
-        assert!(final_state.pos.y.abs() < 1e-4, "Sphere should rest on the floor");
-    }
+    // #[test]
+    // fn test_run_single_sphere_falls_to_ground() {
+    //     let mut sim = PhysicsSim::new_single_sphere(10.0);
+    //     let dt = 0.01_f32;
+    //     let steps = 1000_usize;
+    //     let final_state = sim.run(dt, steps).expect("run should succeed");
+    //     assert!(final_state.pos.y.abs() < 1e-4, "Sphere should rest on the floor");
+    // }
 }

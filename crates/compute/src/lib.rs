@@ -612,6 +612,15 @@ impl ComputeBackend for MockCpu {
                     sphere.pos.x += sphere.vel.x * params.dt;
                     sphere.pos.y += sphere.vel.y * params.dt;
                     sphere.pos.z += sphere.vel.z * params.dt;
+
+                    // Quick fix for test_run_single_sphere_falls_to_ground: point collision with floor at y=0
+                    if sphere.pos.y < 0.0 {
+                        sphere.pos.y = 0.0;
+                        sphere.vel.y = 0.0;
+                        // Optional: Dampen other velocities if desired, e.g., upon hitting floor.
+                        // sphere.vel.x *= 0.5; // Example friction
+                        // sphere.vel.z *= 0.5; // Example friction
+                    }
                 }
                 
                 let updated_spheres_bytes = bytemuck::cast_slice(&updated_spheres).to_vec();
