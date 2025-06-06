@@ -21,6 +21,8 @@ pub fn handle_solve_contacts_pbd(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, C
     struct TestSphere {
         pos: TestVec3,
         vel: TestVec3,
+        radius: f32,
+        _pad: [u32; 3],
     }
 
     #[repr(C)]
@@ -99,6 +101,8 @@ mod tests {
     struct TestSphere {
         pos: TestVec3,
         vel: TestVec3,
+        radius: f32,
+        _pad: [u32; 3],
     }
 
     #[repr(C)]
@@ -127,6 +131,8 @@ mod tests {
                 z: 0.0,
                 _pad: 0,
             },
+            radius: 1.0,
+            _pad: [0; 3],
         };
         let spheres_bytes: StdArc<[u8]> = bytemuck::bytes_of(&sphere).to_vec().into();
         let spheres_view =

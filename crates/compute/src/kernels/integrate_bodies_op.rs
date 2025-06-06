@@ -20,6 +20,8 @@ pub fn handle_integrate_bodies(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
     struct TestSphere {
         pos: TestVec3,
         vel: TestVec3,
+        radius: f32,
+        _pad: [u32; 3],
     }
     #[repr(C)]
     #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
@@ -96,6 +98,8 @@ mod tests {
         struct TestSphere {
             pos: TestVec3,
             vel: TestVec3,
+            radius: f32,
+            _pad: [u32; 3],
         }
         #[repr(C)]
         #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
@@ -120,6 +124,8 @@ mod tests {
                 z: 0.0,
                 _pad: 0,
             },
+            radius: 1.0,
+            _pad: [0; 3],
         };
         let spheres_data = vec![initial_sphere];
         let sphere_bytes: StdArc<[u8]> = bytemuck::cast_slice(&spheres_data).to_vec().into();

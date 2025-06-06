@@ -22,8 +22,8 @@ pub struct TestPlane {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct TestContact {
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct SdfContact {
     pub index: u32,
     pub penetration: f32,
 }
@@ -71,10 +71,10 @@ pub fn handle_detect_contacts_sdf(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, 
     let bodies: &[TestBody] = bytemuck::cast_slice(&bodies_view.data);
     let plane: &TestPlane = bytemuck::from_bytes(&sdf_view.data);
 
-    let mut contacts = Vec::<TestContact>::new();
+    let mut contacts = Vec::<SdfContact>::new();
     for (idx, body) in bodies.iter().enumerate() {
         if body.pos.y < plane.height {
-            contacts.push(TestContact {
+            contacts.push(SdfContact {
                 index: idx as u32,
                 penetration: plane.height - body.pos.y,
             });
@@ -129,7 +129,7 @@ mod tests {
         let out_view = BufferView::new(
             out_placeholder,
             vec![bodies.len()],
-            std::mem::size_of::<TestContact>(),
+            std::mem::size_of::<SdfContact>(),
         );
 
         let result = cpu
@@ -141,7 +141,7 @@ mod tests {
             .expect("Dispatch failed");
 
         assert_eq!(result.len(), 1);
-        let contacts: &[TestContact] = bytemuck::cast_slice(&result[0]);
+        let contacts: &[SdfContact] = bytemuck::cast_slice(&result[0]);
         assert_eq!(contacts.len(), 1);
         assert_eq!(contacts[0].index, 0);
         assert!((contacts[0].penetration - 1.0).abs() < 1e-6);
@@ -173,7 +173,7 @@ mod tests {
 
         let out_placeholder: StdArc<[u8]> = vec![0u8; 8].into();
         let out_view =
-            BufferView::new(out_placeholder, vec![1], std::mem::size_of::<TestContact>());
+            BufferView::new(out_placeholder, vec![1], std::mem::size_of::<SdfContact>());
 
         let result = cpu
             .dispatch(
@@ -184,7 +184,7 @@ mod tests {
             .expect("Dispatch failed");
 
         assert_eq!(result.len(), 1);
-        let contacts: &[TestContact] = if result[0].is_empty() {
+        let contacts: &[SdfContact] = if result[0].is_empty() {
             &[]
         } else {
             bytemuck::cast_slice(&result[0])
