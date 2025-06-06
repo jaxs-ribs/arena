@@ -123,6 +123,15 @@ impl PhysicsSim {
         }
     }
 
+    pub fn reset(&mut self) {
+        let initial_height = 10.0; // Or retrieve from some initial state config
+        let sphere = Sphere {
+            pos: Vec3::new(0.0, initial_height, 0.0),
+            vel: Vec3::new(0.0, 0.0, 0.0),
+        };
+        self.spheres = vec![sphere];
+    }
+
     pub fn step_gpu(&mut self) -> Result<(), PhysicsError> {
         if self.spheres.is_empty() {
             return Ok(());

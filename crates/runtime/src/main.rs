@@ -4,10 +4,9 @@
 mod watcher;
 
 use anyhow::Result;
-use physics::PhysicsSim;
 
 #[cfg(feature = "render")]
-use render::Renderer;
+use render;
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
@@ -25,59 +24,14 @@ fn main() -> Result<()> {
 
     let enable_render = std::env::args().any(|a| a == "--draw");
 
-    #[cfg(feature = "render")]
-    let mut renderer = if enable_render {
-        Some(Renderer::new()?)
-    } else {
-        None
-    };
-
-    tracing::info!("Initializing physics simulation...");
-    let mut sim = PhysicsSim::new_single_sphere(10.0);
-    let dt = 0.01_f32;
-    let num_steps = 200;
-
-    tracing::info!(
-        "Starting simulation loop for {} steps with dt = {}...",
-        num_steps,
-        dt
-    );
-    for i in 0..num_steps {
-        if let Err(e) = sim.run(dt, 1) {
-            tracing::error!("Error during simulation step {}: {:?}", i, e);
-            break;
-        }
+    if enable_render {
         #[cfg(feature = "render")]
-        if let Some(r) = renderer.as_mut() {
-            r.update_spheres(&sim.spheres);
-            r.render()?;
+        {
+            render::run()?;
         }
-        if (i + 1) % 50 == 0 {
-            if !sim.spheres.is_empty() {
-                tracing::info!(
-                    "Simulation step {} complete. Sphere_y: {}",
-                    i + 1,
-                    sim.spheres[0].pos.y
-                );
-            } else {
-                tracing::info!(
-                    "Simulation step {} complete. No spheres to report position.",
-                    i + 1
-                );
-            }
-        }
-    }
-
-    tracing::info!("Simulation loop finished after {} steps.", num_steps);
-    if !sim.spheres.is_empty() {
-        tracing::info!("Final sphere position: {:?}", sim.spheres[0].pos);
-    }
-
-    #[cfg(feature = "render")]
-    if let Some(r) = renderer.as_mut() {
-        loop {
-            r.render()?;
-        }
+    } else {
+        tracing::info!("Running in headless mode. No renderer will be used.");
+        // Placeholder for future headless simulation logic
     }
 
     Ok(())

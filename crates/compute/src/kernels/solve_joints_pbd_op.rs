@@ -13,6 +13,7 @@ pub fn handle_solve_joints_pbd(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
         x: f32,
         y: f32,
         z: f32,
+        _pad: u32,
     }
 
     #[repr(C)]
@@ -89,6 +90,7 @@ pub fn handle_solve_joints_pbd(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
             x: pb.x - pa.x,
             y: pb.y - pa.y,
             z: pb.z - pa.z,
+            _pad: 0,
         };
         let len_sq = dx.x * dx.x + dx.y * dx.y + dx.z * dx.z;
         if len_sq == 0.0 {
@@ -124,6 +126,7 @@ mod tests {
             x: f32,
             y: f32,
             z: f32,
+            _pad: u32,
         }
 
         #[repr(C)]
@@ -156,6 +159,7 @@ mod tests {
                     x: 0.0,
                     y: 0.0,
                     z: 0.0,
+                    _pad: 0,
                 },
             },
             TestBody {
@@ -163,6 +167,7 @@ mod tests {
                     x: 1.5,
                     y: 0.0,
                     z: 0.0,
+                    _pad: 0,
                 },
             },
         ];

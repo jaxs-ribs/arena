@@ -6,6 +6,7 @@ pub struct TestVec3 {
     pub x: f32,
     pub y: f32,
     pub z: f32,
+    pub _pad: u32,
 }
 
 #[repr(C)]
@@ -100,6 +101,7 @@ mod tests {
                     x: 0.0,
                     y: -1.0,
                     z: 0.0,
+                    _pad: 0,
                 },
             },
             TestBody {
@@ -107,6 +109,7 @@ mod tests {
                     x: 0.0,
                     y: 1.0,
                     z: 0.0,
+                    _pad: 0,
                 },
             },
         ];
@@ -153,6 +156,7 @@ mod tests {
                 x: 0.0,
                 y: 0.5,
                 z: 0.0,
+                _pad: 0,
             },
         }];
 
