@@ -23,7 +23,7 @@ pub fn handle_reduce_max(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeEr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ComputeBackend, Kernel, MockCpu};
+    use crate::{ComputeBackend, Kernel, backend::mock_cpu::MockCpu};
     use std::sync::Arc as StdArc;
 
     #[test]
