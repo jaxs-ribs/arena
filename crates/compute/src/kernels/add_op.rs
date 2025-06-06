@@ -46,7 +46,7 @@ pub fn handle_add(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BufferView, ComputeBackend, Kernel, MockCpu}; // Removed unused Arc
+    use crate::{BufferView, ComputeBackend, Kernel, backend::mock_cpu::MockCpu}; // Removed unused Arc
     use std::sync::Arc as StdArc;
 
     #[test]

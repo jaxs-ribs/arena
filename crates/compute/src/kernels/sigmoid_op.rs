@@ -24,7 +24,7 @@ pub fn handle_sigmoid(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ComputeBackend, Kernel, MockCpu};
+    use crate::{ComputeBackend, Kernel, backend::mock_cpu::MockCpu};
     use std::sync::Arc as StdArc;
 
     #[test]
