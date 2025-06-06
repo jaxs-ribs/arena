@@ -45,7 +45,7 @@ impl Env for RollingSphereEnv {
     }
 }
 
-use crate::{nn::{self, Dense}, optim::Adam, tape::Tape, Tensor};
+use crate::{nn::{self, Dense}, optim::Adam, tape::Tape, tensor::Tensor};
 use std::collections::HashMap;
 
 /// Simple policy/value network used by [`SpherePpoTrainer`].

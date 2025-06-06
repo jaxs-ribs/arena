@@ -1,6 +1,6 @@
 use crate::graph::{EOp, Node};
 use crate::recorder::Recorder;
-use crate::Tensor;
+use crate::tensor::Tensor;
 use anyhow::Result;
 use std::collections::HashMap;
 
