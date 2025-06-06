@@ -1,6 +1,6 @@
 pub use crate::graph;
 use crate::recorder::Recorder;
-use crate::Tensor;
+use crate::tensor::Tensor;
 use std::collections::HashMap;
 
 /// A fully connected neural network layer.

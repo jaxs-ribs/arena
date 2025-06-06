@@ -1,4 +1,4 @@
-use crate::Tensor;
+use crate::tensor::Tensor;
 
 /// The Adam optimizer.
 pub struct Adam {

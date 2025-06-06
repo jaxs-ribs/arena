@@ -1,5 +1,5 @@
 use crate::graph::Node;
-use crate::Tensor;
+use crate::tensor::Tensor;
 use std::collections::HashMap;
 
 /// A trait for recording operations in a computation graph.

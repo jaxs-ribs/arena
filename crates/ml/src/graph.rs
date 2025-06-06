@@ -1,5 +1,5 @@
 use crate::recorder::Recorder;
-use crate::Tensor;
+use crate::tensor::Tensor;
 use compute::{ComputeBackend, ComputeError};
 use std::collections::HashMap;
 use std::sync::Arc;
