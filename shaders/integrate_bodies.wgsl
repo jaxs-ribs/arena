@@ -20,8 +20,8 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
   let g = params.xyz;
   let f = vec3<f32>(forces[idx], 0.0);
   let acc = g + f;
-  s.pos += s.vel * dt + 0.5 * acc * dt * dt;
   s.vel += acc * dt;
+  s.pos += s.vel * dt;
 
   let half_dt = 0.5 * dt;
   let ox = s.angular_vel.x * half_dt;
@@ -31,12 +31,10 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
   let qy = s.orientation.y;
   let qz = s.orientation.z;
   let qw = s.orientation.w;
-  s.orientation = vec4<f32>(
-    qx + ox * qw + oy * qz - oz * qy,
-    qy + oy * qw + oz * qx - ox * qz,
-    qz + oz * qw + ox * qy - oy * qx,
-    qw + (-ox * qx - oy * qy - oz * qz),
-  );
+  s.orientation.x += ox * qw + oy * qz - oz * qy;
+  s.orientation.y += oy * qw + oz * qx - ox * qz;
+  s.orientation.z += oz * qw + ox * qy - oy * qx;
+  s.orientation.w += -ox * qx - oy * qy - oz * qz;
   
   // floor at y=0
   if (s.pos.y < 0.0) {

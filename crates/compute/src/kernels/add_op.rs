@@ -3,15 +3,12 @@ use crate::{BufferView, ComputeError};
 
 // Add operation handler
 pub fn handle_add(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
-    if binds.len() < 4 {
-        // IN1, IN2, OUT, CONFIG per layout.rs
-        return Err(ComputeError::ShapeMismatch(
-            "Add kernel expects 4 buffers (input_a, input_b, output_placeholder, config)",
-        ));
+    if binds.len() < 3 {
+        return Err(ComputeError::ShapeMismatch("Add kernel expects 3 buffers"));
     }
     let input_a_view = &binds[0];
     let input_b_view = &binds[1];
-    // binds[2] is output_placeholder, binds[3] is config
+    // binds[2] is output_placeholder
 
     if input_a_view.element_size_in_bytes != std::mem::size_of::<f32>()
         || input_b_view.element_size_in_bytes != std::mem::size_of::<f32>()
@@ -66,11 +63,7 @@ mod tests {
         let out_bytes: Arc<[u8]> = bytemuck::cast_slice(&out_data).to_vec().into();
         let out = BufferView::new(out_bytes, vec![out_data.len()], std::mem::size_of::<f32>());
 
-        let config_data = vec![0u32];
-        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
-        let config = BufferView::new(config_bytes, vec![config_data.len()], std::mem::size_of::<u32>());
-
-        let dispatch_binds = vec![a, b, out, config];
+        let dispatch_binds = vec![a, b, out];
         let result_buffers = cpu
             .dispatch(&Kernel::Add, &dispatch_binds, [1, 1, 1])
             .unwrap();

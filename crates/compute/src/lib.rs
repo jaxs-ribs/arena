@@ -64,6 +64,7 @@ pub enum Kernel {
     // Optional helpers
     ExpandInstances,
     RngNormal,
+    AddBroadcast,
 }
 
 impl Kernel {

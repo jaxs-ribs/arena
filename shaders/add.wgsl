@@ -1,11 +1,10 @@
 @group(0) @binding(0) var<storage, read> a: array<f32>;
 @group(0) @binding(1) var<storage, read> b: array<f32>;
-@group(0) @binding(3) var<storage, read_write> out: array<f32>;
-@group(0) @binding(4) var<uniform> _config: u32;
+@group(0) @binding(2) var<storage, read_write> out: array<f32>;
 
-@compute @workgroup_size(256)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let i = gid.x;
-    if (i >= arrayLength(&out)) { return; }
-    out[i] = a[i] + b[i];
+@compute @workgroup_size(1)
+fn main() {
+    for (var i: u32 = 0u; i < arrayLength(&a); i = i + 1u) {
+        out[i] = a[i] + b[i];
+    }
 }

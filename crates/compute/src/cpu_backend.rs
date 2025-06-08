@@ -67,6 +67,7 @@ impl ComputeBackend for CpuBackend {
             }
             Kernel::SolveJointsPBD => kernels::solve_joints_pbd_op::handle_solve_joints_pbd(binds),
             Kernel::RngNormal => kernels::rng_normal_op::handle_rng_normal(binds),
+            Kernel::AddBroadcast => kernels::add_broadcast_op::handle_add_broadcast(binds),
             Kernel::ExpandInstances => kernels::expand_instances_op::handle_expand_instances(binds),
         };
         result

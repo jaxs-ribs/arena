@@ -1,9 +1,9 @@
 use crate::{BufferView, ComputeError};
 
 pub fn handle_reduce_sum(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
-    if binds.len() < 3 {
+    if binds.len() < 2 {
         return Err(ComputeError::ShapeMismatch(
-            "ReduceSum kernel expects 3 buffers",
+            "ReduceSum kernel expects 2 buffers",
         ));
     }
     let input_view = &binds[0];

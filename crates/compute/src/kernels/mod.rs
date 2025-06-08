@@ -1,9 +1,8 @@
-// This module will re-export handlers for each kernel operation.
-
+pub mod add_broadcast_op;
 pub mod add_op;
 pub mod clamp_op;
-pub mod detect_contacts_sdf_op;
 pub mod detect_contacts_box_op;
+pub mod detect_contacts_sdf_op;
 pub mod detect_contacts_sphere;
 pub mod div_op;
 pub mod exp_op;
@@ -31,4 +30,36 @@ pub mod sqrt_op;
 pub mod sub_op;
 pub mod tanh_op;
 pub mod where_op;
-// Add other kernel modules here as they are created.
+
+pub use add_broadcast_op::handle_add_broadcast;
+pub use add_op::handle_add;
+pub use clamp_op::handle_clamp;
+pub use detect_contacts_box_op::handle_detect_contacts_box;
+pub use detect_contacts_sdf_op::handle_detect_contacts_sdf;
+pub use detect_contacts_sphere::handle_detect_contacts_sphere;
+pub use div_op::handle_div;
+pub use exp_op::handle_exp;
+pub use expand_instances_op::handle_expand_instances;
+pub use gather_op::handle_gather;
+pub use integrate_bodies_op::handle_integrate_bodies;
+pub use log_op::handle_log;
+pub use matmul_op::handle_matmul;
+pub use max_op::handle_max;
+pub use min_op::handle_min;
+pub use mul_op::handle_mul;
+pub use neg_op::handle_neg;
+pub use reduce_max_op::handle_reduce_max;
+pub use reduce_mean_op::handle_reduce_mean;
+pub use reduce_sum_op::handle_reduce_sum;
+pub use relu_op::handle_relu;
+pub use rng_normal_op::handle_rng_normal;
+pub use rsqrt_op::handle_rsqrt;
+pub use scatter_add_op::handle_scatter_add;
+pub use segmented_reduce_sum_op::handle_segmented_reduce_sum;
+pub use sigmoid_op::handle_sigmoid;
+pub use solve_contacts_pbd_op::handle_solve_contacts_pbd;
+pub use solve_joints_pbd_op::handle_solve_joints_pbd;
+pub use sqrt_op::handle_sqrt;
+pub use sub_op::handle_sub;
+pub use tanh_op::handle_tanh;
+pub use where_op::handle_where;

@@ -1,13 +1,13 @@
 @group(0) @binding(0) var<storage, read> a: array<f32>;
 @group(0) @binding(1) var<storage, read> b: array<f32>;
-@group(0) @binding(3) var<storage, read_write> out: array<f32>;
-@group(0) @binding(4) var<uniform> cfg: vec3<u32>; // M, N, K
+@group(0) @binding(2) var<storage, read_write> out: array<f32>;
+@group(0) @binding(3) var<uniform> cfg: vec3<u32>; // M, N, K
 
 @compute @workgroup_size(1)
 fn main() {
     let M = cfg.x;
-    let N = cfg.y;
-    let K = cfg.z;
+    let K = cfg.y;
+    let N = cfg.z;
     for (var m: u32 = 0u; m < M; m = m + 1u) {
         for (var n: u32 = 0u; n < N; n = n + 1u) {
             var sum: f32 = 0.0;

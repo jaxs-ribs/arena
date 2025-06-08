@@ -11,10 +11,10 @@ const _: () = assert!(STORAGE_OUT == 3);
 pub const fn binding_count(kernel: &crate::Kernel) -> u32 {
     match kernel {
         // Element-wise
-        crate::Kernel::Add
-        | crate::Kernel::Sub
-        | crate::Kernel::Mul
-        | crate::Kernel::Div
+        crate::Kernel::Add => 3,
+        crate::Kernel::Sub => 3,
+        crate::Kernel::Mul => 3,
+        crate::Kernel::Div
         | crate::Kernel::Min
         | crate::Kernel::Max
         | crate::Kernel::Where => 4, // IN1, IN2, OUT, CONFIG
@@ -31,7 +31,9 @@ pub const fn binding_count(kernel: &crate::Kernel) -> u32 {
         crate::Kernel::Clamp => 5, // IN_VAL, IN_MIN, IN_MAX, OUT, CONFIG
 
         // Reductions
-        crate::Kernel::ReduceSum | crate::Kernel::ReduceMean | crate::Kernel::ReduceMax => 3, // IN, OUT, CONFIG (e.g. axis)
+        crate::Kernel::ReduceSum => 2,
+        crate::Kernel::ReduceMean => 3,
+        crate::Kernel::ReduceMax => 3,
 
         crate::Kernel::SegmentedReduceSum | crate::Kernel::ScatterAdd => 4, // DATA_IN, INDICES, OUT, CONFIG
 
@@ -51,5 +53,6 @@ pub const fn binding_count(kernel: &crate::Kernel) -> u32 {
         // Optional helpers
         crate::Kernel::ExpandInstances => 3, // IN, OUT, CONFIG
         crate::Kernel::RngNormal => 2,       // OUT, CONFIG (e.g. seeds/state) (Provisional)
+        crate::Kernel::AddBroadcast => 4,    // A, B, OUT, CFG
     }
 }

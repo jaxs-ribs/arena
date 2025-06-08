@@ -38,11 +38,9 @@ pub fn run(_enable_render: bool) -> Result<()> {
         dt
     );
 
+    #[allow(unused_mut)]
     let mut should_continue = true;
     for i in 0..num_steps {
-        if !should_continue {
-            break;
-        }
         if let Err(e) = sim.run(dt, 1) {
             tracing::error!("Error during simulation step {}: {:?}", i, e);
             break;

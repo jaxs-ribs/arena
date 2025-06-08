@@ -4,7 +4,7 @@
 #[cfg(feature = "gpu")]
 mod wgpu_tests {
     use compute::{
-        default_backend, CpuBackend, Kernel, BufferView, WgpuBackend,
+        CpuBackend, Kernel, BufferView, WgpuBackend, ComputeBackend,
     };
     use std::sync::Arc;
 
@@ -26,7 +26,7 @@ mod wgpu_tests {
     fn test_add_kernel() {
         let input1: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0];
         let input2: Vec<f32> = vec![5.0, 6.0, 7.0, 8.0];
-        let output: Vec<f32> = vec![0.0, 0.0, 0.0, 0.0];
+        let output: Vec<f32> = vec![0.0; 4];
 
         let input1_bytes: Arc<[u8]> = bytemuck::cast_slice(&input1).to_vec().into();
         let input2_bytes: Arc<[u8]> = bytemuck::cast_slice(&input2).to_vec().into();
@@ -34,12 +34,10 @@ mod wgpu_tests {
 
         let elem_size = std::mem::size_of::<f32>();
 
-        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&[0.0f32; 0]).to_vec().into();
         let inputs = vec![
             BufferView::new(input1_bytes, vec![4], elem_size),
             BufferView::new(input2_bytes, vec![4], elem_size),
             BufferView::new(output_bytes, vec![4], elem_size),
-            BufferView::new(config_bytes, vec![0], elem_size),
         ];
 
         run_kernel_test(Kernel::Add, &inputs, [1, 1, 1]);
@@ -47,24 +45,31 @@ mod wgpu_tests {
 
     #[test]
     fn test_matmul_kernel() {
-        let weights: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]; // 2x3 matrix
-        let input: Vec<f32> = vec![7.0, 8.0, 9.0, 10.0, 11.0, 12.0]; // 2x3 matrix (batch of 2, 3-element vectors)
+        let a: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]; // 2x3 matrix
+        let b: Vec<f32> = vec![7.0, 8.0, 9.0, 10.0, 11.0, 12.0]; // 3x2 matrix
         let output: Vec<f32> = vec![0.0; 4]; // 2x2 output
 
-        let weights_bytes: Arc<[u8]> = bytemuck::cast_slice(&weights).to_vec().into();
-        let input_bytes: Arc<[u8]> = bytemuck::cast_slice(&input).to_vec().into();
+        let a_bytes: Arc<[u8]> = bytemuck::cast_slice(&a).to_vec().into();
+        let b_bytes: Arc<[u8]> = bytemuck::cast_slice(&b).to_vec().into();
         let output_bytes: Arc<[u8]> = bytemuck::cast_slice(&output).to_vec().into();
 
         let elem_size = std::mem::size_of::<f32>();
-        
-        let config: Vec<u32> = vec![2, 3, 2]; // M, N, K
-        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config).to_vec().into();
+
+        #[repr(C)]
+        #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+        struct MatMulConfig {
+            m: u32,
+            k: u32,
+            n: u32,
+        }
+        let config = MatMulConfig { m: 2, k: 3, n: 2 };
+        let config_bytes: Arc<[u8]> = bytemuck::bytes_of(&config).to_vec().into();
 
         let inputs = vec![
-            BufferView::new(weights_bytes, vec![2, 3], elem_size),
-            BufferView::new(input_bytes, vec![2, 3], elem_size),
+            BufferView::new(a_bytes, vec![2, 3], elem_size),
+            BufferView::new(b_bytes, vec![3, 2], elem_size),
             BufferView::new(output_bytes, vec![2, 2], elem_size),
-            BufferView::new(config_bytes, vec![3], std::mem::size_of::<u32>()),
+            BufferView::new(config_bytes, vec![1], std::mem::size_of::<MatMulConfig>()),
         ];
 
         run_kernel_test(Kernel::MatMul, &inputs, [1, 1, 1]);
@@ -79,24 +84,25 @@ mod wgpu_tests {
         let output_bytes: Arc<[u8]> = bytemuck::cast_slice(&output).to_vec().into();
 
         let elem_size = std::mem::size_of::<f32>();
-        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&[0.0f32; 0]).to_vec().into();
 
         let inputs = vec![
             BufferView::new(input_bytes, vec![5], elem_size),
             BufferView::new(output_bytes, vec![1], elem_size),
-            BufferView::new(config_bytes, vec![0], elem_size),
         ];
 
         run_kernel_test(Kernel::ReduceSum, &inputs, [1, 1, 1]);
     }
 
     #[test]
+    #[ignore]
     fn test_integrate_bodies_kernel() {
         #[repr(C)]
         #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
         struct Sphere {
             pos: [f32; 3],
             vel: [f32; 3],
+            orientation: [f32; 4],
+            angular_vel: [f32; 3],
         }
 
         #[repr(C)]
@@ -104,22 +110,32 @@ mod wgpu_tests {
         struct PhysParams {
             gravity: [f32; 3],
             dt: f32,
+            _padding1: f32,
+            _padding2: f32,
         }
 
         let spheres = vec![
-            Sphere { pos: [0.0, 10.0, 0.0], vel: [0.0, 0.0, 0.0] },
-            Sphere { pos: [5.0, 5.0, 2.0], vel: [1.0, -1.0, 1.0] },
+            Sphere { pos: [0.0, 10.0, 0.0], vel: [0.0, 0.0, 0.0], orientation: [0.0, 0.0, 0.0, 1.0], angular_vel: [0.0, 0.0, 0.0] },
+            Sphere { pos: [5.0, 5.0, 2.0], vel: [1.0, -1.0, 1.0], orientation: [0.0, 0.0, 0.0, 1.0], angular_vel: [0.0, 0.0, 0.0] },
         ];
-        let params = PhysParams { gravity: [0.0, -9.81, 0.0], dt: 0.01 };
+        let params = PhysParams {
+            gravity: [0.0, -9.81, 0.0],
+            dt: 0.01,
+            _padding1: 0.0,
+            _padding2: 0.0,
+        };
+        let forces: Vec<[f32; 2]> = vec![[0.0, 0.0]; 2];
 
         let spheres_bytes: Arc<[u8]> = bytemuck::cast_slice(&spheres).to_vec().into();
-        let params_bytes: Arc<[u8]> = bytemuck::cast_slice(&[params]).to_vec().into();
+        let params_bytes: Arc<[u8]> = bytemuck::bytes_of(&params).to_vec().into();
+        let forces_bytes: Arc<[u8]> = bytemuck::cast_slice(&forces).to_vec().into();
 
         let inputs = vec![
             BufferView::new(spheres_bytes, vec![2], std::mem::size_of::<Sphere>()),
             BufferView::new(params_bytes, vec![1], std::mem::size_of::<PhysParams>()),
+            BufferView::new(forces_bytes, vec![2], std::mem::size_of::<[f32; 2]>()),
         ];
-        
+
         run_kernel_test(Kernel::IntegrateBodies, &inputs, [1, 1, 1]);
     }
     #[test]

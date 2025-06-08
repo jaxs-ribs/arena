@@ -42,11 +42,11 @@ pub struct Renderer {
     pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     vertices: Vec<[f32; 3]>,
-    camera: Camera,
+    _camera: Camera,
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
-    window: Window,
+    _window: Window,
 }
 
 impl Renderer {
@@ -204,11 +204,11 @@ impl Renderer {
             pipeline,
             vertex_buffer,
             vertices,
-            camera,
+            _camera: camera,
             camera_uniform,
             camera_buffer,
             camera_bind_group,
-            window,
+            _window: window,
         })
     }
 

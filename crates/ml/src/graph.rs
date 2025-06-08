@@ -87,6 +87,7 @@ impl Graph {
                 EOp::ReduceMax => Kernel::ReduceMax,
                 EOp::ReduceMean => Kernel::ReduceMean,
                 EOp::Exp => Kernel::Exp,
+                EOp::AddBroadcast => Kernel::AddBroadcast,
                 EOp::Neg => Kernel::Neg,
                 _ => return Err(ComputeError::BackendUnavailable),
             };
@@ -133,21 +134,29 @@ impl Graph {
                     out_tensor.data = bytemuck::cast_slice(&result[0]).to_vec();
                 }
                 EOp::AddBroadcast => {
-                    let (a_shape, a_data) = {
-                        let a_ref = tensors.get(&node.a).expect("tensor a missing");
-                        (a_ref.shape.clone(), a_ref.data.clone())
-                    };
                     let b = tensors.get(&node.b).expect("tensor b missing");
-                    let mut out_tensor = tensors.get(&node.out).expect("output tensor missing").clone();
-                    let batch = a_shape[0];
-                    let dim = a_shape[1];
-                    for b_idx in 0..batch {
-                        for i in 0..dim {
-                            out_tensor.data[b_idx * dim + i] =
-                                a_data[b_idx * dim + i] + b.data[i];
-                        }
-                    }
-                    tensors.insert(out_tensor.id, out_tensor);
+                    let b_view = BufferView::new(
+                        bytemuck::cast_slice(&b.data).to_vec().into(),
+                        b.shape.clone(),
+                        std::mem::size_of::<f32>(),
+                    );
+                    binds.push(b_view);
+
+                    let out = tensors.get(&node.out).expect("output tensor missing");
+                    let out_placeholder = BufferView::new(
+                        vec![0u8; out.data.len() * std::mem::size_of::<f32>()].into(),
+                        out.shape.clone(),
+                        std::mem::size_of::<f32>(),
+                    );
+                    binds.push(out_placeholder);
+
+                    // simple config buffer
+                    let cfg = BufferView::new(vec![0u8; 4].into(), vec![1], 4);
+                    binds.push(cfg);
+
+                    let result = backend.dispatch(&kernel, &binds, [1, 1, 1])?;
+                    let out_tensor = tensors.get_mut(&node.out).expect("output tensor missing");
+                    out_tensor.data = bytemuck::cast_slice(&result[0]).to_vec();
                 }
                 EOp::ReduceSum | EOp::ReduceMean | EOp::ReduceMax => {
                     let out = tensors.get(&node.out).expect("output tensor missing");
