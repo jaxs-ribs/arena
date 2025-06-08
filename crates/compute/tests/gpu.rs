@@ -122,4 +122,112 @@ mod wgpu_tests {
         
         run_kernel_test(Kernel::IntegrateBodies, &inputs, [1, 1, 1]);
     }
-} 
+    #[test]
+    fn test_neg_kernel() {
+        let input: Vec<f32> = vec![1.0, -2.0, 3.0, -4.0];
+        let out: Vec<f32> = vec![0.0; 4];
+        let bytes_in: Arc<[u8]> = bytemuck::cast_slice(&input).to_vec().into();
+        let bytes_out: Arc<[u8]> = bytemuck::cast_slice(&out).to_vec().into();
+        let cfg: Arc<[u8]> = bytemuck::cast_slice(&[0u32]).to_vec().into();
+        let inputs = vec![
+            BufferView::new(bytes_in, vec![4], std::mem::size_of::<f32>()),
+            BufferView::new(bytes_out, vec![4], std::mem::size_of::<f32>()),
+            BufferView::new(cfg, vec![1], std::mem::size_of::<u32>()),
+        ];
+        run_kernel_test(Kernel::Neg, &inputs, [1,1,1]);
+    }
+
+    #[test]
+    fn test_relu_kernel() {
+        let input: Vec<f32> = vec![-1.0, 0.5, -0.2, 3.0];
+        let out: Vec<f32> = vec![0.0; 4];
+        let bytes_in: Arc<[u8]> = bytemuck::cast_slice(&input).to_vec().into();
+        let bytes_out: Arc<[u8]> = bytemuck::cast_slice(&out).to_vec().into();
+        let cfg: Arc<[u8]> = bytemuck::cast_slice(&[0u32]).to_vec().into();
+        let inputs = vec![
+            BufferView::new(bytes_in, vec![4], std::mem::size_of::<f32>()),
+            BufferView::new(bytes_out, vec![4], std::mem::size_of::<f32>()),
+            BufferView::new(cfg, vec![1], std::mem::size_of::<u32>()),
+        ];
+        run_kernel_test(Kernel::Relu, &inputs, [1,1,1]);
+    }
+
+    #[test]
+    fn test_reduce_mean_kernel() {
+        let input: Vec<f32> = vec![1.0,2.0,3.0,4.0];
+        let out: Vec<f32> = vec![0.0];
+        let bytes_in: Arc<[u8]> = bytemuck::cast_slice(&input).to_vec().into();
+        let bytes_out: Arc<[u8]> = bytemuck::cast_slice(&out).to_vec().into();
+        let cfg: Arc<[u8]> = bytemuck::cast_slice(&[0u32]).to_vec().into();
+        let inputs = vec![
+            BufferView::new(bytes_in, vec![4], std::mem::size_of::<f32>()),
+            BufferView::new(bytes_out, vec![1], std::mem::size_of::<f32>()),
+            BufferView::new(cfg, vec![1], std::mem::size_of::<u32>()),
+        ];
+        run_kernel_test(Kernel::ReduceMean, &inputs, [1,1,1]);
+    }
+
+    #[test]
+    fn test_gather_kernel() {
+        let data: Vec<f32> = vec![10.0, 11.0, 12.0, 13.0];
+        let idx: Vec<u32> = vec![2,0,3];
+        let out: Vec<f32> = vec![0.0; 3];
+        let data_b: Arc<[u8]> = bytemuck::cast_slice(&data).to_vec().into();
+        let idx_b: Arc<[u8]> = bytemuck::cast_slice(&idx).to_vec().into();
+        let out_b: Arc<[u8]> = bytemuck::cast_slice(&out).to_vec().into();
+        let cfg: Arc<[u8]> = bytemuck::cast_slice(&[0u32]).to_vec().into();
+        let inputs = vec![
+            BufferView::new(data_b, vec![4], std::mem::size_of::<f32>()),
+            BufferView::new(idx_b, vec![3], std::mem::size_of::<u32>()),
+            BufferView::new(out_b, vec![3], std::mem::size_of::<f32>()),
+            BufferView::new(cfg, vec![1], std::mem::size_of::<u32>()),
+        ];
+        run_kernel_test(Kernel::Gather, &inputs, [1,1,1]);
+    }
+
+    #[test]
+    fn test_scatter_add_kernel() {
+        let values: Vec<f32> = vec![1.0,2.0,3.0];
+        let indices: Vec<u32> = vec![1,0,2];
+        let acc: Vec<f32> = vec![0.0,0.0,0.0];
+        let values_b: Arc<[u8]> = bytemuck::cast_slice(&values).to_vec().into();
+        let idx_b: Arc<[u8]> = bytemuck::cast_slice(&indices).to_vec().into();
+        let acc_b: Arc<[u8]> = bytemuck::cast_slice(&acc).to_vec().into();
+        let cfg: Arc<[u8]> = bytemuck::cast_slice(&[0u32]).to_vec().into();
+        let inputs = vec![
+            BufferView::new(values_b, vec![3], std::mem::size_of::<f32>()),
+            BufferView::new(idx_b, vec![3], std::mem::size_of::<u32>()),
+            BufferView::new(acc_b, vec![3], std::mem::size_of::<f32>()),
+            BufferView::new(cfg, vec![1], std::mem::size_of::<u32>()),
+        ];
+        run_kernel_test(Kernel::ScatterAdd, &inputs, [1,1,1]);
+    }
+
+    #[test]
+    fn test_expand_instances_kernel() {
+        let template: Vec<f32> = vec![1.0,2.0];
+        let out: Vec<f32> = vec![0.0; 4];
+        let template_b: Arc<[u8]> = bytemuck::cast_slice(&template).to_vec().into();
+        let out_b: Arc<[u8]> = bytemuck::cast_slice(&out).to_vec().into();
+        let cfg_val: u32 = 2;
+        let cfg_b: Arc<[u8]> = bytemuck::bytes_of(&cfg_val).to_vec().into();
+        let inputs = vec![
+            BufferView::new(template_b, vec![2], std::mem::size_of::<f32>()),
+            BufferView::new(out_b, vec![2,2], std::mem::size_of::<f32>()),
+            BufferView::new(cfg_b, vec![1], std::mem::size_of::<u32>()),
+        ];
+        run_kernel_test(Kernel::ExpandInstances, &inputs, [1,1,1]);
+    }
+
+    #[test]
+    fn test_rng_normal_kernel() {
+        let out: Vec<f32> = vec![0.0; 4];
+        let out_b: Arc<[u8]> = bytemuck::cast_slice(&out).to_vec().into();
+        let cfg: Arc<[u8]> = bytemuck::cast_slice(&[0u32]).to_vec().into();
+        let inputs = vec![
+            BufferView::new(out_b, vec![4], std::mem::size_of::<f32>()),
+            BufferView::new(cfg, vec![1], std::mem::size_of::<u32>()),
+        ];
+        run_kernel_test(Kernel::RngNormal, &inputs, [1,1,1]);
+    }
+}
