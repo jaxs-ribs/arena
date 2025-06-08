@@ -48,6 +48,7 @@ pub enum Kernel {
 
     // Physics world passes
     IntegrateBodies,
+    DetectContactsSphere,
     DetectContactsSDF,
     SolveContactsPBD,
     SolveJointsPBD,

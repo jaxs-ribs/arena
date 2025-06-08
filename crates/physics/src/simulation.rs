@@ -93,6 +93,64 @@ impl PhysicsSim {
 
         #[repr(C)]
         #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+        struct ContactVec3 {
+            x: f32,
+            y: f32,
+            z: f32,
+        }
+        #[repr(C)]
+        #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+        struct ContactBody {
+            pos: ContactVec3,
+        }
+        #[repr(C)]
+        #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+        struct PbdContact {
+            body_index: u32,
+            normal: ContactVec3,
+            depth: f32,
+        }
+
+        let contact_bodies: Vec<ContactBody> = self
+            .spheres
+            .iter()
+            .map(|s| ContactBody {
+                pos: ContactVec3 {
+                    x: s.pos.x,
+                    y: s.pos.y,
+                    z: s.pos.z,
+                },
+            })
+            .collect();
+
+        let body_bytes: Arc<[u8]> = bytemuck::cast_slice(&contact_bodies).to_vec().into();
+        let body_view = compute::BufferView::new(body_bytes, vec![contact_bodies.len()], size_of::<ContactBody>());
+
+        let placeholder: Arc<[u8]> =
+            vec![0u8; contact_bodies.len() * contact_bodies.len() * size_of::<PbdContact>()].into();
+        let contacts_view = compute::BufferView::new(
+            placeholder,
+            vec![contact_bodies.len() * contact_bodies.len()],
+            size_of::<PbdContact>(),
+        );
+
+        let sphere_contact_buffers = self.backend.dispatch(
+            &compute::Kernel::DetectContactsSphere,
+            &[body_view, contacts_view],
+            [1, 1, 1],
+        )?;
+
+        let mut contacts_pbd: Vec<PbdContact> = if let Some(bytes) = sphere_contact_buffers.get(0) {
+            bytes
+                .chunks_exact(size_of::<PbdContact>())
+                .map(bytemuck::pod_read_unaligned)
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        #[repr(C)]
+        #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
         struct SdfVec3 {
             x: f32,
             y: f32,
@@ -152,22 +210,15 @@ impl PhysicsSim {
             Vec::new()
         };
 
-        #[repr(C)]
-        #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-        struct PbdContact {
-            body_index: u32,
-            normal: SdfVec3,
-            depth: f32,
-        }
-
-        let contacts_pbd: Vec<PbdContact> = contacts
+        let contacts_plane: Vec<PbdContact> = contacts
             .iter()
             .map(|c| PbdContact {
                 body_index: c.index,
-                normal: SdfVec3 { x: 0.0, y: 1.0, z: 0.0 },
+                normal: ContactVec3 { x: 0.0, y: 1.0, z: 0.0 },
                 depth: c.penetration,
             })
             .collect();
+        contacts_pbd.extend(contacts_plane);
 
         let contacts_bytes: Arc<[u8]> = bytemuck::cast_slice(&contacts_pbd).to_vec().into();
         let contacts_view = compute::BufferView::new(

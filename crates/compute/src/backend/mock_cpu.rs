@@ -51,6 +51,9 @@ impl ComputeBackend for MockCpu {
             Kernel::Gather => kernels::gather_op::handle_gather(binds),
             Kernel::MatMul => kernels::matmul_op::handle_matmul(binds),
             Kernel::IntegrateBodies => kernels::integrate_bodies_op::handle_integrate_bodies(binds),
+            Kernel::DetectContactsSphere => {
+                kernels::detect_contacts_sphere::handle_detect_contacts_sphere(binds)
+            }
             Kernel::DetectContactsSDF => {
                 kernels::detect_contacts_sdf_op::handle_detect_contacts_sdf(binds)
             }
@@ -242,6 +245,7 @@ mod tests {
 
         // Physics world passes
         assert_eq!(binding_count(&Kernel::IntegrateBodies), 2);
+        assert_eq!(binding_count(&Kernel::DetectContactsSphere), 2);
         assert_eq!(binding_count(&Kernel::DetectContactsSDF), 3);
         assert_eq!(binding_count(&Kernel::SolveContactsPBD), 3);
 
