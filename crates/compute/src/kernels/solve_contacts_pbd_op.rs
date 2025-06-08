@@ -19,9 +19,12 @@ pub fn handle_solve_contacts_pbd(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, C
     #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
     struct TestSphere {
         pos: TestVec3,
+        _pad1: f32,
         vel: TestVec3,
+        _pad2: f32,
         orientation: [f32; 4],
         angular_vel: TestVec3,
+        _pad3: f32,
     }
 
     #[repr(C)]
@@ -97,9 +100,12 @@ mod tests {
     #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
     struct TestSphere {
         pos: TestVec3,
+        _pad1: f32,
         vel: TestVec3,
+        _pad2: f32,
         orientation: [f32; 4],
         angular_vel: TestVec3,
+        _pad3: f32,
     }
 
     #[repr(C)]
@@ -120,13 +126,20 @@ mod tests {
                 y: -0.1,
                 z: 0.0,
             },
+            _pad1: 0.0,
             vel: TestVec3 {
                 x: 0.0,
                 y: 0.0,
                 z: 0.0,
             },
+            _pad2: 0.0,
             orientation: [0.0, 0.0, 0.0, 1.0],
-            angular_vel: TestVec3 { x: 0.0, y: 0.0, z: 0.0 },
+            angular_vel: TestVec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            _pad3: 0.0,
         };
         let spheres_bytes: Arc<[u8]> = bytemuck::bytes_of(&sphere).to_vec().into();
         let spheres_view =

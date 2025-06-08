@@ -17,9 +17,12 @@ impl Vec3 {
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Sphere {
     pub pos: Vec3,
+    _pad1: f32,
     pub vel: Vec3,
+    _pad2: f32,
     pub orientation: [f32; 4],
     pub angular_vel: Vec3,
+    _pad3: f32,
 }
 
 impl Sphere {
@@ -27,9 +30,12 @@ impl Sphere {
     pub const fn new(pos: Vec3, vel: Vec3) -> Self {
         Self {
             pos,
+            _pad1: 0.0,
             vel,
+            _pad2: 0.0,
             orientation: [0.0, 0.0, 0.0, 1.0],
             angular_vel: Vec3::new(0.0, 0.0, 0.0),
+            _pad3: 0.0,
         }
     }
 }
@@ -38,7 +44,9 @@ impl Sphere {
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct BoxShape {
     pub center: Vec3,
+    _pad1: f32,
     pub half_extents: Vec3,
+    _pad2: f32,
 }
 
 #[derive(Clone, Debug)]
