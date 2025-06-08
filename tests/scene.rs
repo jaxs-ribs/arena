@@ -20,7 +20,7 @@ fn chain_of_spheres_runs_stably() {
     let _ = sim.run(0.01, 10).unwrap();
 
     for s in &sim.spheres {
-        assert!(s.pos.y >= 0.0);
+        assert!(s.pos.y >= 1.0);
     }
 
     // Check chain length approximately maintained

@@ -163,14 +163,23 @@ impl PhysicsSim {
         }
         #[repr(C)]
         #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-        struct SdfPlane {
-            height: f32,
+        struct BoxVec3 {
+            x: f32,
+            y: f32,
+            z: f32,
         }
         #[repr(C)]
         #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-        struct SdfContact {
-            index: u32,
-            penetration: f32,
+        struct BoxShapeInternal {
+            center: BoxVec3,
+            half_extents: BoxVec3,
+        }
+        #[repr(C)]
+        #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+        struct BoxContact {
+            body_index: u32,
+            normal: BoxVec3,
+            depth: f32,
         }
 
         let bodies: Vec<SdfBody> = self
@@ -188,37 +197,37 @@ impl PhysicsSim {
         let bodies_bytes: Arc<[u8]> = bytemuck::cast_slice(&bodies).to_vec().into();
         let bodies_view = compute::BufferView::new(bodies_bytes, vec![bodies.len()], size_of::<SdfBody>());
 
-        let plane = SdfPlane { height: 0.0 };
-        let plane_bytes: Arc<[u8]> = bytemuck::bytes_of(&plane).to_vec().into();
-        let plane_view = compute::BufferView::new(plane_bytes, vec![1], size_of::<SdfPlane>());
+        let ground_box = BoxShapeInternal {
+            center: BoxVec3 { x: 0.0, y: -1.0, z: 0.0 },
+            half_extents: BoxVec3 { x: 5.0, y: 1.0, z: 5.0 },
+        };
+        let box_bytes: Arc<[u8]> = bytemuck::bytes_of(&ground_box).to_vec().into();
+        let box_view = compute::BufferView::new(box_bytes, vec![1], size_of::<BoxShapeInternal>());
 
-        let placeholder: Arc<[u8]> = vec![0u8; bodies.len() * size_of::<SdfContact>()].into();
-        let contacts_view = compute::BufferView::new(placeholder, vec![bodies.len()], size_of::<SdfContact>());
+        let placeholder: Arc<[u8]> = vec![0u8; bodies.len() * size_of::<BoxContact>()].into();
+        let contacts_view = compute::BufferView::new(placeholder, vec![bodies.len()], size_of::<BoxContact>());
 
         let contact_buffers = self.backend.dispatch(
-            &compute::Kernel::DetectContactsSDF,
-            &[bodies_view, plane_view, contacts_view],
+            &compute::Kernel::DetectContactsBox,
+            &[bodies_view, box_view, contacts_view],
             [1, 1, 1],
         )?;
 
-        let contacts: Vec<SdfContact> = if let Some(bytes) = contact_buffers.get(0) {
+        let contacts_box: Vec<PbdContact> = if let Some(bytes) = contact_buffers.get(0) {
             bytes
-                .chunks_exact(size_of::<SdfContact>())
+                .chunks_exact(size_of::<BoxContact>())
                 .map(bytemuck::pod_read_unaligned)
+                .map(|c: BoxContact| PbdContact {
+                    body_index: c.body_index,
+                    normal: ContactVec3 { x: c.normal.x, y: c.normal.y, z: c.normal.z },
+                    depth: c.depth,
+                })
                 .collect()
         } else {
             Vec::new()
         };
 
-        let contacts_plane: Vec<PbdContact> = contacts
-            .iter()
-            .map(|c| PbdContact {
-                body_index: c.index,
-                normal: ContactVec3 { x: 0.0, y: 1.0, z: 0.0 },
-                depth: c.penetration,
-            })
-            .collect();
-        contacts_pbd.extend(contacts_plane);
+        contacts_pbd.extend(contacts_box);
 
         let contacts_bytes: Arc<[u8]> = bytemuck::cast_slice(&contacts_pbd).to_vec().into();
         let contacts_view = compute::BufferView::new(

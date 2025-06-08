@@ -3,6 +3,7 @@
 pub mod add_op;
 pub mod clamp_op;
 pub mod detect_contacts_sdf_op;
+pub mod detect_contacts_box_op;
 pub mod detect_contacts_sphere;
 pub mod div_op;
 pub mod exp_op;
