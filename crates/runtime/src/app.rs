@@ -37,7 +37,12 @@ pub fn run(_enable_render: bool) -> Result<()> {
         num_steps,
         dt
     );
+
+    let mut should_continue = true;
     for i in 0..num_steps {
+        if !should_continue {
+            break;
+        }
         if let Err(e) = sim.run(dt, 1) {
             tracing::error!("Error during simulation step {}: {:?}", i, e);
             break;
@@ -45,7 +50,7 @@ pub fn run(_enable_render: bool) -> Result<()> {
         #[cfg(feature = "render")]
         if let Some(r) = renderer.as_mut() {
             r.update_spheres(&sim.spheres);
-            r.render()?;
+            should_continue = r.render()?;
         }
         if (i + 1) % 50 == 0 {
             if !sim.spheres.is_empty() {
@@ -66,6 +71,17 @@ pub fn run(_enable_render: bool) -> Result<()> {
     tracing::info!("Simulation loop finished after {} steps.", num_steps);
     if !sim.spheres.is_empty() {
         tracing::info!("Final sphere position: {:?}", sim.spheres[0].pos);
+    }
+
+    #[cfg(feature = "render")]
+    if let Some(mut renderer) = renderer {
+        // Create a new simulation loop that just renders the final state.
+        while should_continue {
+            should_continue = renderer.render()?;
+            // The renderer does not have its own physics loop, so we manually update positions.
+            // For this example, we'll just keep rendering the final state.
+            std::thread::sleep(std::time::Duration::from_millis(16));
+        }
     }
 
     Ok(())
