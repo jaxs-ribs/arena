@@ -73,6 +73,15 @@ cargo run -p runtime --features render -- --draw
 This will open a window and draw the sphere positions after each simulation
 step.
 
+## Stick Balancing Environment (WIP)
+
+The repository now contains a minimal physics setup for a classic control task:
+balancing a stick on a moving cart. The `StickBalanceEnv` in the `ml` crate
+exposes an `Env` implementation backed by the physics engine. A new test file
+exercises this environment by stepping it with zero actions and verifying that
+the episode terminates once the pole falls over. No learning happens yet—this is
+purely a skeleton for future reinforcement learning experiments.
+
 ## Status
 
 The codebase is early and experimental. Right now it demonstrates the core pieces needed to integrate physics simulation with GPU kernels compiled from WGSL. The intention is to evolve this into a Brax‑like environment where reinforcement learning policies can be trained directly on a differentiable WebGPU simulator.
