@@ -19,6 +19,8 @@ pub fn handle_integrate_bodies(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
     struct TestSphere {
         pos: TestVec3,
         vel: TestVec3,
+        orientation: [f32; 4],
+        angular_vel: TestVec3,
     }
     #[repr(C)]
     #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
@@ -85,6 +87,19 @@ pub fn handle_integrate_bodies(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
             sphere.pos.y = 0.0;
             sphere.vel.y = 0.0;
         }
+
+        let half_dt = 0.5 * params.dt;
+        let ox = sphere.angular_vel.x * half_dt;
+        let oy = sphere.angular_vel.y * half_dt;
+        let oz = sphere.angular_vel.z * half_dt;
+        let qx = sphere.orientation[0];
+        let qy = sphere.orientation[1];
+        let qz = sphere.orientation[2];
+        let qw = sphere.orientation[3];
+        sphere.orientation[0] += ox * qw + oy * qz - oz * qy;
+        sphere.orientation[1] += oy * qw + oz * qx - ox * qz;
+        sphere.orientation[2] += oz * qw + ox * qy - oy * qx;
+        sphere.orientation[3] += -ox * qx - oy * qy - oz * qz;
     }
 
     let updated_spheres_bytes = bytemuck::cast_slice(&updated_spheres).to_vec();
@@ -111,6 +126,8 @@ mod tests {
         struct TestSphere {
             pos: TestVec3,
             vel: TestVec3,
+            orientation: [f32; 4],
+            angular_vel: TestVec3,
         }
         #[repr(C)]
         #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
@@ -140,6 +157,8 @@ mod tests {
                 y: 0.0,
                 z: 0.0,
             },
+            orientation: [0.0, 0.0, 0.0, 1.0],
+            angular_vel: TestVec3 { x: 0.0, y: 0.0, z: 1.0 },
         };
         let spheres_data = vec![initial_sphere];
         let sphere_bytes: StdArc<[u8]> = bytemuck::cast_slice(&spheres_data).to_vec().into();
@@ -191,9 +210,13 @@ mod tests {
         let expected_vel_x = initial_sphere.vel.x + params.gravity.x * params.dt;
         let expected_pos_x = initial_sphere.pos.x + expected_vel_x * params.dt;
 
+        let expected_orient_z = initial_sphere.orientation[2]
+            + initial_sphere.angular_vel.z * params.dt * 0.5 * initial_sphere.orientation[3];
+
         assert!((updated_sphere.vel.y - expected_vel_y).abs() < 1e-5);
         assert!((updated_sphere.pos.y - expected_pos_y).abs() < 1e-5);
         assert!((updated_sphere.vel.x - expected_vel_x).abs() < 1e-5);
         assert!((updated_sphere.pos.x - expected_pos_x).abs() < 1e-5);
+        assert!((updated_sphere.orientation[2] - expected_orient_z).abs() < 1e-5);
     }
 }

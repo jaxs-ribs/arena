@@ -1,6 +1,9 @@
 struct Sphere {
   pos : vec3<f32>,
   vel : vec3<f32>,
+  orientation : vec4<f32>,
+  angular_vel : vec3<f32>,
+  _pad : f32,
 };
 
 @group(0) @binding(0) var<storage, read_write> spheres : array<Sphere>;
@@ -19,6 +22,21 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
   let acc = g + f;
   s.pos += s.vel * dt + 0.5 * acc * dt * dt;
   s.vel += acc * dt;
+
+  let half_dt = 0.5 * dt;
+  let ox = s.angular_vel.x * half_dt;
+  let oy = s.angular_vel.y * half_dt;
+  let oz = s.angular_vel.z * half_dt;
+  let qx = s.orientation.x;
+  let qy = s.orientation.y;
+  let qz = s.orientation.z;
+  let qw = s.orientation.w;
+  s.orientation = vec4<f32>(
+    qx + ox * qw + oy * qz - oz * qy,
+    qy + oy * qw + oz * qx - ox * qz,
+    qz + oz * qw + ox * qy - oy * qx,
+    qw + (-ox * qx - oy * qy - oz * qz),
+  );
   
   // floor at y=0
   if (s.pos.y < 0.0) {

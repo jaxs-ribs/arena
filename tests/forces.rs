@@ -4,7 +4,10 @@ use physics::{PhysicsSim, Sphere, Vec3};
 fn per_body_forces_move_spheres_independently() {
     let mut sim = PhysicsSim::new_single_sphere(0.0);
     sim.params.gravity = Vec3::new(0.0, 0.0, 0.0);
-    sim.spheres.push(Sphere { pos: Vec3::new(0.0, 0.0, 0.0), vel: Vec3::new(0.0, 0.0, 0.0) });
+    sim.spheres.push(Sphere::new(
+        Vec3::new(0.0, 0.0, 0.0),
+        Vec3::new(0.0, 0.0, 0.0),
+    ));
     sim.params.forces.push([ -1.0, 0.0 ]);
     sim.params.forces[0] = [1.0, 0.0];
 
