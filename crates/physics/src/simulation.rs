@@ -30,6 +30,24 @@ pub struct PhysicsSim {
 const WORKGROUP_SIZE: u32 = 256;
 
 impl PhysicsSim {
+    /// Creates an empty simulation with default parameters.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            spheres: Vec::new(),
+            params: PhysParams {
+                gravity: Vec3::new(0.0, -9.81, 0.0),
+                dt: 0.01,
+                forces: Vec::new(),
+            },
+            joints: Vec::new(),
+            joint_params: JointParams {
+                compliance: 0.0,
+                _pad: [0.0; 3],
+            },
+            backend: compute::default_backend(),
+        }
+    }
     #[must_use]
     pub fn new_single_sphere(initial_height: f32) -> Self {
         let sphere = Sphere::new(
@@ -56,6 +74,36 @@ impl PhysicsSim {
             },
             backend,
         }
+    }
+
+    /// Adds a sphere to the simulation and returns its index.
+    pub fn add_sphere(&mut self, pos: Vec3, vel: Vec3) -> usize {
+        let index = self.spheres.len();
+        self.spheres.push(Sphere::new(pos, vel));
+        self.params.forces.push([0.0, 0.0]);
+        index
+    }
+
+    /// Adds a distance joint between two bodies.
+    pub fn add_joint(&mut self, body_a: u32, body_b: u32, rest_length: f32) {
+        self.joints.push(Joint {
+            body_a,
+            body_b,
+            rest_length,
+            _padding: 0,
+        });
+    }
+
+    /// Sets an external force for a given sphere.
+    pub fn set_force(&mut self, body_index: usize, force: [f32; 2]) {
+        if let Some(f) = self.params.forces.get_mut(body_index) {
+            *f = force;
+        }
+    }
+
+    /// Overrides the compute backend used for dispatching kernels.
+    pub fn set_backend(&mut self, backend: Arc<dyn ComputeBackend>) {
+        self.backend = backend;
     }
 
     pub fn step_gpu(&mut self) -> Result<(), PhysicsError> {
