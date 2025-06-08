@@ -1,55 +1,28 @@
 use compute;
 use std::fs;
-use std::path::Path; // This should be resolvable as `runtime` depends on `compute`
+use std::path::Path;
 
-// Helper function to validate a WGSL shader file using naga
-fn validate_wgsl_shader(shader_path_str: &str) {
-    let shader_path = Path::new(shader_path_str);
-    let shader_source = match fs::read_to_string(shader_path) {
-        Ok(s) => s,
-        Err(e) => panic!("Failed to read shader file {shader_path:?}: {e}"),
-    };
-
-    let module = match naga::front::wgsl::parse_str(&shader_source) {
-        Ok(m) => m,
-        Err(e) => {
-            panic!(
-                "WGSL parsing error in {shader_path:?}:\n{error_report}",
-                error_report = e.emit_to_string(&shader_source)
-            );
-        }
-    };
-
+fn validate_wgsl_shader(shader_path: &Path) {
+    let shader_source = fs::read_to_string(shader_path)
+        .expect(&format!("Failed to read shader file {:?}", shader_path));
+    let module = naga::front::wgsl::parse_str(&shader_source)
+        .expect(&format!("WGSL parsing error in {:?}", shader_path));
     let mut validator = naga::valid::Validator::new(
         naga::valid::ValidationFlags::all(),
         naga::valid::Capabilities::all(),
     );
+    validator
+        .validate(&module)
+        .expect(&format!("WGSL validation error in {:?}", shader_path));
+}
 
-    match validator.validate(&module) {
-        Ok(_) => println!("Successfully parsed and validated {shader_path:?}"),
-        Err(e) => {
-            panic!(
-                "WGSL validation error in {shader_path:?}:\n{error_report}",
-                error_report = e.emit_to_string(&shader_source)
-            );
+#[test]
+fn validate_kernel_shaders_compile() {
+    let _backend = compute::default_backend();
+    for entry in fs::read_dir(Path::new("../../shaders")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().map(|e| e == "wgsl").unwrap_or(false) {
+            validate_wgsl_shader(&path);
         }
     }
-}
-
-#[test]
-fn validate_noop_shader_compiles() {
-    let _backend = compute::default_backend();
-    validate_wgsl_shader("../../shaders/noop.wgsl");
-}
-
-#[test]
-fn validate_integrate_euler_shader_compiles() {
-    let _backend = compute::default_backend();
-    validate_wgsl_shader("../../shaders/integrate_euler.wgsl");
-}
-
-#[test]
-fn validate_elementwise_shader_compiles() {
-    let _backend = compute::default_backend();
-    validate_wgsl_shader("../../shaders/elementwise.wgsl");
 }
