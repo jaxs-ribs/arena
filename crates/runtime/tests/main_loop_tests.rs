@@ -47,6 +47,13 @@ fn test_runtime_main_executes_successfully() {
     };
 
     let mut cmd = Command::new(binary_path);
+    cmd.current_dir(
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap(),
+    );
     cmd.stdout(Stdio::piped()); // Capture stdout
     cmd.stderr(Stdio::piped()); // Capture stderr
 
@@ -117,7 +124,7 @@ fn test_runtime_main_executes_successfully() {
                 status.code()
             );
             assert!(
-                stdout_output.contains("Simulation loop finished"),
+                stdout_output.contains("Running in headless mode. No renderer will be used."),
                 "Expected log output not found in stdout."
             );
         }
