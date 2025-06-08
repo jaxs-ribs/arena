@@ -106,10 +106,11 @@ pub fn handle_integrate_bodies(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
     Ok(vec![updated_spheres_bytes])
 }
 
+#[cfg(feature = "cpu-tests")]
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::sync::Arc as StdArc;
+    use crate::{BufferView, ComputeBackend, CpuBackend, Kernel};
+    use std::sync::Arc;
 
     #[test]
     fn mock_integrate_bodies_updates_sphere() {
@@ -160,7 +161,7 @@ mod tests {
             angular_vel: TestVec3 { x: 0.0, y: 0.0, z: 1.0 },
         };
         let spheres_data = vec![initial_sphere];
-        let sphere_bytes: StdArc<[u8]> = bytemuck::cast_slice(&spheres_data).to_vec().into();
+        let sphere_bytes: Arc<[u8]> = bytemuck::cast_slice(&spheres_data).to_vec().into();
         let sphere_buffer_view = BufferView::new(
             sphere_bytes,
             vec![spheres_data.len()],
@@ -177,12 +178,12 @@ mod tests {
             _padding1: 0.0,
             _padding2: 0.0,
         };
-        let params_bytes: StdArc<[u8]> = bytemuck::bytes_of(&params).to_vec().into();
+        let params_bytes: Arc<[u8]> = bytemuck::bytes_of(&params).to_vec().into();
         let params_buffer_view =
             BufferView::new(params_bytes, vec![1], std::mem::size_of::<TestPhysParams>());
 
         let forces = vec![TestForce { x: 0.0, y: 0.0 }];
-        let forces_bytes: StdArc<[u8]> = bytemuck::cast_slice(&forces).to_vec().into();
+        let forces_bytes: Arc<[u8]> = bytemuck::cast_slice(&forces).to_vec().into();
         let forces_buffer_view =
             BufferView::new(forces_bytes, vec![forces.len()], std::mem::size_of::<TestForce>());
 

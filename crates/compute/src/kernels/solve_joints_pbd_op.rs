@@ -110,10 +110,11 @@ pub fn handle_solve_joints_pbd(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
     Ok(vec![updated_bytes])
 }
 
+#[cfg(feature = "cpu-tests")]
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::sync::Arc as StdArc;
+    use crate::{BufferView, ComputeBackend, CpuBackend, Kernel};
+    use std::sync::Arc;
 
     #[test]
     fn distance_joint_maintains_length() {
@@ -176,9 +177,9 @@ mod tests {
             _pad: [0.0; 3],
         };
 
-        let body_bytes: StdArc<[u8]> = bytemuck::cast_slice(&bodies).to_vec().into();
-        let joint_bytes: StdArc<[u8]> = bytemuck::cast_slice(&joints).to_vec().into();
-        let param_bytes: StdArc<[u8]> = bytemuck::bytes_of(&params).to_vec().into();
+        let body_bytes: Arc<[u8]> = bytemuck::cast_slice(&bodies).to_vec().into();
+        let joint_bytes: Arc<[u8]> = bytemuck::cast_slice(&joints).to_vec().into();
+        let param_bytes: Arc<[u8]> = bytemuck::bytes_of(&params).to_vec().into();
 
         let body_view = BufferView::new(
             body_bytes,

@@ -79,10 +79,11 @@ pub fn handle_solve_contacts_pbd(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, C
     Ok(vec![out_bytes])
 }
 
+#[cfg(feature = "cpu-tests")]
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::sync::Arc as StdArc;
+    use crate::{BufferView, ComputeBackend, CpuBackend, Kernel};
+    use std::sync::Arc;
 
     #[repr(C)]
     #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
@@ -127,7 +128,7 @@ mod tests {
             orientation: [0.0, 0.0, 0.0, 1.0],
             angular_vel: TestVec3 { x: 0.0, y: 0.0, z: 0.0 },
         };
-        let spheres_bytes: StdArc<[u8]> = bytemuck::bytes_of(&sphere).to_vec().into();
+        let spheres_bytes: Arc<[u8]> = bytemuck::bytes_of(&sphere).to_vec().into();
         let spheres_view =
             BufferView::new(spheres_bytes, vec![1], std::mem::size_of::<TestSphere>());
 
@@ -140,11 +141,11 @@ mod tests {
             },
             depth: 0.1,
         };
-        let contacts_bytes: StdArc<[u8]> = bytemuck::bytes_of(&contact).to_vec().into();
+        let contacts_bytes: Arc<[u8]> = bytemuck::bytes_of(&contact).to_vec().into();
         let contacts_view =
             BufferView::new(contacts_bytes, vec![1], std::mem::size_of::<TestContact>());
 
-        let params_bytes: StdArc<[u8]> = vec![0u8; 4].into();
+        let params_bytes: Arc<[u8]> = vec![0u8; 4].into();
         let params_view = BufferView::new(params_bytes, vec![1], 4);
 
         let out = cpu

@@ -75,10 +75,11 @@ pub fn handle_matmul(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError>
     Ok(vec![out_bytes])
 }
 
+#[cfg(feature = "cpu-tests")]
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::sync::Arc as StdArc;
+    use crate::{BufferView, ComputeBackend, CpuBackend, Kernel};
+    use std::sync::Arc;
 
     #[repr(C)]
     #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -100,21 +101,21 @@ mod tests {
         let n = 2u32;
         let expected_output_data = vec![58.0f32, 64.0, 139.0, 154.0];
 
-        let a_bytes: StdArc<[u8]> = bytemuck::cast_slice(&a_data).to_vec().into();
+        let a_bytes: Arc<[u8]> = bytemuck::cast_slice(&a_data).to_vec().into();
         let a_buffer_view = BufferView::new(
             a_bytes,
             vec![m as usize, k as usize],
             std::mem::size_of::<f32>(),
         );
 
-        let b_bytes: StdArc<[u8]> = bytemuck::cast_slice(&b_data).to_vec().into();
+        let b_bytes: Arc<[u8]> = bytemuck::cast_slice(&b_data).to_vec().into();
         let b_buffer_view = BufferView::new(
             b_bytes,
             vec![k as usize, n as usize],
             std::mem::size_of::<f32>(),
         );
 
-        let output_placeholder: StdArc<[u8]> =
+        let output_placeholder: Arc<[u8]> =
             vec![0u8; (m * n) as usize * std::mem::size_of::<f32>()].into();
         let output_buffer_view = BufferView::new(
             output_placeholder,
@@ -123,7 +124,7 @@ mod tests {
         );
 
         let matmul_config = TestMatMulConfig { m, k, n };
-        let config_bytes: StdArc<[u8]> = bytemuck::bytes_of(&matmul_config).to_vec().into();
+        let config_bytes: Arc<[u8]> = bytemuck::bytes_of(&matmul_config).to_vec().into();
         let config_buffer_view = BufferView::new(
             config_bytes,
             vec![1],

@@ -54,10 +54,11 @@ pub fn handle_segmented_reduce_sum(binds: &[BufferView]) -> Result<Vec<Vec<u8>>,
     Ok(vec![out_bytes])
 }
 
+#[cfg(feature = "cpu-tests")]
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::sync::Arc as StdArc;
+    use crate::{BufferView, ComputeBackend, CpuBackend, Kernel};
+    use std::sync::Arc;
 
     #[test]
     fn mock_segmented_reduce_sum_computes_segment_sums() {
@@ -66,14 +67,14 @@ mod tests {
         let segment_indices = vec![0u32, 3, 7];
         let expected_sums = vec![6.0f32, 22.0, 27.0];
 
-        let input_bytes: StdArc<[u8]> = bytemuck::cast_slice(&input_data).to_vec().into();
+        let input_bytes: Arc<[u8]> = bytemuck::cast_slice(&input_data).to_vec().into();
         let input_buffer_view = BufferView::new(
             input_bytes,
             vec![input_data.len()],
             std::mem::size_of::<f32>(),
         );
 
-        let segment_indices_bytes: StdArc<[u8]> =
+        let segment_indices_bytes: Arc<[u8]> =
             bytemuck::cast_slice(&segment_indices).to_vec().into();
         let segment_indices_buffer_view = BufferView::new(
             segment_indices_bytes,
@@ -81,7 +82,7 @@ mod tests {
             std::mem::size_of::<u32>(),
         );
 
-        let output_placeholder: StdArc<[u8]> =
+        let output_placeholder: Arc<[u8]> =
             vec![0u8; expected_sums.len() * std::mem::size_of::<f32>()].into();
         let output_buffer_view = BufferView::new(
             output_placeholder,
@@ -90,7 +91,7 @@ mod tests {
         );
 
         let config_data = vec![0u32];
-        let config_bytes: StdArc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
+        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
         let config_buffer_view = BufferView::new(
             config_bytes,
             vec![config_data.len()],

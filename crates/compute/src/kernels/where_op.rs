@@ -65,17 +65,28 @@ mod tests {
     fn test_where() {
         let cpu = CpuBackend::new();
 
-        let cond = BufferView::from(Arc::new(vec![1u32, 0, 1, 0, 1]));
-        let a = BufferView::from(Arc::new(vec![1.0, 2.0, 3.0, 4.0, 5.0]));
-        let b = BufferView::from(Arc::new(vec![6.0, 7.0, 8.0, 9.0, 10.0]));
-        let out = BufferView::new(Arc::new(vec![0.0; 5]), ());
+        let cond_data = vec![1u32, 0, 1, 0, 1];
+        let cond_bytes = Arc::from(bytemuck::cast_slice(&cond_data));
+        let cond = BufferView::new(cond_bytes, vec![cond_data.len()], std::mem::size_of::<u32>());
 
-        let dispatch_binds = &[&cond, &a, &b, &out];
+        let a_data = vec![1.0f32, 2.0, 3.0, 4.0, 5.0];
+        let a_bytes = Arc::from(bytemuck::cast_slice(&a_data));
+        let a = BufferView::new(a_bytes, vec![a_data.len()], std::mem::size_of::<f32>());
+
+        let b_data = vec![6.0f32, 7.0, 8.0, 9.0, 10.0];
+        let b_bytes = Arc::from(bytemuck::cast_slice(&b_data));
+        let b = BufferView::new(b_bytes, vec![b_data.len()], std::mem::size_of::<f32>());
+
+        let out_data = vec![0.0f32; 5];
+        let out_bytes = Arc::from(bytemuck::cast_slice(&out_data));
+        let out = BufferView::new(out_bytes, vec![out_data.len()], std::mem::size_of::<f32>());
+
+        let dispatch_binds = vec![cond, a, b, out];
         let result_buffers = cpu
             .dispatch(&Kernel::Where, &dispatch_binds, [1, 1, 1])
             .unwrap();
 
-        let result = result_buffers[0].as_slice::<f32>().unwrap();
+        let result: &[f32] = bytemuck::cast_slice(&result_buffers[0]);
         assert_eq!(result, &[1.0, 7.0, 3.0, 9.0, 5.0]);
     }
 }

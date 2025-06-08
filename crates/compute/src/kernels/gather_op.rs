@@ -44,10 +44,11 @@ pub fn handle_gather(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError>
     Ok(vec![out_bytes])
 }
 
+#[cfg(feature = "cpu-tests")]
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::sync::Arc as StdArc;
+    use crate::{BufferView, ComputeBackend, CpuBackend, Kernel};
+    use std::sync::Arc;
 
     #[test]
     fn mock_gather_collects_values_from_indices() {
@@ -56,21 +57,21 @@ mod tests {
         let indices_to_gather = vec![3u32, 0, 2, 2, 4];
         let expected_output_data = vec![13.0f32, 10.0, 12.0, 12.0, 14.0];
 
-        let source_data_bytes: StdArc<[u8]> = bytemuck::cast_slice(&source_data).to_vec().into();
+        let source_data_bytes: Arc<[u8]> = bytemuck::cast_slice(&source_data).to_vec().into();
         let source_buffer_view = BufferView::new(
             source_data_bytes,
             vec![source_data.len()],
             std::mem::size_of::<f32>(),
         );
 
-        let indices_bytes: StdArc<[u8]> = bytemuck::cast_slice(&indices_to_gather).to_vec().into();
+        let indices_bytes: Arc<[u8]> = bytemuck::cast_slice(&indices_to_gather).to_vec().into();
         let indices_buffer_view = BufferView::new(
             indices_bytes,
             vec![indices_to_gather.len()],
             std::mem::size_of::<u32>(),
         );
 
-        let output_placeholder: StdArc<[u8]> =
+        let output_placeholder: Arc<[u8]> =
             vec![0u8; expected_output_data.len() * std::mem::size_of::<f32>()].into();
         let output_buffer_view = BufferView::new(
             output_placeholder,
@@ -79,7 +80,7 @@ mod tests {
         );
 
         let config_data = vec![0u32];
-        let config_bytes: StdArc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
+        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
         let config_buffer_view = BufferView::new(
             config_bytes,
             vec![config_data.len()],

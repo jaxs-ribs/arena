@@ -52,10 +52,11 @@ pub fn handle_scatter_add(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeE
     Ok(vec![out_bytes])
 }
 
+#[cfg(feature = "cpu-tests")]
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::sync::Arc as StdArc;
+    use crate::{BufferView, ComputeBackend, CpuBackend, Kernel};
+    use std::sync::Arc;
 
     #[test]
     fn mock_scatter_add_adds_values_to_indices() {
@@ -65,7 +66,7 @@ mod tests {
         let indices_data = vec![1u32, 0, 3];
         let expected_final_output_data = vec![2.0f32, 1.0, 0.0, 3.0, 0.0];
 
-        let values_to_add_bytes: StdArc<[u8]> =
+        let values_to_add_bytes: Arc<[u8]> =
             bytemuck::cast_slice(&values_to_add_data).to_vec().into();
         let values_buffer_view = BufferView::new(
             values_to_add_bytes,
@@ -73,14 +74,14 @@ mod tests {
             std::mem::size_of::<f32>(),
         );
 
-        let indices_bytes: StdArc<[u8]> = bytemuck::cast_slice(&indices_data).to_vec().into();
+        let indices_bytes: Arc<[u8]> = bytemuck::cast_slice(&indices_data).to_vec().into();
         let indices_buffer_view = BufferView::new(
             indices_bytes,
             vec![indices_data.len()],
             std::mem::size_of::<u32>(),
         );
 
-        let initial_output_bytes: StdArc<[u8]> =
+        let initial_output_bytes: Arc<[u8]> =
             bytemuck::cast_slice(&initial_output_data).to_vec().into();
         let output_accumulator_buffer_view = BufferView::new(
             initial_output_bytes,
@@ -89,7 +90,7 @@ mod tests {
         );
 
         let config_data = vec![0u32];
-        let config_bytes: StdArc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
+        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
         let config_buffer_view = BufferView::new(
             config_bytes,
             vec![config_data.len()],

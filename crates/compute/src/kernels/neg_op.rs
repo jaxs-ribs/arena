@@ -32,15 +32,18 @@ mod tests {
     fn test_neg() {
         let cpu = CpuBackend::new();
 
-        let a = BufferView::from(Arc::new(vec![1.0, -1.0, 0.0, 5.0, -5.0]));
-        let out = BufferView::new(Arc::new(vec![0.0; 5]), ());
+        let a_data = vec![1.0f32, -1.0, 0.0, 5.0, -5.0];
+        let a_bytes = Arc::from(bytemuck::cast_slice(&a_data));
+        let a = BufferView::new(a_bytes, vec![a_data.len()], std::mem::size_of::<f32>());
 
-        let dispatch_binds = &[&a, &out];
-        let result_buffers = cpu
-            .dispatch(&Kernel::Neg, &dispatch_binds, [1, 1, 1])
-            .unwrap();
+        let out_data = vec![0.0f32; 5];
+        let out_bytes = Arc::from(bytemuck::cast_slice(&out_data));
+        let out = BufferView::new(out_bytes, vec![out_data.len()], std::mem::size_of::<f32>());
 
-        let result = result_buffers[0].as_slice::<f32>().unwrap();
+        let dispatch_binds = vec![a, out];
+        let result_buffers = cpu.dispatch(&Kernel::Neg, &dispatch_binds, [1, 1, 1]).unwrap();
+
+        let result: &[f32] = bytemuck::cast_slice(&result_buffers[0]);
         assert_eq!(result, &[-1.0, 1.0, 0.0, -5.0, 5.0]);
     }
 }

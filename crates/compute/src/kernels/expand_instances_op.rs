@@ -35,10 +35,11 @@ pub fn handle_expand_instances(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
     Ok(vec![output_bytes])
 }
 
+#[cfg(feature = "cpu-tests")]
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::sync::Arc as StdArc;
+    use crate::{BufferView, ComputeBackend, CpuBackend, Kernel};
+    use std::sync::Arc;
 
     #[repr(C)]
     #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -57,7 +58,7 @@ mod tests {
             expected_output_data.extend_from_slice(&template_data);
         }
 
-        let template_bytes: StdArc<[u8]> = bytemuck::cast_slice(&template_data).to_vec().into();
+        let template_bytes: Arc<[u8]> = bytemuck::cast_slice(&template_data).to_vec().into();
         let template_buffer_view = BufferView::new(
             template_bytes,
             vec![template_data.len()],
@@ -66,7 +67,7 @@ mod tests {
 
         let output_placeholder_total_bytes =
             template_data.len() * repetition_count as usize * std::mem::size_of::<f32>();
-        let output_placeholder: StdArc<[u8]> = vec![0u8; output_placeholder_total_bytes].into();
+        let output_placeholder: Arc<[u8]> = vec![0u8; output_placeholder_total_bytes].into();
         let output_buffer_view = BufferView::new(
             output_placeholder,
             vec![repetition_count as usize, template_data.len()],
@@ -76,7 +77,7 @@ mod tests {
         let expand_config = TestExpandConfig {
             count: repetition_count,
         };
-        let config_bytes: StdArc<[u8]> = bytemuck::bytes_of(&expand_config).to_vec().into();
+        let config_bytes: Arc<[u8]> = bytemuck::bytes_of(&expand_config).to_vec().into();
         let config_buffer_view = BufferView::new(
             config_bytes,
             vec![1],
