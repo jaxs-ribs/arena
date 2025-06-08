@@ -8,17 +8,26 @@ use std::collections::HashMap;
 pub enum EOp {
     Add,
     Mul,
+    Div,
     ReduceSum,
     MatMul,
     Tanh,
+    Relu,
+    Sigmoid,
+    Log,
+    Sqrt,
+    Rsqrt,
     Sub,
     Pow,
     MulScalar,
     Clamp,
     Min,
+    Max,
+    ReduceMax,
     ReduceMean,
     Exp,
     AddBroadcast,
+    Neg,
 }
 /// A node in the computation graph, representing a single operation.
 #[derive(Clone)]
@@ -61,15 +70,24 @@ impl Graph {
             let kernel = match node.op {
                 EOp::Add => Kernel::Add,
                 EOp::Mul => Kernel::Mul,
+                EOp::Div => Kernel::Div,
                 EOp::ReduceSum => Kernel::ReduceSum,
                 // Unsupported ops map to available kernels when possible
                 EOp::MatMul => Kernel::MatMul,
                 EOp::Tanh => Kernel::Tanh,
+                EOp::Relu => Kernel::Relu,
+                EOp::Sigmoid => Kernel::Sigmoid,
+                EOp::Log => Kernel::Log,
+                EOp::Sqrt => Kernel::Sqrt,
+                EOp::Rsqrt => Kernel::Rsqrt,
                 EOp::Sub => Kernel::Sub,
                 EOp::Clamp => Kernel::Clamp,
                 EOp::Min => Kernel::Min,
+                EOp::Max => Kernel::Max,
+                EOp::ReduceMax => Kernel::ReduceMax,
                 EOp::ReduceMean => Kernel::ReduceMean,
                 EOp::Exp => Kernel::Exp,
+                EOp::Neg => Kernel::Neg,
                 _ => return Err(ComputeError::BackendUnavailable),
             };
 
@@ -84,7 +102,12 @@ impl Graph {
             binds.push(a_view);
 
             match node.op {
-                EOp::Add | EOp::Mul | EOp::Sub | EOp::Min => {
+                EOp::Add
+                | EOp::Mul
+                | EOp::Sub
+                | EOp::Div
+                | EOp::Min
+                | EOp::Max => {
                     let b = tensors.get(&node.b).expect("tensor b missing");
                     let b_view = BufferView::new(
                         bytemuck::cast_slice(&b.data).to_vec().into(),
@@ -109,7 +132,24 @@ impl Graph {
                     let out_tensor = tensors.get_mut(&node.out).expect("output tensor missing");
                     out_tensor.data = bytemuck::cast_slice(&result[0]).to_vec();
                 }
-                EOp::ReduceSum | EOp::ReduceMean => {
+                EOp::AddBroadcast => {
+                    let (a_shape, a_data) = {
+                        let a_ref = tensors.get(&node.a).expect("tensor a missing");
+                        (a_ref.shape.clone(), a_ref.data.clone())
+                    };
+                    let b = tensors.get(&node.b).expect("tensor b missing");
+                    let mut out_tensor = tensors.get(&node.out).expect("output tensor missing").clone();
+                    let batch = a_shape[0];
+                    let dim = a_shape[1];
+                    for b_idx in 0..batch {
+                        for i in 0..dim {
+                            out_tensor.data[b_idx * dim + i] =
+                                a_data[b_idx * dim + i] + b.data[i];
+                        }
+                    }
+                    tensors.insert(out_tensor.id, out_tensor);
+                }
+                EOp::ReduceSum | EOp::ReduceMean | EOp::ReduceMax => {
                     let out = tensors.get(&node.out).expect("output tensor missing");
                     let out_placeholder = BufferView::new(
                         vec![0u8; std::mem::size_of::<f32>()].into(),
@@ -164,7 +204,15 @@ impl Graph {
                     let out_tensor = tensors.get_mut(&node.out).expect("output tensor missing");
                     out_tensor.data = bytemuck::cast_slice(&result[0]).to_vec();
                 }
-                EOp::Tanh | EOp::Exp | EOp::Clamp => {
+                EOp::Tanh
+                | EOp::Relu
+                | EOp::Sigmoid
+                | EOp::Log
+                | EOp::Sqrt
+                | EOp::Rsqrt
+                | EOp::Exp
+                | EOp::Clamp
+                | EOp::Neg => {
                     let out = tensors.get(&node.out).expect("output tensor missing");
                     let out_placeholder = BufferView::new(
                         vec![0u8; out.data.len() * std::mem::size_of::<f32>()].into(),
