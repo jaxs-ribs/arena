@@ -2,6 +2,8 @@
 
 This project aims to build a full stack physics and machine learning environment inspired by [Brax](https://github.com/google/brax) but designed around **WebGPU** and implemented entirely in Rust.  The goal is to provide fast differentiable physics, a compute backend that works on desktop and in browsers, and a minimal runtime for training ML policies directly against the simulator.
 
+> *See [VISION.md](VISION.md) for the long-term roadmap, including novelty-driven search with Dreamer V3.*
+
 ## Vision
 
 * **WebGPU First** – leverage the modern graphics and compute API available across platforms. The `compute` crate provides a generic interface over GPU compute kernels with a CPU fallback used during testing. The initial GPU implementation targets the `wgpu` crate so it can run on Vulkan, Metal and eventually WebGPU in the browser.
