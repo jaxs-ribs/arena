@@ -6,15 +6,17 @@ This project aims to build a full stack physics and machine learning environment
 
 * **WebGPU First** – leverage the modern graphics and compute API available across platforms. The `compute` crate provides a generic interface over GPU compute kernels with a CPU fallback used during testing. The initial GPU implementation targets the `wgpu` crate so it can run on Vulkan, Metal and eventually WebGPU in the browser.
 * **Physics Engine** – the `physics` crate contains a simple rigid body simulator implemented with GPU kernels. At the moment it includes a basic sphere integrator but it is structured so more complex bodies and constraints can be added. The API is designed to be differentiable so gradients can flow through simulation steps.
-* **Runtime & Tooling** – the `runtime` crate is a small executable that wires everything together. It includes a shader watcher for hot‑reloading WGSL compute shaders and serves as the basis for training loops and visual debugging.
 * **ML Policy Stack** – future work will extend the runtime with reinforcement learning utilities and policy networks so the simulator can be used end‑to‑end for control tasks. Everything stays in Rust for portability and performance.
+* **Runtime & Tooling** – the `runtime` crate is a small executable that wires everything together. It includes a shader watcher for hot‑reloading WGSL compute shaders and serves as the basis for training loops and visual debugging.
 
 ## Repository Layout
 
 ```
 crates/
   compute/   # Abstraction over compute backends (CPU mock, WGPU)
+  ml/        # ML building blocks (tensor, tape, optim)
   physics/   # Differentiable physics simulation code
+  render/    # WGPU-based renderer for visualization
   runtime/   # Executable with shader hot‑reload and training scaffolding
 shaders/     # WGSL compute kernels
 tests/       # Integration tests (e.g. free‑fall verification)
@@ -31,7 +33,7 @@ rustup override set stable
 cargo test
 ```
 
-Unit tests cover the CPU compute backend, physics stepping, shader compilation and a simple integration test verifying that a falling sphere matches analytic physics. More GPU‑specific tests will be added as the WebGPU backend matures.
+Unit tests cover the CPU compute backend, physics stepping, shader compilation and a simple integration test verifying that a falling sphere matches analytic physics. GPU-specific tests are part of the standard `cargo test` run and do not require a separate command.
 
 ## Command Cheatsheet
 
@@ -47,8 +49,11 @@ cargo test -p compute
 # Run physics crate tests
 cargo test -p physics
 
-# Execute integration tests under `tests/`
+# Execute a specific integration test
 cargo test --test scene
+
+# Run compute crate tests with the WGPU backend
+cargo test -p compute --features gpu
 
 # Compile benches (requires `criterion`)
 cargo bench
