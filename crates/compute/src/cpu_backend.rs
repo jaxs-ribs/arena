@@ -1,5 +1,4 @@
 use crate::{kernels, BufferView, ComputeBackend, ComputeError, Kernel};
-use std::sync::Arc;
 
 #[derive(Default, Debug, Clone)]
 pub struct CpuBackend;

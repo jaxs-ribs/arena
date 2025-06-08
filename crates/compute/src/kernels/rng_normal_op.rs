@@ -23,6 +23,7 @@ pub fn handle_rng_normal(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeEr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{CpuBackend, Kernel, ComputeBackend};
     use std::sync::Arc as StdArc;
 
     #[test]
