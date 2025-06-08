@@ -74,10 +74,14 @@ impl PhysicsSim {
         struct RawPhysParams {
             gravity: Vec3,
             dt: f32,
+            _padding1: f32,
+            _padding2: f32,
         }
         let raw_params = RawPhysParams {
             gravity: self.params.gravity,
             dt: self.params.dt,
+            _padding1: 0.0,
+            _padding2: 0.0,
         };
         let params_bytes: Arc<[u8]> = bytemuck::bytes_of(&raw_params).to_vec().into();
         let params_buffer_view = compute::BufferView::new(params_bytes, vec![1], size_of::<RawPhysParams>());
