@@ -109,6 +109,34 @@ impl Tensor {
         out
     }
 
+    /// Performs element-wise division between two tensors.
+    pub fn div(
+        &self,
+        other: &Self,
+        recorder: &mut impl Recorder,
+        tensors: &mut HashMap<usize, Tensor>,
+    ) -> Self {
+        assert_eq!(self.shape, other.shape);
+        let data = self
+            .data
+            .iter()
+            .zip(other.data.iter())
+            .map(|(a, b)| a / b)
+            .collect();
+        let out = Tensor::from_vec(self.shape.clone(), data);
+        recorder.record(
+            Node {
+                op: EOp::Div,
+                a: self.id,
+                b: other.id,
+                out: out.id,
+            },
+            tensors,
+        );
+        tensors.insert(out.id, out.clone());
+        out
+    }
+
     /// Reduces a tensor to a single value by summing all its elements.
     pub fn reduce_sum(
         &self,
@@ -120,6 +148,23 @@ impl Tensor {
         recorder.record(
             Node {
                 op: EOp::ReduceSum,
+                a: self.id,
+                b: 0,
+                out: out.id,
+            },
+            tensors,
+        );
+        tensors.insert(out.id, out.clone());
+        out
+    }
+
+    /// Negates each element of the tensor.
+    pub fn neg(&self, recorder: &mut impl Recorder, tensors: &mut HashMap<usize, Tensor>) -> Self {
+        let data = self.data.iter().map(|x| -*x).collect();
+        let out = Tensor::from_vec(self.shape.clone(), data);
+        recorder.record(
+            Node {
+                op: EOp::Neg,
                 a: self.id,
                 b: 0,
                 out: out.id,
@@ -379,6 +424,117 @@ impl Tensor {
         recorder.record(
             Node {
                 op: EOp::Exp,
+                a: self.id,
+                b: 0,
+                out: out.id,
+            },
+            tensors,
+        );
+        tensors.insert(out.id, out.clone());
+        out
+    }
+
+    /// Applies the natural logarithm to each element of the tensor.
+    pub fn log(&self, recorder: &mut impl Recorder, tensors: &mut HashMap<usize, Tensor>) -> Self {
+        let data = self.data.iter().map(|x| x.ln()).collect();
+        let out = Tensor::from_vec(self.shape.clone(), data);
+        recorder.record(
+            Node {
+                op: EOp::Log,
+                a: self.id,
+                b: 0,
+                out: out.id,
+            },
+            tensors,
+        );
+        tensors.insert(out.id, out.clone());
+        out
+    }
+
+    /// Applies the square root to each element of the tensor.
+    pub fn sqrt(&self, recorder: &mut impl Recorder, tensors: &mut HashMap<usize, Tensor>) -> Self {
+        let data = self.data.iter().map(|x| x.sqrt()).collect();
+        let out = Tensor::from_vec(self.shape.clone(), data);
+        recorder.record(
+            Node {
+                op: EOp::Sqrt,
+                a: self.id,
+                b: 0,
+                out: out.id,
+            },
+            tensors,
+        );
+        tensors.insert(out.id, out.clone());
+        out
+    }
+
+    /// Applies the rectified linear unit function to each element.
+    pub fn relu(&self, recorder: &mut impl Recorder, tensors: &mut HashMap<usize, Tensor>) -> Self {
+        let data = self.data.iter().map(|x| x.max(0.0)).collect();
+        let out = Tensor::from_vec(self.shape.clone(), data);
+        recorder.record(
+            Node {
+                op: EOp::Relu,
+                a: self.id,
+                b: 0,
+                out: out.id,
+            },
+            tensors,
+        );
+        tensors.insert(out.id, out.clone());
+        out
+    }
+
+    /// Applies the sigmoid function to each element.
+    pub fn sigmoid(&self, recorder: &mut impl Recorder, tensors: &mut HashMap<usize, Tensor>) -> Self {
+        let data = self.data.iter().map(|x| 1.0 / (1.0 + (-x).exp())).collect();
+        let out = Tensor::from_vec(self.shape.clone(), data);
+        recorder.record(
+            Node {
+                op: EOp::Sigmoid,
+                a: self.id,
+                b: 0,
+                out: out.id,
+            },
+            tensors,
+        );
+        tensors.insert(out.id, out.clone());
+        out
+    }
+
+    /// Computes the element-wise maximum of two tensors.
+    pub fn max(&self, other: &Self, recorder: &mut impl Recorder, tensors: &mut HashMap<usize, Tensor>) -> Self {
+        assert_eq!(self.shape, other.shape);
+        let data = self
+            .data
+            .iter()
+            .zip(other.data.iter())
+            .map(|(a, b)| a.max(*b))
+            .collect();
+        let out = Tensor::from_vec(self.shape.clone(), data);
+        recorder.record(
+            Node {
+                op: EOp::Max,
+                a: self.id,
+                b: other.id,
+                out: out.id,
+            },
+            tensors,
+        );
+        tensors.insert(out.id, out.clone());
+        out
+    }
+
+    /// Reduces a tensor to its maximum element.
+    pub fn reduce_max(&self, recorder: &mut impl Recorder, tensors: &mut HashMap<usize, Tensor>) -> Self {
+        let max_val = self
+            .data
+            .iter()
+            .fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+        let out = Tensor::from_vec(vec![1], vec![max_val]);
+        recorder.record(
+            Node {
+                op: EOp::ReduceMax,
                 a: self.id,
                 b: 0,
                 out: out.id,

@@ -151,6 +151,54 @@ impl Tape {
                         *g += (1.0 - d.powi(2)) * og;
                     }
                 }
+                EOp::Neg => {
+                    let a = tensors.get(&node.a).unwrap();
+                    let a_grad = grads
+                        .entry(node.a)
+                        .or_insert_with(|| vec![0.0; a.data.len()]);
+                    for (g, og) in a_grad.iter_mut().zip(out_grad.iter()) {
+                        *g -= og;
+                    }
+                }
+                EOp::Log => {
+                    let a = tensors.get(&node.a).unwrap();
+                    let a_grad = grads
+                        .entry(node.a)
+                        .or_insert_with(|| vec![0.0; a.data.len()]);
+                    for (g, (d, og)) in a_grad.iter_mut().zip(a.data.iter().zip(out_grad.iter())) {
+                        *g += og / d;
+                    }
+                }
+                EOp::Sqrt => {
+                    let a = tensors.get(&node.a).unwrap();
+                    let out = tensors.get(&node.out).unwrap();
+                    let a_grad = grads
+                        .entry(node.a)
+                        .or_insert_with(|| vec![0.0; a.data.len()]);
+                    for (g, (o, og)) in a_grad.iter_mut().zip(out.data.iter().zip(out_grad.iter())) {
+                        *g += 0.5 / o * og;
+                    }
+                }
+                EOp::Relu => {
+                    let a = tensors.get(&node.a).unwrap();
+                    let a_grad = grads
+                        .entry(node.a)
+                        .or_insert_with(|| vec![0.0; a.data.len()]);
+                    for (g, (d, og)) in a_grad.iter_mut().zip(a.data.iter().zip(out_grad.iter())) {
+                        if *d > 0.0 {
+                            *g += og;
+                        }
+                    }
+                }
+                EOp::Sigmoid => {
+                    let a_grad = grads
+                        .entry(node.a)
+                        .or_insert_with(|| vec![0.0; tensors.get(&node.a).unwrap().data.len()]);
+                    let out = tensors.get(&node.out).unwrap();
+                    for (g, (o, og)) in a_grad.iter_mut().zip(out.data.iter().zip(out_grad.iter())) {
+                        *g += o * (1.0 - o) * og;
+                    }
+                }
                 EOp::Sub => {
                     let a = tensors.get(&node.a).unwrap();
                     let b = tensors.get(&node.b).unwrap();
@@ -168,6 +216,29 @@ impl Tape {
                             .or_insert_with(|| vec![0.0; b.data.len()]);
                         for (g, og) in b_grad.iter_mut().zip(out_grad.iter()) {
                             *g -= og;
+                        }
+                    }
+                }
+                EOp::Div => {
+                    let a = tensors.get(&node.a).unwrap();
+                    let b = tensors.get(&node.b).unwrap();
+                    {
+                        let a_grad = grads
+                            .entry(node.a)
+                            .or_insert_with(|| vec![0.0; a.data.len()]);
+                        for (g, (b_val, og)) in a_grad.iter_mut().zip(b.data.iter().zip(out_grad.iter())) {
+                            *g += og / b_val;
+                        }
+                    }
+                    {
+                        let b_grad = grads
+                            .entry(node.b)
+                            .or_insert_with(|| vec![0.0; b.data.len()]);
+                        for (g, ((a_val, b_val), og)) in b_grad
+                            .iter_mut()
+                            .zip(a.data.iter().zip(b.data.iter()).zip(out_grad.iter()))
+                        {
+                            *g -= a_val / (b_val * b_val) * og;
                         }
                     }
                 }
@@ -232,6 +303,30 @@ impl Tape {
                         }
                     }
                 }
+                EOp::Max => {
+                    let a = tensors.get(&node.a).unwrap();
+                    let b = tensors.get(&node.b).unwrap();
+                    {
+                        let a_grad = grads
+                            .entry(node.a)
+                            .or_insert_with(|| vec![0.0; a.data.len()]);
+                        for i in 0..a.data.len() {
+                            if a.data[i] > b.data[i] {
+                                a_grad[i] += out_grad[i];
+                            }
+                        }
+                    }
+                    {
+                        let b_grad = grads
+                            .entry(node.b)
+                            .or_insert_with(|| vec![0.0; b.data.len()]);
+                        for i in 0..b.data.len() {
+                            if b.data[i] >= a.data[i] {
+                                b_grad[i] += out_grad[i];
+                            }
+                        }
+                    }
+                }
                 EOp::ReduceMean => {
                     let a = tensors.get(&node.a).unwrap();
                     let a_grad = grads
@@ -240,6 +335,22 @@ impl Tape {
                     let n = a.data.len() as f32;
                     for g in a_grad.iter_mut() {
                         *g += out_grad[0] / n;
+                    }
+                }
+                EOp::ReduceMax => {
+                    let a = tensors.get(&node.a).unwrap();
+                    let a_grad = grads
+                        .entry(node.a)
+                        .or_insert_with(|| vec![0.0; a.data.len()]);
+                    let max_val = a
+                        .data
+                        .iter()
+                        .cloned()
+                        .fold(f32::NEG_INFINITY, f32::max);
+                    for (g, d) in a_grad.iter_mut().zip(a.data.iter()) {
+                        if (*d - max_val).abs() < f32::EPSILON {
+                            *g += out_grad[0];
+                        }
                     }
                 }
                 EOp::Exp => {

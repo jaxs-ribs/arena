@@ -12,12 +12,20 @@ pub enum EOp {
     MatMul,
     Tanh,
     Sub,
+    Div,
+    Neg,
     Pow,
     MulScalar,
     Clamp,
     Min,
+    Max,
+    ReduceMax,
     ReduceMean,
     Exp,
+    Log,
+    Sqrt,
+    Relu,
+    Sigmoid,
     AddBroadcast,
 }
 /// A node in the computation graph, representing a single operation.
@@ -66,10 +74,18 @@ impl Graph {
                 EOp::MatMul => Kernel::MatMul,
                 EOp::Tanh => Kernel::Tanh,
                 EOp::Sub => Kernel::Sub,
+                EOp::Div => Kernel::Div,
+                EOp::Neg => Kernel::Neg,
                 EOp::Clamp => Kernel::Clamp,
                 EOp::Min => Kernel::Min,
+                EOp::Max => Kernel::Max,
+                EOp::ReduceMax => Kernel::ReduceMax,
                 EOp::ReduceMean => Kernel::ReduceMean,
                 EOp::Exp => Kernel::Exp,
+                EOp::Log => Kernel::Log,
+                EOp::Sqrt => Kernel::Sqrt,
+                EOp::Relu => Kernel::Relu,
+                EOp::Sigmoid => Kernel::Sigmoid,
                 _ => return Err(ComputeError::BackendUnavailable),
             };
 
@@ -84,7 +100,7 @@ impl Graph {
             binds.push(a_view);
 
             match node.op {
-                EOp::Add | EOp::Mul | EOp::Sub | EOp::Min => {
+                EOp::Add | EOp::Mul | EOp::Sub | EOp::Div | EOp::Min | EOp::Max => {
                     let b = tensors.get(&node.b).expect("tensor b missing");
                     let b_view = BufferView::new(
                         bytemuck::cast_slice(&b.data).to_vec().into(),
@@ -109,8 +125,8 @@ impl Graph {
                     let out_tensor = tensors.get_mut(&node.out).expect("output tensor missing");
                     out_tensor.data = bytemuck::cast_slice(&result[0]).to_vec();
                 }
-                EOp::ReduceSum | EOp::ReduceMean => {
-                    let out = tensors.get(&node.out).expect("output tensor missing");
+                EOp::ReduceSum | EOp::ReduceMean | EOp::ReduceMax => {
+                    let _out = tensors.get(&node.out).expect("output tensor missing");
                     let out_placeholder = BufferView::new(
                         vec![0u8; std::mem::size_of::<f32>()].into(),
                         vec![1],
@@ -164,7 +180,7 @@ impl Graph {
                     let out_tensor = tensors.get_mut(&node.out).expect("output tensor missing");
                     out_tensor.data = bytemuck::cast_slice(&result[0]).to_vec();
                 }
-                EOp::Tanh | EOp::Exp | EOp::Clamp => {
+                EOp::Tanh | EOp::Exp | EOp::Clamp | EOp::Neg | EOp::Log | EOp::Sqrt | EOp::Relu | EOp::Sigmoid => {
                     let out = tensors.get(&node.out).expect("output tensor missing");
                     let out_placeholder = BufferView::new(
                         vec![0u8; out.data.len() * std::mem::size_of::<f32>()].into(),
