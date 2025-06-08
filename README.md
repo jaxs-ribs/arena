@@ -73,6 +73,12 @@ cargo run -p runtime --features render -- --draw
 This will open a window and draw the sphere positions after each simulation
 step.
 
+
+## JSON Schema
+
+The file [docs/README.md](docs/README.md) describes the JSON format used to
+construct creature bodies.
+
 ## Stick Balancing Environment (WIP)
 
 The repository now contains a minimal physics setup for a classic control task:
