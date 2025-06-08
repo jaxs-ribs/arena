@@ -3,8 +3,16 @@
 use std::sync::Arc;
 use thiserror::Error;
 
+pub mod backend;
+pub mod layout;
 mod kernels;
-pub mod layout; // New module declaration
+
+#[cfg(feature = "cpu")]
+pub mod cpu;
+#[cfg(feature = "gpu")]
+pub mod gpu;
+
+pub use backend::ComputeBackend;
 
 #[derive(Error, Debug)]
 pub enum ComputeError {
@@ -81,100 +89,29 @@ impl BufferView {
     }
 }
 
-pub trait ComputeBackend: Send + Sync + 'static {
-    /// Dispatches a compute shader with the given bindings and workgroup configuration.
-    ///
-    /// # Arguments
-    /// * `shader`: The kernel to dispatch.
-    /// * `binds`: A slice of `BufferView`s for input and output.
-    ///            It is conventional that buffers intended for read-back by the CPU
-    ///            are specified first or are clearly identifiable by the kernel type.
-    /// * `workgroups`: The number of workgroups to dispatch.
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(Vec<Vec<u8>>)` where each inner `Vec<u8>` contains the byte data
-    /// of a buffer that was written to by the GPU and is intended for CPU read-back.
-    /// The order should be consistent with how `binds` are interpreted for output.
-    /// Returns `ComputeError::ShapeMismatch` if any input buffers are invalid.
-    /// May return other `ComputeError` variants depending on the backend implementation.
-    fn dispatch(
-        &self,
-        shader: &Kernel,
-        binds: &[BufferView],
-        workgroups: [u32; 3],
-    ) -> Result<Vec<Vec<u8>>, ComputeError>;
-}
-
-#[cfg(feature = "mock")]
-#[derive(Default)]
-pub struct MockCpu;
-
-#[cfg(feature = "mock")]
-impl ComputeBackend for MockCpu {
-    fn dispatch(
-        &self,
-        shader: &Kernel,
-        binds: &[BufferView],
-        _workgroups: [u32; 3],
-    ) -> Result<Vec<Vec<u8>>, ComputeError> {
-        for buffer_view in binds {
-            let expected_elements = buffer_view.shape.iter().product::<usize>();
-            let expected_bytes = expected_elements * buffer_view.element_size_in_bytes;
-
-            if buffer_view.data.len() != expected_bytes {
-                return Err(ComputeError::ShapeMismatch(
-                    "Buffer data length does not match product of shape dimensions and element size",
-                ));
-            }
-        }
-        match shader {
-            Kernel::Add => kernels::add_op::handle_add(binds),
-            Kernel::Sub => kernels::sub_op::handle_sub(binds),
-            Kernel::Mul => kernels::mul_op::handle_mul(binds),
-            Kernel::Div => kernels::div_op::handle_div(binds),
-            Kernel::Where => kernels::where_op::handle_where(binds),
-            Kernel::Neg => kernels::neg_op::handle_neg(binds),
-            Kernel::Exp => kernels::exp_op::handle_exp(binds),
-            Kernel::Log => kernels::log_op::handle_log(binds),
-            Kernel::Sqrt => kernels::sqrt_op::handle_sqrt(binds),
-            Kernel::Rsqrt => kernels::rsqrt_op::handle_rsqrt(binds),
-            Kernel::Tanh => kernels::tanh_op::handle_tanh(binds),
-            Kernel::Relu => kernels::relu_op::handle_relu(binds),
-            Kernel::Sigmoid => kernels::sigmoid_op::handle_sigmoid(binds),
-            Kernel::Min => kernels::min_op::handle_min(binds), // Updated to call the new handler
-            Kernel::Max => kernels::max_op::handle_max(binds), // Updated to call the new handler
-            Kernel::Clamp => kernels::clamp_op::handle_clamp(binds), // Updated to call the new handler
-            Kernel::ReduceSum => kernels::reduce_sum_op::handle_reduce_sum(binds),
-            Kernel::ReduceMean => kernels::reduce_mean_op::handle_reduce_mean(binds),
-            Kernel::ReduceMax => kernels::reduce_max_op::handle_reduce_max(binds),
-            Kernel::SegmentedReduceSum => {
-                kernels::segmented_reduce_sum_op::handle_segmented_reduce_sum(binds)
-            }
-            Kernel::ScatterAdd => kernels::scatter_add_op::handle_scatter_add(binds),
-            Kernel::Gather => kernels::gather_op::handle_gather(binds),
-            Kernel::MatMul => kernels::matmul_op::handle_matmul(binds),
-            Kernel::IntegrateBodies => kernels::integrate_bodies_op::handle_integrate_bodies(binds),
-            Kernel::DetectContactsSDF => {
-                kernels::detect_contacts_sdf_op::handle_detect_contacts_sdf(binds)
-            }
-            Kernel::SolveContactsPBD => {
-                kernels::solve_contacts_pbd_op::handle_solve_contacts_pbd(binds)
-            }
-            Kernel::SolveJointsPBD => kernels::solve_joints_pbd_op::handle_solve_joints_pbd(binds),
-            Kernel::RngNormal => kernels::rng_normal_op::handle_rng_normal(binds),
-            Kernel::ExpandInstances => kernels::expand_instances_op::handle_expand_instances(binds),
-        }
+pub fn default_backend() -> std::sync::Arc<dyn ComputeBackend> {
+    #[cfg(feature = "cpu")]
+    {
+        Arc::new(cpu::CpuBackend::default())
+    }
+    #[cfg(feature = "gpu")]
+    {
+        Arc::new(gpu::GpuBackend::try_new().expect("Failed to create GPU backend"))
+    }
+    #[cfg(not(any(feature = "cpu", feature = "gpu")))]
+    {
+        panic!("No backend feature flag enabled. Please enable either 'cpu' or 'gpu'.")
     }
 }
 
-#[cfg(all(test, feature = "mock"))]
+#[cfg(all(test, feature = "cpu"))]
 mod tests {
     use super::*;
+    use cpu::CpuBackend;
 
     #[test]
     fn mismatch_shape_fails() {
-        let cpu = MockCpu;
+        let cpu = CpuBackend;
         let bad_buf = BufferView::new(vec![0u8; 12].into(), vec![4], 4);
         let good_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
         let out_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
@@ -188,7 +125,7 @@ mod tests {
 
     #[test]
     fn correct_shape_succeeds() {
-        let cpu = MockCpu;
+        let cpu = CpuBackend;
         let good_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
         let out_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
         let cfg = BufferView::new(vec![0u8; 4].into(), vec![1], 4);
@@ -202,7 +139,7 @@ mod tests {
 
     #[test]
     fn correct_shape_with_larger_elements() {
-        let cpu = MockCpu;
+        let cpu = CpuBackend;
         let data_f32_x4 = vec![0u8; 16];
         let good_buf = BufferView::new(data_f32_x4.into(), vec![4], 4);
         let out_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
@@ -229,7 +166,7 @@ mod tests {
 
     #[test]
     fn multiple_buffers_correct_shape_succeeds() {
-        let cpu = MockCpu;
+        let cpu = CpuBackend;
         let good_buf1 = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
         let good_buf2 = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
         let out_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
@@ -247,7 +184,7 @@ mod tests {
 
     #[test]
     fn multiple_buffers_one_bad_shape_fails() {
-        let cpu = MockCpu;
+        let cpu = CpuBackend;
         let good_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
         let bad_buf = BufferView::new(vec![0u8; 7].into(), vec![4], 4);
         let out_buf = BufferView::new(vec![0u8; 16].into(), vec![4], 4);
@@ -261,14 +198,14 @@ mod tests {
 
     #[test]
     fn empty_binds_succeeds() {
-        let cpu = MockCpu;
+        let cpu = CpuBackend;
         let result = cpu.dispatch(&Kernel::Add, &[], [1, 1, 1]);
         assert!(matches!(result, Err(ComputeError::ShapeMismatch(_))));
     }
 
     #[test]
     fn shape_product_is_zero() {
-        let cpu = MockCpu;
+        let cpu = CpuBackend;
         // Use f32 element size to match Exp kernel's expectation
         let element_size = std::mem::size_of::<f32>();
         let buf_zero_data_zero_prod =
@@ -518,31 +455,3 @@ pub mod wgpu_metal_backend {
 // Re-export WgpuMetal at the crate root if the feature is enabled.
 #[cfg(all(target_os = "macos", feature = "metal"))]
 pub use wgpu_metal_backend::WgpuMetal;
-
-/// Returns a compute backend if available, falling back to the CPU implementation.
-///
-/// On macOS with the `metal` feature enabled this will attempt to create a
-/// [`WgpuMetal`] backend. If GPU initialization fails or the feature/OS is not
-/// available, a [`MockCpu`] backend is returned.
-#[must_use]
-pub fn default_backend() -> std::sync::Arc<dyn ComputeBackend> {
-    #[cfg(all(target_os = "macos", feature = "metal"))]
-    {
-        if let Ok(gpu) = WgpuMetal::try_new() {
-            tracing::info!("Using WgpuMetal backend.");
-            return std::sync::Arc::new(gpu);
-        }
-        tracing::warn!("WgpuMetal backend initialization failed, falling back...");
-    }
-
-    #[cfg(feature = "mock")]
-    {
-        tracing::info!("Using MockCpu backend.");
-        return std::sync::Arc::new(MockCpu::default());
-    }
-
-    #[cfg(not(feature = "mock"))]
-    {
-        compile_error!("No compute backend available. Enable the 'mock' feature or ensure a GPU backend can initialize.");
-    }
-}

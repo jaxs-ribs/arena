@@ -56,7 +56,7 @@ impl PhysicsSim {
         self.spheres = vec![sphere];
     }
 
-    pub fn step_gpu(&mut self) -> Result<(), PhysicsError> {
+    pub fn step(&mut self) -> Result<(), PhysicsError> {
         if self.spheres.is_empty() {
             return Ok(());
         }
@@ -74,7 +74,7 @@ impl PhysicsSim {
         self.params.dt = dt;
 
         for _ in 0..steps {
-            self.step_gpu()?;
+            self.step()?;
         }
 
         self.spheres

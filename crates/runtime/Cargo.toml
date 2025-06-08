@@ -9,7 +9,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
 notify = "6.1" # Using a slightly newer version if available, or 6.0 as per earlier thought
 
-compute = { path = "../compute", features = ["mock"] }
+compute = { path = "../compute" }
 render = { path = "../render", optional = true }
 physics = { path = "../physics" }
 
