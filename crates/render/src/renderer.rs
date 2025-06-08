@@ -9,11 +9,11 @@ use winit::platform::pump_events::{EventLoopExtPumpEvents, PumpStatus};
 
 pub struct Renderer<'w> {
     event_loop: EventLoop<()>,
-    window: winit::window::Window,
+    _window: winit::window::Window,
     surface: wgpu::Surface<'w>,
     device: wgpu::Device,
     queue: wgpu::Queue,
-    config: wgpu::SurfaceConfiguration,
+    _config: wgpu::SurfaceConfiguration,
     pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     vertices: Vec<[f32; 2]>,
@@ -117,11 +117,11 @@ impl<'w> Renderer<'w> {
 
         Ok(Renderer {
             event_loop,
-            window,
+            _window: window,
             surface,
             device,
             queue,
-            config,
+            _config: config,
             pipeline,
             vertex_buffer,
             vertices,

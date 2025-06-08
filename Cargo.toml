@@ -11,5 +11,3 @@ resolver = "2"
 [workspace.dependencies]
 naga = { version = "0.19", features = ["wgsl-in"] }
 
-[workspace.dev-dependencies]
-criterion = "0.5" 

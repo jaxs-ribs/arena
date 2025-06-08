@@ -6,7 +6,7 @@ use render::Renderer;
 
 use crate::watcher;
 
-pub fn run(enable_render: bool) -> Result<()> {
+pub fn run(_enable_render: bool) -> Result<()> {
     tracing_subscriber::fmt::init();
 
     let _shader_watcher = match watcher::start() {
@@ -21,7 +21,7 @@ pub fn run(enable_render: bool) -> Result<()> {
     };
 
     #[cfg(feature = "render")]
-    let mut renderer = if enable_render {
+    let mut renderer = if _enable_render {
         Some(Renderer::new()?)
     } else {
         None
