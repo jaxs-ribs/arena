@@ -48,10 +48,7 @@ cargo test -p compute
 cargo test -p physics
 
 # Execute integration tests under `tests/`
-cargo test --test free_fall
-
-# Compile and run GPU kernels on macOS with Metal
-cargo test -p compute --features metal
+cargo test --test scene
 
 # Compile benches (requires `criterion`)
 cargo bench
