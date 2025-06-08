@@ -16,7 +16,7 @@ impl ComputeBackend for CpuBackend {
         shader: &Kernel,
         binds: &[BufferView],
         _workgroups: [u32; 3],
-    ) -> Result<Vec<Arc<[u8]>>, ComputeError> {
+    ) -> Result<Vec<Vec<u8>>, ComputeError> {
         for buffer_view in binds {
             let expected_elements = buffer_view.shape.iter().product::<usize>();
             let expected_bytes = expected_elements * buffer_view.element_size_in_bytes;
@@ -70,7 +70,7 @@ impl ComputeBackend for CpuBackend {
             Kernel::RngNormal => kernels::rng_normal_op::handle_rng_normal(binds),
             Kernel::ExpandInstances => kernels::expand_instances_op::handle_expand_instances(binds),
         };
-        result.map(|bufs| bufs.into_iter().map(Into::into).collect())
+        result
     }
 }
 

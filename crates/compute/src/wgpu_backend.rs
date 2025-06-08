@@ -43,7 +43,7 @@ impl ComputeBackend for WgpuBackend {
         kernel: &Kernel,
         bindings: &[BufferView],
         workgroups: [u32; 3],
-    ) -> Result<Vec<Arc<[u8]>>, ComputeError> {
+    ) -> Result<Vec<Vec<u8>>, ComputeError> {
         let shader_source = kernel.to_shader_source();
         let shader = self
             .device
@@ -163,7 +163,7 @@ impl ComputeBackend for WgpuBackend {
             self.device.poll(wgpu::Maintain::Wait);
             rx.recv().unwrap().unwrap();
             let data = buffer_slice.get_mapped_range();
-            results.push(data.to_vec().into());
+            results.push(data.to_vec());
         }
 
         Ok(results)

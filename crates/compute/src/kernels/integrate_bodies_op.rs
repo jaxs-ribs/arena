@@ -21,6 +21,8 @@ pub fn handle_integrate_bodies(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
         vel: TestVec3,
         orientation: [f32; 4],
         angular_vel: TestVec3,
+        mass: f32,
+        inv_inertia: f32,
     }
     #[repr(C)]
     #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
@@ -75,8 +77,9 @@ pub fn handle_integrate_bodies(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
     let forces: &[TestForce] = bytemuck::cast_slice(&forces_data_view.data);
 
     for (sphere, f) in updated_spheres.iter_mut().zip(forces) {
-        sphere.vel.x += (params.gravity.x + f.x) * params.dt;
-        sphere.vel.y += (params.gravity.y + f.y) * params.dt;
+        let inv_mass = 1.0 / sphere.mass;
+        sphere.vel.x += (params.gravity.x + f.x * inv_mass) * params.dt;
+        sphere.vel.y += (params.gravity.y + f.y * inv_mass) * params.dt;
         sphere.vel.z += params.gravity.z * params.dt;
 
         sphere.pos.x += sphere.vel.x * params.dt;
@@ -128,6 +131,8 @@ mod tests {
             vel: TestVec3,
             orientation: [f32; 4],
             angular_vel: TestVec3,
+            mass: f32,
+            inv_inertia: f32,
         }
         #[repr(C)]
         #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
@@ -159,6 +164,8 @@ mod tests {
             },
             orientation: [0.0, 0.0, 0.0, 1.0],
             angular_vel: TestVec3 { x: 0.0, y: 0.0, z: 1.0 },
+            mass: 1.0,
+            inv_inertia: 1.0 / 0.4,
         };
         let spheres_data = vec![initial_sphere];
         let sphere_bytes: StdArc<[u8]> = bytemuck::cast_slice(&spheres_data).to_vec().into();

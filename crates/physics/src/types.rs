@@ -20,16 +20,22 @@ pub struct Sphere {
     pub vel: Vec3,
     pub orientation: [f32; 4],
     pub angular_vel: Vec3,
+    pub mass: f32,
+    pub inv_inertia: f32,
 }
 
 impl Sphere {
     #[must_use]
     pub const fn new(pos: Vec3, vel: Vec3) -> Self {
+        let mass = 1.0;
+        let inv_inertia = 1.0 / (0.4 * mass);
         Self {
             pos,
             vel,
             orientation: [0.0, 0.0, 0.0, 1.0],
             angular_vel: Vec3::new(0.0, 0.0, 0.0),
+            mass,
+            inv_inertia,
         }
     }
 }

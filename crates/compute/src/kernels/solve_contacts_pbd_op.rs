@@ -22,6 +22,8 @@ pub fn handle_solve_contacts_pbd(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, C
         vel: TestVec3,
         orientation: [f32; 4],
         angular_vel: TestVec3,
+        mass: f32,
+        inv_inertia: f32,
     }
 
     #[repr(C)]
@@ -70,9 +72,10 @@ pub fn handle_solve_contacts_pbd(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, C
             ));
         }
         let body = &mut bodies[idx];
-        body.pos.x += contact.normal.x * contact.depth;
-        body.pos.y += contact.normal.y * contact.depth;
-        body.pos.z += contact.normal.z * contact.depth;
+        let inv_mass = 1.0 / body.mass;
+        body.pos.x += contact.normal.x * contact.depth * inv_mass;
+        body.pos.y += contact.normal.y * contact.depth * inv_mass;
+        body.pos.z += contact.normal.z * contact.depth * inv_mass;
     }
 
     let out_bytes = bytemuck::cast_slice(&bodies).to_vec();
@@ -100,6 +103,8 @@ mod tests {
         vel: TestVec3,
         orientation: [f32; 4],
         angular_vel: TestVec3,
+        mass: f32,
+        inv_inertia: f32,
     }
 
     #[repr(C)]
@@ -127,6 +132,8 @@ mod tests {
             },
             orientation: [0.0, 0.0, 0.0, 1.0],
             angular_vel: TestVec3 { x: 0.0, y: 0.0, z: 0.0 },
+            mass: 1.0,
+            inv_inertia: 1.0 / 0.4,
         };
         let spheres_bytes: StdArc<[u8]> = bytemuck::bytes_of(&sphere).to_vec().into();
         let spheres_view =

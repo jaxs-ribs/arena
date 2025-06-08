@@ -6,6 +6,10 @@ use thiserror::Error;
 mod cpu_backend;
 #[cfg(feature = "gpu")]
 pub mod wgpu_backend;
+#[cfg(feature = "mock")]
+pub mod backend {
+    pub mod mock_cpu;
+}
 
 pub mod kernels;
 pub mod layout;
