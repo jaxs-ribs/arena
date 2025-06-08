@@ -3,7 +3,6 @@ struct Sphere {
   vel : vec3<f32>,
   orientation : vec4<f32>,
   angular_vel : vec3<f32>,
-  _pad : f32,
 };
 
 @group(0) @binding(0) var<storage, read_write> spheres : array<Sphere>;

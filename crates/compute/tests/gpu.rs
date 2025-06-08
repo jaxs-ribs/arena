@@ -94,15 +94,17 @@ mod wgpu_tests {
     }
 
     #[test]
-    #[ignore]
     fn test_integrate_bodies_kernel() {
         #[repr(C)]
-        #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+        #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable, Debug)]
         struct Sphere {
             pos: [f32; 3],
+            _pad1: f32,
             vel: [f32; 3],
+            _pad2: f32,
             orientation: [f32; 4],
             angular_vel: [f32; 3],
+            _pad3: f32,
         }
 
         #[repr(C)]
@@ -115,8 +117,8 @@ mod wgpu_tests {
         }
 
         let spheres = vec![
-            Sphere { pos: [0.0, 10.0, 0.0], vel: [0.0, 0.0, 0.0], orientation: [0.0, 0.0, 0.0, 1.0], angular_vel: [0.0, 0.0, 0.0] },
-            Sphere { pos: [5.0, 5.0, 2.0], vel: [1.0, -1.0, 1.0], orientation: [0.0, 0.0, 0.0, 1.0], angular_vel: [0.0, 0.0, 0.0] },
+            Sphere { pos: [0.0, 10.0, 0.0], _pad1: 0.0, vel: [0.0, 0.0, 0.0], _pad2: 0.0, orientation: [0.0, 0.0, 0.0, 1.0], angular_vel: [0.0, 0.0, 0.0], _pad3: 0.0 },
+            Sphere { pos: [5.0, 5.0, 2.0], _pad1: 0.0, vel: [1.0, -1.0, 1.0], _pad2: 0.0, orientation: [0.0, 0.0, 0.0, 1.0], angular_vel: [0.0, 0.0, 0.0], _pad3: 0.0 },
         ];
         let params = PhysParams {
             gravity: [0.0, -9.81, 0.0],

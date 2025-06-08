@@ -134,10 +134,13 @@ impl Graph {
                     out_tensor.data = bytemuck::cast_slice(&result[0]).to_vec();
                 }
                 EOp::AddBroadcast => {
-                    let b = tensors.get(&node.b).expect("tensor b missing");
+                    let in0 = tensors.get(&node.a).expect("input tensor missing");
+                    let _out = tensors.get(&node.out).expect("output tensor missing");
+                    let a = in0.borrow();
+                    let b = node.params[0].as_float().unwrap() as f32;
                     let b_view = BufferView::new(
-                        bytemuck::cast_slice(&b.data).to_vec().into(),
-                        b.shape.clone(),
+                        vec![b].into(),
+                        vec![1],
                         std::mem::size_of::<f32>(),
                     );
                     binds.push(b_view);
