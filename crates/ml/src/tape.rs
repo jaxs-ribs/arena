@@ -72,6 +72,25 @@ impl Tape {
                         *g += d * og;
                     }
                 }
+                EOp::Div => {
+                    let a = tensors.get(&node.a).unwrap();
+                    let b = tensors.get(&node.b).unwrap();
+                    let a_grad = grads
+                        .entry(node.a)
+                        .or_insert_with(|| vec![0.0; a.data.len()]);
+                    for (g, (b_val, og)) in a_grad.iter_mut().zip(b.data.iter().zip(out_grad.iter())) {
+                        *g += og / b_val;
+                    }
+                    let b_grad = grads
+                        .entry(node.b)
+                        .or_insert_with(|| vec![0.0; b.data.len()]);
+                    for (g, ((a_val, b_val), og)) in b_grad
+                        .iter_mut()
+                        .zip(a.data.iter().zip(b.data.iter()).zip(out_grad.iter()))
+                    {
+                        *g -= a_val * og / (b_val * b_val);
+                    }
+                }
                 EOp::ReduceSum => {
                     let a = tensors.get(&node.a).unwrap();
                     let a_grad = grads
@@ -138,6 +157,56 @@ impl Tape {
                                 b_grad[i] += out_grad[b_idx * dim + i];
                             }
                         }
+                    }
+                }
+                EOp::Relu => {
+                    let a = tensors.get(&node.a).unwrap();
+                    let a_grad = grads
+                        .entry(node.a)
+                        .or_insert_with(|| vec![0.0; a.data.len()]);
+                    for (g, (d, og)) in a_grad.iter_mut().zip(a.data.iter().zip(out_grad.iter())) {
+                        if *d > 0.0 {
+                            *g += og;
+                        }
+                    }
+                }
+                EOp::Sigmoid => {
+                    let a = tensors.get(&node.a).unwrap();
+                    let out = tensors.get(&node.out).unwrap();
+                    let a_grad = grads
+                        .entry(node.a)
+                        .or_insert_with(|| vec![0.0; a.data.len()]);
+                    for (g, (o, og)) in a_grad.iter_mut().zip(out.data.iter().zip(out_grad.iter())) {
+                        *g += o * (1.0 - o) * og;
+                    }
+                }
+                EOp::Log => {
+                    let a = tensors.get(&node.a).unwrap();
+                    let a_grad = grads
+                        .entry(node.a)
+                        .or_insert_with(|| vec![0.0; a.data.len()]);
+                    for (g, (d, og)) in a_grad.iter_mut().zip(a.data.iter().zip(out_grad.iter())) {
+                        *g += og / d;
+                    }
+                }
+                EOp::Sqrt => {
+                    let a = tensors.get(&node.a).unwrap();
+                    let out = tensors.get(&node.out).unwrap();
+                    let a_grad = grads
+                        .entry(node.a)
+                        .or_insert_with(|| vec![0.0; a.data.len()]);
+                    for (g, (o, og)) in a_grad.iter_mut().zip(out.data.iter().zip(out_grad.iter())) {
+                        *g += 0.5 / o * og;
+                    }
+                }
+                EOp::Rsqrt => {
+                    let a = tensors.get(&node.a).unwrap();
+                    let out = tensors.get(&node.out).unwrap();
+                    let a_grad = grads
+                        .entry(node.a)
+                        .or_insert_with(|| vec![0.0; a.data.len()]);
+                    for (g, (o, og)) in a_grad.iter_mut().zip(out.data.iter().zip(out_grad.iter())) {
+                        *g += -0.5 * o.powi(3) * og;
                     }
                 }
                 EOp::Tanh => {
@@ -232,6 +301,30 @@ impl Tape {
                         }
                     }
                 }
+                EOp::Max => {
+                    let a = tensors.get(&node.a).unwrap();
+                    let b = tensors.get(&node.b).unwrap();
+                    {
+                        let a_grad = grads
+                            .entry(node.a)
+                            .or_insert_with(|| vec![0.0; a.data.len()]);
+                        for i in 0..a.data.len() {
+                            if a.data[i] > b.data[i] {
+                                a_grad[i] += out_grad[i];
+                            }
+                        }
+                    }
+                    {
+                        let b_grad = grads
+                            .entry(node.b)
+                            .or_insert_with(|| vec![0.0; b.data.len()]);
+                        for i in 0..b.data.len() {
+                            if b.data[i] >= a.data[i] {
+                                b_grad[i] += out_grad[i];
+                            }
+                        }
+                    }
+                }
                 EOp::ReduceMean => {
                     let a = tensors.get(&node.a).unwrap();
                     let a_grad = grads
@@ -251,6 +344,27 @@ impl Tape {
                     for (g, (d, og)) in a_grad.iter_mut().zip(out.data.iter().zip(out_grad.iter()))
                     {
                         *g += d * og;
+                    }
+                }
+                EOp::Neg => {
+                    let a = tensors.get(&node.a).unwrap();
+                    let a_grad = grads
+                        .entry(node.a)
+                        .or_insert_with(|| vec![0.0; a.data.len()]);
+                    for (g, og) in a_grad.iter_mut().zip(out_grad.iter()) {
+                        *g -= og;
+                    }
+                }
+                EOp::ReduceMax => {
+                    let a = tensors.get(&node.a).unwrap();
+                    let max_val = a.data.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+                    let a_grad = grads
+                        .entry(node.a)
+                        .or_insert_with(|| vec![0.0; a.data.len()]);
+                    for (g, val) in a_grad.iter_mut().zip(a.data.iter()) {
+                        if (*val - max_val).abs() < f32::EPSILON {
+                            *g += out_grad[0];
+                        }
                     }
                 }
             }

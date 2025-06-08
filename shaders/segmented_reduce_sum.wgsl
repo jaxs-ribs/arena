@@ -8,7 +8,12 @@ fn main() {
     let seg_count = arrayLength(&segments);
     for (var s: u32 = 0u; s < seg_count; s = s + 1u) {
         let start = segments[s];
-        let end = if (s + 1u < seg_count) { segments[s + 1u] } else { arrayLength(&data_in) };
+        var end: u32;
+        if (s + 1u < seg_count) {
+            end = segments[s + 1u];
+        } else {
+            end = arrayLength(&data_in);
+        }
         var sum: f32 = 0.0;
         for (var i: u32 = start; i < end; i = i + 1u) {
             sum = sum + data_in[i];
