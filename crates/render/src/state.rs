@@ -190,7 +190,10 @@ impl State {
                     winit::event::MouseScrollDelta::LineDelta(_, y) => *y * 0.1,
                     winit::event::MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * 0.02,
                 };
-                self.camera.position += self.camera.position.normalize() * scroll;
+                let new_pos = self.camera.position + self.camera.position.normalize() * scroll;
+                if new_pos.length_squared() > 0.01 {
+                    self.camera.position = new_pos;
+                }
                 true
             }
             _ => false,
