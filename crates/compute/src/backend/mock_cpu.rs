@@ -54,6 +54,9 @@ impl ComputeBackend for MockCpu {
             Kernel::DetectContactsSphere => {
                 kernels::detect_contacts_sphere::handle_detect_contacts_sphere(binds)
             }
+            Kernel::DetectContactsBox => {
+                kernels::detect_contacts_box_op::handle_detect_contacts_box(binds)
+            }
             Kernel::DetectContactsSDF => {
                 kernels::detect_contacts_sdf_op::handle_detect_contacts_sdf(binds)
             }
@@ -246,6 +249,7 @@ mod tests {
         // Physics world passes
         assert_eq!(binding_count(&Kernel::IntegrateBodies), 2);
         assert_eq!(binding_count(&Kernel::DetectContactsSphere), 2);
+        assert_eq!(binding_count(&Kernel::DetectContactsBox), 3);
         assert_eq!(binding_count(&Kernel::DetectContactsSDF), 3);
         assert_eq!(binding_count(&Kernel::SolveContactsPBD), 3);
 

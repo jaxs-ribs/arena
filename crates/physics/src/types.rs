@@ -22,6 +22,13 @@ pub struct Sphere {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct BoxShape {
+    pub center: Vec3,
+    pub half_extents: Vec3,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct PhysParams {
     pub gravity: Vec3,
     pub dt: f32,

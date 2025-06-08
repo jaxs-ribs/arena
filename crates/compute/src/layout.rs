@@ -43,6 +43,7 @@ pub const fn binding_count(kernel: &crate::Kernel) -> u32 {
         // Physics world passes
         crate::Kernel::IntegrateBodies => 2, // BODIES_INOUT, PARAMS_UNIFORM
         crate::Kernel::DetectContactsSphere => 2, // BODIES_IN, CONTACTS_OUT
+        crate::Kernel::DetectContactsBox => 3, // BODIES_IN, BOX_IN, CONTACTS_OUT
         crate::Kernel::DetectContactsSDF => 3, // BODIES_IN, SDF_DATA_UNIFORM_OR_STORAGE, CONTACTS_OUT
         crate::Kernel::SolveContactsPBD => 3,  // BODIES_INOUT, CONTACTS_IN, PARAMS_UNIFORM
         crate::Kernel::SolveJointsPBD => 4, // BODIES_INOUT, JOINTS_INOUT, CONSTRAINTS_IN, PARAMS_UNIFORM (Provisional)
