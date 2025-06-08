@@ -33,6 +33,33 @@ cargo test
 
 Unit tests cover the CPU compute backend, physics stepping, shader compilation and a simple integration test verifying that a falling sphere matches analytic physics. More GPU‑specific tests will be added as the WebGPU backend matures.
 
+## Command Cheatsheet
+
+Below is a quick reference of commands for running the various test suites and examples. All commands assume you are at the repository root.
+
+```bash
+# Run the entire test suite (CPU fallback backend)
+cargo test
+
+# Run only compute crate tests
+cargo test -p compute
+
+# Run physics crate tests
+cargo test -p physics
+
+# Execute integration tests under `tests/`
+cargo test --test free_fall
+
+# Compile and run GPU kernels on macOS with Metal
+cargo test -p compute --features metal
+
+# Compile benches (requires `criterion`)
+cargo bench
+
+# Launch the renderer example
+cargo run -p runtime --features render -- --draw
+```
+
 ## Visualizing the simulation
 
 The project includes a minimal renderer based on `wgpu`. To see a live sphere
