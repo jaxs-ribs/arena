@@ -1,9 +1,9 @@
 use crate::{BufferView, ComputeError};
 
 pub fn handle_reduce_sum(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
-    if binds.len() < 2 {
+    if binds.len() < 3 {
         return Err(ComputeError::ShapeMismatch(
-            "ReduceSum kernel expects 2 buffers",
+            "ReduceSum kernel expects 3 buffers",
         ));
     }
     let input_view = &binds[0];
@@ -43,15 +43,12 @@ mod tests {
 
         let config_data = vec![0u32];
         let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
-        let config_buffer_view = BufferView::new(
-            config_bytes,
-            vec![config_data.len()],
-            std::mem::size_of::<u32>(),
-        );
+        let config_buffer_view =
+            BufferView::new(config_bytes, vec![1], std::mem::size_of::<u32>());
 
-        let dispatch_binds = [input_buffer_view, output_buffer_view, config_buffer_view];
+        let dispatch_binds = &[input_buffer_view, output_buffer_view, config_buffer_view];
         let result_buffers = cpu
-            .dispatch(&Kernel::ReduceSum, &dispatch_binds, [1, 1, 1])
+            .dispatch(&Kernel::ReduceSum, dispatch_binds, [1, 1, 1])
             .expect("Dispatch for ReduceSum failed");
 
         assert_eq!(result_buffers.len(), 1);

@@ -77,12 +77,14 @@ fn kernel_name(kernel: &Kernel) -> &'static str {
 fn is_read_only(kernel: &Kernel, binding: u32) -> bool {
     let binding_count = crate::layout::binding_count(kernel);
     match kernel {
+        Kernel::Add => binding == 0 || binding == 1,
+        Kernel::Mul | Kernel::Div | Kernel::Sub => binding == 0 || binding == 1 || binding == 3,
         Kernel::RngNormal => binding != 0,
-        Kernel::ReduceMean => binding == 0 || binding == 2,
-        Kernel::ReduceSum => binding == 0,
+        Kernel::ReduceMean | Kernel::ReduceSum => binding == 0 || binding == 2,
         Kernel::Neg | Kernel::Relu | Kernel::ExpandInstances => binding == 0 || binding == 2,
         Kernel::MatMul => binding == 0 || binding == 1 || binding == 3,
         Kernel::IntegrateBodies => binding == 1 || binding == 2,
+        Kernel::DetectContactsSphere => binding == 0,
         Kernel::Gather => binding == 0 || binding == 1 || binding == 3,
         Kernel::ScatterAdd => binding == 0 || binding == 1 || binding == 3,
         _ => binding < binding_count - 1,

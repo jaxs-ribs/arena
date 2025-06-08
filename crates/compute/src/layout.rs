@@ -12,8 +12,8 @@ pub const fn binding_count(kernel: &crate::Kernel) -> u32 {
     match kernel {
         // Element-wise
         crate::Kernel::Add => 3,
-        crate::Kernel::Sub => 3,
-        crate::Kernel::Mul => 3,
+        crate::Kernel::Sub => 4,
+        crate::Kernel::Mul => 4,
         crate::Kernel::Div
         | crate::Kernel::Min
         | crate::Kernel::Max
@@ -31,7 +31,7 @@ pub const fn binding_count(kernel: &crate::Kernel) -> u32 {
         crate::Kernel::Clamp => 5, // IN_VAL, IN_MIN, IN_MAX, OUT, CONFIG
 
         // Reductions
-        crate::Kernel::ReduceSum => 2,
+        crate::Kernel::ReduceSum => 3,
         crate::Kernel::ReduceMean => 3,
         crate::Kernel::ReduceMax => 3,
 

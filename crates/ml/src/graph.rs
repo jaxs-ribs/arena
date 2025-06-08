@@ -103,12 +103,7 @@ impl Graph {
             binds.push(a_view);
 
             match node.op {
-                EOp::Add
-                | EOp::Mul
-                | EOp::Sub
-                | EOp::Div
-                | EOp::Min
-                | EOp::Max => {
+                EOp::Add => {
                     let b = tensors.get(&node.b).expect("tensor b missing");
                     let b_view = BufferView::new(
                         bytemuck::cast_slice(&b.data).to_vec().into(),
@@ -117,15 +112,35 @@ impl Graph {
                     );
                     binds.push(b_view);
 
-                    let out = tensors.get(&node.out).expect("output tensor missing");
+                    let _out = tensors.get(&node.out).expect("output tensor missing");
                     let out_placeholder = BufferView::new(
-                        vec![0u8; out.data.len() * std::mem::size_of::<f32>()].into(),
-                        out.shape.clone(),
+                        vec![0u8; _out.data.len() * std::mem::size_of::<f32>()].into(),
+                        _out.shape.clone(),
                         std::mem::size_of::<f32>(),
                     );
                     binds.push(out_placeholder);
 
-                    // simple config buffer
+                    let result = backend.dispatch(&kernel, &binds, [1, 1, 1])?;
+                    let out_tensor = tensors.get_mut(&node.out).expect("output tensor missing");
+                    out_tensor.data = bytemuck::cast_slice(&result[0]).to_vec();
+                }
+                EOp::Mul | EOp::Sub | EOp::Div => {
+                    let b = tensors.get(&node.b).expect("tensor b missing");
+                    let b_view = BufferView::new(
+                        bytemuck::cast_slice(&b.data).to_vec().into(),
+                        b.shape.clone(),
+                        std::mem::size_of::<f32>(),
+                    );
+                    binds.push(b_view);
+
+                    let _out = tensors.get(&node.out).expect("output tensor missing");
+                    let out_placeholder = BufferView::new(
+                        vec![0u8; _out.data.len() * std::mem::size_of::<f32>()].into(),
+                        _out.shape.clone(),
+                        std::mem::size_of::<f32>(),
+                    );
+                    binds.push(out_placeholder);
+
                     let cfg = BufferView::new(vec![0u8; 4].into(), vec![1], 4);
                     binds.push(cfg);
 
@@ -133,22 +148,19 @@ impl Graph {
                     let out_tensor = tensors.get_mut(&node.out).expect("output tensor missing");
                     out_tensor.data = bytemuck::cast_slice(&result[0]).to_vec();
                 }
-                EOp::AddBroadcast => {
-                    let in0 = tensors.get(&node.a).expect("input tensor missing");
-                    let _out = tensors.get(&node.out).expect("output tensor missing");
-                    let a = in0.borrow();
-                    let b = node.params[0].as_float().unwrap() as f32;
+                EOp::Min | EOp::Max | EOp::AddBroadcast => {
+                    let b = tensors.get(&node.b).expect("tensor b missing");
                     let b_view = BufferView::new(
-                        vec![b].into(),
-                        vec![1],
+                        bytemuck::cast_slice(&b.data).to_vec().into(),
+                        b.shape.clone(),
                         std::mem::size_of::<f32>(),
                     );
                     binds.push(b_view);
 
-                    let out = tensors.get(&node.out).expect("output tensor missing");
+                    let _out = tensors.get(&node.out).expect("output tensor missing");
                     let out_placeholder = BufferView::new(
-                        vec![0u8; out.data.len() * std::mem::size_of::<f32>()].into(),
-                        out.shape.clone(),
+                        vec![0u8; _out.data.len() * std::mem::size_of::<f32>()].into(),
+                        _out.shape.clone(),
                         std::mem::size_of::<f32>(),
                     );
                     binds.push(out_placeholder);
@@ -162,13 +174,14 @@ impl Graph {
                     out_tensor.data = bytemuck::cast_slice(&result[0]).to_vec();
                 }
                 EOp::ReduceSum | EOp::ReduceMean | EOp::ReduceMax => {
-                    let out = tensors.get(&node.out).expect("output tensor missing");
+                    let _out = tensors.get(&node.out).expect("output tensor missing");
                     let out_placeholder = BufferView::new(
                         vec![0u8; std::mem::size_of::<f32>()].into(),
                         vec![1],
                         std::mem::size_of::<f32>(),
                     );
                     binds.push(out_placeholder);
+
                     let cfg = BufferView::new(vec![0u8; 4].into(), vec![1], 4);
                     binds.push(cfg);
 
@@ -185,10 +198,10 @@ impl Graph {
                     );
                     binds.push(b_view);
 
-                    let out = tensors.get(&node.out).expect("output tensor missing");
+                    let _out = tensors.get(&node.out).expect("output tensor missing");
                     let out_placeholder = BufferView::new(
-                        vec![0u8; out.data.len() * std::mem::size_of::<f32>()].into(),
-                        out.shape.clone(),
+                        vec![0u8; _out.data.len() * std::mem::size_of::<f32>()].into(),
+                        _out.shape.clone(),
                         std::mem::size_of::<f32>(),
                     );
                     binds.push(out_placeholder);
@@ -225,10 +238,10 @@ impl Graph {
                 | EOp::Exp
                 | EOp::Clamp
                 | EOp::Neg => {
-                    let out = tensors.get(&node.out).expect("output tensor missing");
+                    let _out = tensors.get(&node.out).expect("output tensor missing");
                     let out_placeholder = BufferView::new(
-                        vec![0u8; out.data.len() * std::mem::size_of::<f32>()].into(),
-                        out.shape.clone(),
+                        vec![0u8; _out.data.len() * std::mem::size_of::<f32>()].into(),
+                        _out.shape.clone(),
                         std::mem::size_of::<f32>(),
                     );
                     binds.push(out_placeholder);

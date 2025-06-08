@@ -82,12 +82,14 @@ mod wgpu_tests {
         
         let input_bytes: Arc<[u8]> = bytemuck::cast_slice(&input).to_vec().into();
         let output_bytes: Arc<[u8]> = bytemuck::cast_slice(&output).to_vec().into();
+        let cfg_bytes: Arc<[u8]> = bytemuck::cast_slice(&[0u32]).to_vec().into();
 
         let elem_size = std::mem::size_of::<f32>();
 
         let inputs = vec![
             BufferView::new(input_bytes, vec![5], elem_size),
             BufferView::new(output_bytes, vec![1], elem_size),
+            BufferView::new(cfg_bytes, vec![1], std::mem::size_of::<u32>()),
         ];
 
         run_kernel_test(Kernel::ReduceSum, &inputs, [1, 1, 1]);
