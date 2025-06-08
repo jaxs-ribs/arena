@@ -9,6 +9,7 @@ fn chain_of_spheres_runs_stably() {
             pos: Vec3::new(i as f32, 1.0, 0.0),
             vel: Vec3::new(0.0, 0.0, 0.0),
         });
+        sim.params.forces.push([0.0, 0.0]);
         sim.joints.push(Joint {
             body_a: i - 1,
             body_b: i,

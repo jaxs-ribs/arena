@@ -4,6 +4,7 @@ use physics::{PhysicsSim, Sphere, Vec3, Joint};
 fn distance_joint_moves_bodies_toward_rest_length() {
     let mut sim = PhysicsSim::new_single_sphere(0.0);
     sim.spheres.push(Sphere { pos: Vec3::new(1.5, 0.0, 0.0), vel: Vec3::new(0.0, 0.0, 0.0) });
+    sim.params.forces.push([0.0, 0.0]);
     sim.joints.push(Joint { body_a: 0, body_b: 1, rest_length: 1.0, _padding: 0 });
     let _ = sim.run(0.0, 1).unwrap();
     let dx = sim.spheres[1].pos.x - sim.spheres[0].pos.x;

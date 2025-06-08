@@ -247,7 +247,7 @@ mod tests {
         assert_eq!(binding_count(&Kernel::MatMul), 4);
 
         // Physics world passes
-        assert_eq!(binding_count(&Kernel::IntegrateBodies), 2);
+        assert_eq!(binding_count(&Kernel::IntegrateBodies), 3);
         assert_eq!(binding_count(&Kernel::DetectContactsSphere), 2);
         assert_eq!(binding_count(&Kernel::DetectContactsBox), 3);
         assert_eq!(binding_count(&Kernel::DetectContactsSDF), 3);

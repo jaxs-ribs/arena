@@ -27,12 +27,12 @@ pub struct BoxShape {
     pub half_extents: Vec3,
 }
 
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone, Debug)]
 pub struct PhysParams {
     pub gravity: Vec3,
     pub dt: f32,
-    pub force: [f32; 2],
+    /// External forces applied per sphere (x/y components). Length must match number of spheres.
+    pub forces: Vec<[f32; 2]>,
 }
 
 #[repr(C)]
