@@ -151,6 +151,17 @@ impl Tape {
                         *g += (1.0 - d.powi(2)) * og;
                     }
                 }
+                EOp::Relu => {
+                    let a = tensors.get(&node.a).unwrap();
+                    let a_grad = grads
+                        .entry(node.a)
+                        .or_insert_with(|| vec![0.0; a.data.len()]);
+                    for (g, (d, og)) in a_grad.iter_mut().zip(a.data.iter().zip(out_grad.iter())) {
+                        if *d > 0.0 {
+                            *g += og;
+                        }
+                    }
+                }
                 EOp::Sub => {
                     let a = tensors.get(&node.a).unwrap();
                     let b = tensors.get(&node.b).unwrap();

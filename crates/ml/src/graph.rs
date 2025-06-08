@@ -11,6 +11,7 @@ pub enum EOp {
     ReduceSum,
     MatMul,
     Tanh,
+    Relu,
     Sub,
     Pow,
     MulScalar,
@@ -65,6 +66,7 @@ impl Graph {
                 // Unsupported ops map to available kernels when possible
                 EOp::MatMul => Kernel::MatMul,
                 EOp::Tanh => Kernel::Tanh,
+                EOp::Relu => Kernel::Relu,
                 EOp::Sub => Kernel::Sub,
                 EOp::Clamp => Kernel::Clamp,
                 EOp::Min => Kernel::Min,
@@ -164,7 +166,7 @@ impl Graph {
                     let out_tensor = tensors.get_mut(&node.out).expect("output tensor missing");
                     out_tensor.data = bytemuck::cast_slice(&result[0]).to_vec();
                 }
-                EOp::Tanh | EOp::Exp | EOp::Clamp => {
+                EOp::Tanh | EOp::Relu | EOp::Exp | EOp::Clamp => {
                     let out = tensors.get(&node.out).expect("output tensor missing");
                     let out_placeholder = BufferView::new(
                         vec![0u8; out.data.len() * std::mem::size_of::<f32>()].into(),

@@ -221,6 +221,23 @@ impl Tensor {
         out
     }
 
+    /// Applies the rectified linear unit function to each element of the tensor.
+    pub fn relu(&self, recorder: &mut impl Recorder, tensors: &mut HashMap<usize, Tensor>) -> Tensor {
+        let data = self.data.iter().map(|x| x.max(0.0)).collect();
+        let out = Tensor::from_vec(self.shape.clone(), data);
+        recorder.record(
+            Node {
+                op: EOp::Relu,
+                a: self.id,
+                b: 0,
+                out: out.id,
+            },
+            tensors,
+        );
+        tensors.insert(out.id, out.clone());
+        out
+    }
+
     /// Performs element-wise subtraction between two tensors.
     pub fn sub(
         &self,

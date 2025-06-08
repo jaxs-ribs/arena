@@ -30,3 +30,22 @@ fn graph_run_matches_cpu() {
     assert_eq!(tensors.get(&d.id).unwrap().data, expected_d);
     assert_eq!(tensors.get(&e.id).unwrap().data, expected_e);
 }
+
+#[test]
+fn graph_run_relu() {
+    let mut g = Graph::new();
+    let mut tensors = HashMap::new();
+
+    let a = Tensor::from_vec(vec![3], vec![-1.0, 0.5, 2.0]);
+    tensors.insert(a.id, a.clone());
+
+    let b = a.relu(&mut g, &mut tensors);
+
+    let expected = b.data.clone();
+
+    tensors.get_mut(&b.id).unwrap().data.fill(0.0);
+
+    g.run(&mut tensors).unwrap();
+
+    assert_eq!(tensors.get(&b.id).unwrap().data, expected);
+}
