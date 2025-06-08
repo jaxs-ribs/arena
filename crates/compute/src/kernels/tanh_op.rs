@@ -16,7 +16,7 @@ pub fn handle_tanh(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     Ok(vec![out_bytes])
 }
 
-/*
+#[cfg(feature = "cpu-tests")]
 #[cfg(test)]
 mod tests {
     use crate::{BufferView, ComputeBackend, CpuBackend, Kernel};
@@ -41,4 +41,3 @@ mod tests {
         }
     }
 }
-*/

@@ -55,7 +55,7 @@ pub fn handle_where(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> 
     Ok(vec![out_bytes])
 }
 
-/*
+#[cfg(feature = "cpu-tests")]
 #[cfg(test)]
 mod tests {
     use crate::{BufferView, ComputeBackend, CpuBackend, Kernel};
@@ -79,4 +79,3 @@ mod tests {
         assert_eq!(result, &[1.0, 7.0, 3.0, 9.0, 5.0]);
     }
 }
-*/

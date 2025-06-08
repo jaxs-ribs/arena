@@ -16,7 +16,7 @@ pub fn handle_sqrt(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     Ok(vec![out_bytes])
 }
 
-/*
+#[cfg(feature = "cpu-tests")]
 #[cfg(test)]
 mod tests {
     use crate::{BufferView, ComputeBackend, CpuBackend, Kernel};
@@ -38,4 +38,3 @@ mod tests {
         assert_eq!(result, &[2.0, 3.0, 0.0, 4.0]);
     }
 }
-*/
