@@ -98,12 +98,11 @@ pub fn handle_detect_contacts_sphere(binds: &[BufferView]) -> Result<Vec<Vec<u8>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{backend::mock_cpu::MockCpu, ComputeBackend, Kernel};
     use std::sync::Arc as StdArc;
 
     #[test]
     fn contacts_generated_for_overlapping_spheres() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
 
         let bodies = vec![
             TestBody {
@@ -139,7 +138,7 @@ mod tests {
 
     #[test]
     fn no_contacts_for_distant_spheres() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
 
         let bodies = vec![
             TestBody {

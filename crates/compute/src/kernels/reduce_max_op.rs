@@ -23,12 +23,11 @@ pub fn handle_reduce_max(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeEr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ComputeBackend, Kernel, backend::mock_cpu::MockCpu};
     use std::sync::Arc as StdArc;
 
     #[test]
     fn mock_reduce_max_computes_max_value() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
         let input_data1 = vec![1.0f32, -2.0, 5.0, 0.0, 4.5, -10.0];
         let expected_max1: f32 = input_data1.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
 

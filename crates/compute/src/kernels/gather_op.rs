@@ -47,12 +47,11 @@ pub fn handle_gather(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ComputeBackend, Kernel, backend::mock_cpu::MockCpu};
     use std::sync::Arc as StdArc;
 
     #[test]
     fn mock_gather_collects_values_from_indices() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
         let source_data = vec![10.0f32, 11.0, 12.0, 13.0, 14.0];
         let indices_to_gather = vec![3u32, 0, 2, 2, 4];
         let expected_output_data = vec![13.0f32, 10.0, 12.0, 12.0, 14.0];

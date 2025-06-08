@@ -38,7 +38,6 @@ pub fn handle_expand_instances(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ComputeBackend, Kernel, backend::mock_cpu::MockCpu};
     use std::sync::Arc as StdArc;
 
     #[repr(C)]
@@ -49,7 +48,7 @@ mod tests {
 
     #[test]
     fn mock_expand_instances_repeats_template() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
         let template_data = vec![1.0f32, 2.0, 3.0];
         let repetition_count = 3u32;
         let mut expected_output_data =

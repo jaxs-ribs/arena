@@ -113,7 +113,6 @@ pub fn handle_solve_joints_pbd(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ComputeBackend, Kernel, backend::mock_cpu::MockCpu};
     use std::sync::Arc as StdArc;
 
     #[test]
@@ -148,7 +147,7 @@ mod tests {
             _pad: [f32; 3],
         }
 
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
 
         let bodies = vec![
             TestBody {

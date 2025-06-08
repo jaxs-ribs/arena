@@ -159,12 +159,11 @@ pub fn handle_detect_contacts_box(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{backend::mock_cpu::MockCpu, ComputeBackend, Kernel};
     use std::sync::Arc as StdArc;
 
     #[test]
     fn contact_generated_for_sphere_touching_box_top() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
 
         let bodies = vec![TestBody {
             pos: TestVec3 { x: 0.0, y: 1.5, z: 0.0 },
@@ -200,7 +199,7 @@ mod tests {
 
     #[test]
     fn no_contact_for_distant_sphere() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
 
         let bodies = vec![TestBody {
             pos: TestVec3 { x: 3.0, y: 0.0, z: 0.0 },

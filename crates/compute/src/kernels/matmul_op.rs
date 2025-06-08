@@ -78,7 +78,6 @@ pub fn handle_matmul(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ComputeBackend, Kernel, backend::mock_cpu::MockCpu};
     use std::sync::Arc as StdArc;
 
     #[repr(C)]
@@ -91,7 +90,7 @@ mod tests {
 
     #[test]
     fn mock_matmul_multiplies_matrices() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
 
         let a_data = vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0];
         let m = 2u32;

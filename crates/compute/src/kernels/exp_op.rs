@@ -24,12 +24,11 @@ pub fn handle_exp(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BufferView, ComputeBackend, Kernel, backend::mock_cpu::MockCpu};
     use std::sync::Arc as StdArc;
 
     #[test]
     fn mock_exp_computes_exponential() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
         let input_data = vec![0.0f32, 1.0, -1.0, 2.0, std::f32::consts::LN_2];
         let expected_output_data: Vec<f32> = input_data.iter().map(|x| x.exp()).collect();
 

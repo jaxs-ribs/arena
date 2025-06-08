@@ -21,12 +21,11 @@ pub fn handle_reduce_sum(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeEr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ComputeBackend, Kernel, backend::mock_cpu::MockCpu};
     use std::sync::Arc as StdArc;
 
     #[test]
     fn mock_reduce_sum_computes_sum() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
         let input_data = vec![1.0f32, 2.0, 3.0, 4.0, 5.0, -2.0];
         let expected_sum: f32 = input_data.iter().sum();
 

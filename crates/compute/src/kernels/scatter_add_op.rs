@@ -55,12 +55,11 @@ pub fn handle_scatter_add(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeE
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ComputeBackend, Kernel, backend::mock_cpu::MockCpu};
     use std::sync::Arc as StdArc;
 
     #[test]
     fn mock_scatter_add_adds_values_to_indices() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
         let initial_output_data = vec![0.0f32; 5];
         let values_to_add_data = vec![1.0f32, 2.0, 3.0];
         let indices_data = vec![1u32, 0, 3];

@@ -51,12 +51,11 @@ pub fn handle_clamp(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> 
 
 #[cfg(test)]
 mod tests {
-    use crate::{BufferView, ComputeBackend, Kernel, backend::mock_cpu::MockCpu};
     use std::sync::Arc as StdArc;
 
     #[test]
     fn mock_clamp_clamps_values() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
         let value_data = vec![1.0f32, -2.0, 0.0, 3.5, -0.5, 7.0, 0.5];
         let min_values_data = vec![0.0f32, 0.0, 0.1, -1.0, 0.0, 6.0, -1.0];
         let max_values_data = vec![1.0f32, 1.0, 0.1, 2.0, 1.0, 6.5, 0.0];

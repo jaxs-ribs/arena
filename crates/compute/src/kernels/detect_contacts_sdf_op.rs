@@ -87,12 +87,11 @@ pub fn handle_detect_contacts_sdf(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ComputeBackend, Kernel, backend::mock_cpu::MockCpu};
     use std::sync::Arc as StdArc;
 
     #[test]
     fn contact_generated_for_body_below_plane() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
 
         let bodies = vec![
             TestBody {
@@ -146,7 +145,7 @@ mod tests {
 
     #[test]
     fn no_contact_for_body_above_plane() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
 
         let bodies = vec![TestBody {
             pos: TestVec3 {

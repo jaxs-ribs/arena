@@ -82,7 +82,6 @@ pub fn handle_solve_contacts_pbd(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, C
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ComputeBackend, Kernel, backend::mock_cpu::MockCpu};
     use std::sync::Arc as StdArc;
 
     #[repr(C)]
@@ -112,7 +111,7 @@ mod tests {
 
     #[test]
     fn mock_solve_contacts_moves_body_out_of_penetration() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
 
         let sphere = TestSphere {
             pos: TestVec3 {

@@ -24,12 +24,11 @@ pub fn handle_neg(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BufferView, ComputeBackend, Kernel, backend::mock_cpu::MockCpu};
     use std::sync::Arc as StdArc;
 
     #[test]
     fn mock_neg_negates_values() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
         let input_data = vec![1.0f32, -2.0, 0.0, 3.5, -0.5];
         let expected_output_data: Vec<f32> = input_data.iter().map(|x| -x).collect();
 

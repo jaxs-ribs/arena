@@ -43,12 +43,11 @@ pub fn handle_div(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BufferView, ComputeBackend, Kernel, backend::mock_cpu::MockCpu};
     use std::sync::Arc as StdArc;
 
     #[test]
     fn mock_div_divides_values() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
         let input_a_data = vec![1.0f32, -2.0, 0.0, 7.0, -0.5];
         let input_b_data = vec![0.5f32, 2.0, 1.0, -2.0, 10.0]; // Avoid division by zero for this test
         let expected_output_data: Vec<f32> = input_a_data

@@ -46,12 +46,12 @@ pub fn handle_add(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BufferView, ComputeBackend, Kernel, backend::mock_cpu::MockCpu}; // Removed unused Arc
-    use std::sync::Arc as StdArc;
+    use crate::{BufferView, Kernel, CpuBackend};
+    use std::sync::Arc;
 
     #[test]
     fn mock_add_adds_values() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
         let input_a_data = vec![1.0f32, -2.0, 0.0, 3.5, -0.5];
         let input_b_data = vec![0.5f32, 2.0, -1.0, -0.5, 10.0];
         let expected_output_data: Vec<f32> = input_a_data
@@ -60,21 +60,21 @@ mod tests {
             .map(|(a, b)| a + b)
             .collect();
 
-        let input_a_bytes: StdArc<[u8]> = bytemuck::cast_slice(&input_a_data).to_vec().into();
+        let input_a_bytes: Arc<[u8]> = bytemuck::cast_slice(&input_a_data).to_vec().into();
         let input_a_buffer_view = BufferView::new(
             input_a_bytes,
             vec![input_a_data.len()],
             std::mem::size_of::<f32>(),
         );
 
-        let input_b_bytes: StdArc<[u8]> = bytemuck::cast_slice(&input_b_data).to_vec().into();
+        let input_b_bytes: Arc<[u8]> = bytemuck::cast_slice(&input_b_data).to_vec().into();
         let input_b_buffer_view = BufferView::new(
             input_b_bytes,
             vec![input_b_data.len()],
             std::mem::size_of::<f32>(),
         );
 
-        let output_buffer_placeholder_bytes: StdArc<[u8]> =
+        let output_buffer_placeholder_bytes: Arc<[u8]> =
             vec![0u8; expected_output_data.len() * std::mem::size_of::<f32>()].into();
         let output_buffer_view = BufferView::new(
             output_buffer_placeholder_bytes,
@@ -83,7 +83,7 @@ mod tests {
         );
 
         let config_data = vec![0u32];
-        let config_bytes: StdArc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
+        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
         let config_buffer_view = BufferView::new(
             config_bytes,
             vec![config_data.len()],

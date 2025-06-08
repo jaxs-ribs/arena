@@ -57,12 +57,11 @@ pub fn handle_segmented_reduce_sum(binds: &[BufferView]) -> Result<Vec<Vec<u8>>,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ComputeBackend, Kernel, backend::mock_cpu::MockCpu};
     use std::sync::Arc as StdArc;
 
     #[test]
     fn mock_segmented_reduce_sum_computes_segment_sums() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
         let input_data = vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
         let segment_indices = vec![0u32, 3, 7];
         let expected_sums = vec![6.0f32, 22.0, 27.0];

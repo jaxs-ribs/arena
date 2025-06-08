@@ -24,12 +24,11 @@ pub fn handle_sigmoid(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ComputeBackend, Kernel, backend::mock_cpu::MockCpu};
     use std::sync::Arc as StdArc;
 
     #[test]
     fn mock_sigmoid_computes_logistic_function() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
         let input_data = vec![0.0f32, 1.0, -1.0, 0.5, -0.5, 20.0, -20.0];
         let expected_output_data: Vec<f32> = input_data
             .iter()

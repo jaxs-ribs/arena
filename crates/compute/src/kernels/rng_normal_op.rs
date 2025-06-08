@@ -23,12 +23,11 @@ pub fn handle_rng_normal(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeEr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ComputeBackend, Kernel, backend::mock_cpu::MockCpu};
     use std::sync::Arc as StdArc;
 
     #[test]
     fn mock_rng_normal_produces_deterministic_sequence() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
         let num_values_to_generate = 5usize;
         let expected_output_data: Vec<f32> = (0..num_values_to_generate)
             .map(|i| i as f32 * 0.1)

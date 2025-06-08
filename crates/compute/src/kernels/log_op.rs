@@ -23,12 +23,11 @@ pub fn handle_log(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BufferView, ComputeBackend, Kernel, backend::mock_cpu::MockCpu};
     use std::sync::Arc as StdArc;
 
     #[test]
     fn mock_log_computes_logarithm() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
         let input_data = vec![1.0f32, std::f32::consts::E, 2.0, 0.5]; // Test with E for ln(E) = 1
         let expected_output_data: Vec<f32> = input_data.iter().map(|x| x.ln()).collect();
 

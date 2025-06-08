@@ -57,12 +57,11 @@ pub fn handle_where(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> 
 
 #[cfg(test)]
 mod tests {
-    use crate::{BufferView, ComputeBackend, Kernel, backend::mock_cpu::MockCpu};
     use std::sync::Arc as StdArc;
 
     #[test]
     fn mock_where_selects_values() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
         let condition_data = vec![1u32, 0, 1, 0, 1];
         let true_values_data = vec![1.1f32, 2.2, 3.3, 4.4, 5.5];
         let false_values_data = vec![-1.1f32, -2.2, -3.3, -4.4, -5.5];

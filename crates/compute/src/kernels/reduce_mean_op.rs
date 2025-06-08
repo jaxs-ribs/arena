@@ -26,12 +26,11 @@ pub fn handle_reduce_mean(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeE
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ComputeBackend, Kernel, backend::mock_cpu::MockCpu};
     use std::sync::Arc as StdArc;
 
     #[test]
     fn mock_reduce_mean_computes_mean() {
-        let cpu = MockCpu::default();
+        let cpu = CpuBackend::new();
 
         let input_data1 = vec![1.0f32, 2.0, 3.0, 4.0, 5.0, -2.0];
         let expected_mean1: f32 = input_data1.iter().sum::<f32>() / (input_data1.len() as f32);
