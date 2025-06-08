@@ -7,4 +7,5 @@ edition = "2021"
 compute = { path = "../compute" }
 bytemuck = { version = "1.15", features = ["derive"] }
 anyhow = "1.0"
+physics = { path = "../physics" }
 fastrand = "1.9"
