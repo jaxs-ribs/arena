@@ -1,4 +1,4 @@
-use physics::{PhysicsSim, Sphere, Vec3, Joint};
+use physics::{PhysicsSim, Sphere, Vec3, Joint, JOINT_TYPE_DISTANCE};
 
 #[test]
 fn distance_joint_moves_bodies_toward_rest_length() {
@@ -8,7 +8,16 @@ fn distance_joint_moves_bodies_toward_rest_length() {
         Vec3::new(0.0, 0.0, 0.0),
     ));
     sim.params.forces.push([0.0, 0.0]);
-    sim.joints.push(Joint { body_a: 0, body_b: 1, rest_length: 1.0, _padding: 0 });
+    sim.joints.push(Joint {
+        body_a: 0,
+        body_b: 1,
+        joint_type: JOINT_TYPE_DISTANCE,
+        rest_length: 1.0,
+        local_anchor_a: Vec3::new(0.0, 0.0, 0.0),
+        local_anchor_b: Vec3::new(0.0, 0.0, 0.0),
+        local_axis_a: Vec3::new(0.0, 0.0, 0.0),
+        local_axis_b: Vec3::new(0.0, 0.0, 0.0),
+    });
     let _ = sim.run(0.0, 1).unwrap();
     let dx = sim.spheres[1].pos.x - sim.spheres[0].pos.x;
     let dy = sim.spheres[1].pos.y - sim.spheres[0].pos.y;

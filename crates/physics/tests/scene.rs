@@ -1,4 +1,4 @@
-use physics::{PhysicsSim, Sphere, Vec3, Joint};
+use physics::{PhysicsSim, Sphere, Vec3, Joint, JOINT_TYPE_DISTANCE};
 
 #[test]
 fn chain_of_spheres_runs_stably() {
@@ -13,8 +13,12 @@ fn chain_of_spheres_runs_stably() {
         sim.joints.push(Joint {
             body_a: i - 1,
             body_b: i,
+            joint_type: JOINT_TYPE_DISTANCE,
             rest_length: 1.0,
-            _padding: 0,
+            local_anchor_a: Vec3::new(0.0, 0.0, 0.0),
+            local_anchor_b: Vec3::new(0.0, 0.0, 0.0),
+            local_axis_a: Vec3::new(0.0, 0.0, 0.0),
+            local_axis_b: Vec3::new(0.0, 0.0, 0.0),
         });
     }
 

@@ -1,12 +1,20 @@
 struct Sphere {
   pos : vec3<f32>,
+  _pad1: f32,
   vel : vec3<f32>,
+  _pad2: f32,
   orientation : vec4<f32>,
   angular_vel : vec3<f32>,
+  _pad3: f32,
 };
 
+struct RawPhysParams {
+  gravity: vec3<f32>,
+  dt: f32,
+}
+
 @group(0) @binding(0) var<storage, read_write> spheres : array<Sphere>;
-@group(0) @binding(1) var<uniform>            params  : vec4<f32>; // xyz: gravity, w: dt
+@group(0) @binding(1) var<uniform>            params  : RawPhysParams;
 @group(0) @binding(2) var<storage, read>      forces  : array<vec2<f32>>;
 
 @compute @workgroup_size(256)
@@ -15,8 +23,8 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
   if (idx >= arrayLength(&spheres)) { return; }
 
   var s = spheres[idx];
-  let dt = params.w;
-  let g = params.xyz;
+  let dt = params.dt;
+  let g = params.gravity;
   let f = vec3<f32>(forces[idx], 0.0);
   let acc = g + f;
   s.vel += acc * dt;

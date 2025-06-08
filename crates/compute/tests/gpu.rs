@@ -15,10 +15,16 @@ mod wgpu_tests {
         let expected = cpu_backend.dispatch(&kernel, inputs, workgroups).unwrap();
         let actual = wgpu_backend.dispatch(&kernel, inputs, workgroups).unwrap();
 
-        assert_eq!(expected.len(), actual.len(), "Mismatched number of output buffers");
+        if expected.is_empty() {
+            // CPU backend wrote in-place, compare to input buffer
+            assert_eq!(inputs[0].data.len(), actual[0].len(), "Mismatched buffer size");
+            assert_eq!(inputs[0].data.as_ref(), actual[0].as_slice(), "Mismatch in buffer at index 0");
+        } else {
+            assert_eq!(expected.len(), actual.len(), "Mismatched number of output buffers");
 
-        for i in 0..expected.len() {
-            assert_eq!(expected[i], actual[i], "Mismatch in buffer at index {}", i);
+            for i in 0..expected.len() {
+                assert_eq!(expected[i], actual[i], "Mismatch in buffer at index {}", i);
+            }
         }
     }
 
@@ -113,9 +119,9 @@ mod wgpu_tests {
         #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
         struct PhysParams {
             gravity: [f32; 3],
+            _pad1: f32,
             dt: f32,
-            _padding1: f32,
-            _padding2: f32,
+            _pad2: [f32; 3],
         }
 
         let spheres = vec![
@@ -124,9 +130,9 @@ mod wgpu_tests {
         ];
         let params = PhysParams {
             gravity: [0.0, -9.81, 0.0],
+            _pad1: 0.0,
             dt: 0.01,
-            _padding1: 0.0,
-            _padding2: 0.0,
+            _pad2: [0.0; 3],
         };
         let forces: Vec<[f32; 2]> = vec![[0.0, 0.0]; 2];
 

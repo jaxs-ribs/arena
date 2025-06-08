@@ -6,6 +6,12 @@ struct Vec3 {
 
 struct Body {
     pos : Vec3,
+    _pad1: f32,
+    vel: Vec3,
+    _pad2: f32,
+    orientation: vec4<f32>,
+    angular_vel: Vec3,
+    _pad3: f32,
 };
 
 struct Contact {
@@ -14,27 +20,31 @@ struct Contact {
     depth : f32,
 };
 
+struct BoxShape {
+    center: vec3<f32>,
+    _pad1: f32,
+    half_extents: vec3<f32>,
+    _pad2: f32,
+}
+
 @group(0) @binding(0) var<storage, read> bodies : array<Body>;
-@group(0) @binding(1) var<storage, read> box_data : array<f32>;
-@group(0) @binding(2) var<storage, read_write> contacts : array<Contact>;
+@group(0) @binding(1) var<storage, read> box_data : BoxShape;
+@group(0) @binding(2) var<storage, read_write> contacts : array<atomic<u32>>;
 
 @compute @workgroup_size(1)
 fn main() {
-    let cx = box_data[0];
-    let cy = box_data[1];
-    let cz = box_data[2];
-    let hx = box_data[3];
-    let hy = box_data[4];
-    let hz = box_data[5];
+    let center = box_data.center;
+    let half_extents = box_data.half_extents;
 
-    let min_x = cx - hx;
-    let max_x = cx + hx;
-    let min_y = cy - hy;
-    let max_y = cy + hy;
-    let min_z = cz - hz;
-    let max_z = cz + hz;
+    let min_x = center.x - half_extents.x;
+    let max_x = center.x + half_extents.x;
+    let min_y = center.y - half_extents.y;
+    let max_y = center.y + half_extents.y;
+    let min_z = center.z - half_extents.z;
+    let max_z = center.z + half_extents.z;
 
-    var out_idx : u32 = 0u;
+    atomicStore(&contacts[0], 0u);
+
     for (var i : u32 = 0u; i < arrayLength(&bodies); i = i + 1u) {
         let p = bodies[i].pos;
         let clamped_x = clamp(p.x, min_x, max_x);
@@ -71,13 +81,19 @@ fn main() {
             emit = true;
         }
 
-        if (emit && out_idx < arrayLength(&contacts)) {
+        if (emit) {
+            let out_idx = atomicAdd(&contacts[0], 1u);
+            if (out_idx < arrayLength(&contacts) - 1u) {
             var c : Contact;
             c.body_index = i;
             c.normal = Vec3(n.x, n.y, n.z);
             c.depth = depth;
-            contacts[out_idx] = c;
-            out_idx = out_idx + 1u;
+                let contact_as_u32 = bitcast<vec4<u32>>(c);
+                atomicStore(&contacts[4 * out_idx + 4], contact_as_u32.x);
+                atomicStore(&contacts[4 * out_idx + 5], contact_as_u32.y);
+                atomicStore(&contacts[4 * out_idx + 6], contact_as_u32.z);
+                atomicStore(&contacts[4 * out_idx + 7], contact_as_u32.w);
+            }
         }
     }
 }

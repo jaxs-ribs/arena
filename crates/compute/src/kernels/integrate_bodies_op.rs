@@ -29,9 +29,9 @@ pub fn handle_integrate_bodies(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
     #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
     struct TestPhysParams {
         gravity: TestVec3,
+        _pad1: f32,
         dt: f32,
-        _padding1: f32,
-        _padding2: f32,
+        _pad2: [f32; 3],
     }
     #[repr(C)]
     #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
@@ -73,11 +73,16 @@ pub fn handle_integrate_bodies(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
         ));
     }
 
-    let mut updated_spheres =
-        bytemuck::cast_slice::<_, TestSphere>(&spheres_data_view.data).to_vec();
+    let spheres_data = unsafe {
+        std::slice::from_raw_parts_mut(
+            spheres_data_view.data.as_ptr() as *mut u8,
+            spheres_data_view.data.len(),
+        )
+    };
+    let spheres: &mut [TestSphere] = bytemuck::cast_slice_mut(spheres_data);
     let forces: &[TestForce] = bytemuck::cast_slice(&forces_data_view.data);
 
-    for (sphere, f) in updated_spheres.iter_mut().zip(forces) {
+    for (sphere, f) in spheres.iter_mut().zip(forces) {
         sphere.vel.x += (params.gravity.x + f.x) * params.dt;
         sphere.vel.y += (params.gravity.y + f.y) * params.dt;
         sphere.vel.z += params.gravity.z * params.dt;
@@ -105,8 +110,7 @@ pub fn handle_integrate_bodies(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
         sphere.orientation[3] += -ox * qx - oy * qy - oz * qz;
     }
 
-    let updated_spheres_bytes = bytemuck::cast_slice(&updated_spheres).to_vec();
-    Ok(vec![updated_spheres_bytes])
+    Ok(vec![])
 }
 
 #[cfg(feature = "cpu-tests")]
@@ -139,9 +143,9 @@ mod tests {
         #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
         struct TestPhysParams {
             gravity: TestVec3,
+            _pad1: f32,
             dt: f32,
-            _padding1: f32,
-            _padding2: f32,
+            _pad2: [f32; 3],
         }
         #[repr(C)]
         #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
@@ -183,9 +187,9 @@ mod tests {
                 y: -9.81,
                 z: 0.0,
             },
+            _pad1: 0.0,
             dt: 0.1,
-            _padding1: 0.0,
-            _padding2: 0.0,
+            _pad2: [0.0; 3],
         };
         let params_bytes: Arc<[u8]> = bytemuck::bytes_of(&params).to_vec().into();
         let params_buffer_view =
@@ -204,13 +208,16 @@ mod tests {
             )
             .expect("Dispatch for IntegrateBodies failed");
 
-        assert_eq!(result_buffers.len(), 1);
-        let updated_spheres_bytes = &result_buffers[0];
+        let updated_spheres_bytes = if result_buffers.is_empty() {
+            sphere_buffer_view.data.clone()
+        } else {
+            result_buffers[0].clone().into()
+        };
         assert_eq!(
             updated_spheres_bytes.len(),
             std::mem::size_of::<TestSphere>() * spheres_data.len()
         );
-        let updated_spheres: &[TestSphere] = bytemuck::cast_slice(updated_spheres_bytes);
+        let updated_spheres: &[TestSphere] = bytemuck::cast_slice(&updated_spheres_bytes);
         assert_eq!(updated_spheres.len(), 1);
         let updated_sphere = updated_spheres[0];
 

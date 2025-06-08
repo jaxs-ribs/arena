@@ -1,4 +1,4 @@
-use physics::{PhysicsSim, Sphere, Vec3, Joint};
+use physics::{PhysicsSim, Sphere, Vec3, Joint, JOINT_TYPE_DISTANCE};
 use crate::rl::Env;
 
 /// Environment for balancing a stick by applying a horizontal force to the base sphere.
@@ -25,7 +25,16 @@ impl StickBalanceEnv {
         // Each sphere needs a force slot.
         sim.params.forces.push([0.0, 0.0]);
         // Constrain them with a distance joint so the stick maintains length.
-        sim.joints.push(Joint { body_a: 0, body_b: 1, rest_length: 1.0, _padding: 0 });
+        sim.joints.push(Joint {
+            body_a: 0,
+            body_b: 1,
+            joint_type: JOINT_TYPE_DISTANCE,
+            rest_length: 1.0,
+            local_anchor_a: Vec3::new(0.0, 0.0, 0.0),
+            local_anchor_b: Vec3::new(0.0, 0.0, 0.0),
+            local_axis_a: Vec3::new(0.0, 0.0, 0.0),
+            local_axis_b: Vec3::new(0.0, 0.0, 0.0),
+        });
         Self { sim, base_idx: 0, tip_idx: 1 }
     }
 
