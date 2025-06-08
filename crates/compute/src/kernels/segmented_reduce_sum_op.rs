@@ -56,8 +56,7 @@ pub fn handle_segmented_reduce_sum(binds: &[BufferView]) -> Result<Vec<Vec<u8>>,
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::sync::Arc as StdArc;
+    use crate::{CpuBackend, Kernel, BufferView};
 
     #[test]
     fn mock_segmented_reduce_sum_computes_segment_sums() {

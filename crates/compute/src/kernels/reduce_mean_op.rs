@@ -25,8 +25,7 @@ pub fn handle_reduce_mean(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeE
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::sync::Arc as StdArc;
+    use crate::{CpuBackend, Kernel, BufferView};
 
     #[test]
     fn mock_reduce_mean_computes_mean() {

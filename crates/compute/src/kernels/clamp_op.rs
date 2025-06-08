@@ -51,7 +51,8 @@ pub fn handle_clamp(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> 
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc as StdArc;
+    use crate::{BufferView, Kernel, CpuBackend};
+    use std::sync::Arc;
 
     #[test]
     fn mock_clamp_clamps_values() {
@@ -67,28 +68,28 @@ mod tests {
             .map(|((&val, &min_val), &max_val)| val.max(min_val).min(max_val))
             .collect();
 
-        let value_bytes: StdArc<[u8]> = bytemuck::cast_slice(&value_data).to_vec().into();
+        let value_bytes: Arc<[u8]> = bytemuck::cast_slice(&value_data).to_vec().into();
         let value_buffer_view = BufferView::new(
             value_bytes,
             vec![value_data.len()],
             std::mem::size_of::<f32>(),
         );
 
-        let min_values_bytes: StdArc<[u8]> = bytemuck::cast_slice(&min_values_data).to_vec().into();
+        let min_values_bytes: Arc<[u8]> = bytemuck::cast_slice(&min_values_data).to_vec().into();
         let min_values_buffer_view = BufferView::new(
             min_values_bytes,
             vec![min_values_data.len()],
             std::mem::size_of::<f32>(),
         );
 
-        let max_values_bytes: StdArc<[u8]> = bytemuck::cast_slice(&max_values_data).to_vec().into();
+        let max_values_bytes: Arc<[u8]> = bytemuck::cast_slice(&max_values_data).to_vec().into();
         let max_values_buffer_view = BufferView::new(
             max_values_bytes,
             vec![max_values_data.len()],
             std::mem::size_of::<f32>(),
         );
 
-        let output_buffer_placeholder_bytes: StdArc<[u8]> =
+        let output_buffer_placeholder_bytes: Arc<[u8]> =
             vec![0u8; expected_output_data.len() * std::mem::size_of::<f32>()].into();
         let output_buffer_view = BufferView::new(
             output_buffer_placeholder_bytes,
@@ -97,7 +98,7 @@ mod tests {
         );
 
         let config_data = vec![0u32];
-        let config_bytes: StdArc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
+        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
         let config_buffer_view = BufferView::new(
             config_bytes,
             vec![config_data.len()],

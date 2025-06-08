@@ -77,8 +77,7 @@ pub fn handle_matmul(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError>
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::sync::Arc as StdArc;
+    use crate::{CpuBackend, Kernel, BufferView};
 
     #[repr(C)]
     #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]

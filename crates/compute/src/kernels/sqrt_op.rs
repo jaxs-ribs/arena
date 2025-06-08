@@ -18,8 +18,7 @@ pub fn handle_sqrt(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::sync::Arc as StdArc;
+    use crate::{CpuBackend, Kernel, BufferView};
 
     #[test]
     fn mock_sqrt_computes_square_root() {

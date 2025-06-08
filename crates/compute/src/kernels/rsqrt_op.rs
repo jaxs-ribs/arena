@@ -20,8 +20,7 @@ pub fn handle_rsqrt(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> 
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::sync::Arc as StdArc;
+    use crate::{CpuBackend, Kernel, BufferView};
 
     #[test]
     fn mock_rsqrt_computes_reciprocal_square_root() {

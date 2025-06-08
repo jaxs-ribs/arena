@@ -18,8 +18,7 @@ pub fn handle_tanh(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::sync::Arc as StdArc;
+    use crate::{CpuBackend, Kernel, BufferView};
 
     #[test]
     fn mock_tanh_computes_hyperbolic_tangent() {

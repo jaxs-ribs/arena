@@ -57,7 +57,8 @@ pub fn handle_where(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> 
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc as StdArc;
+    use crate::{BufferView, Kernel, CpuBackend};
+    use std::sync::Arc;
 
     #[test]
     fn mock_where_selects_values() {
@@ -73,14 +74,14 @@ mod tests {
             .map(|((&cond, &t_val), &f_val)| if cond != 0 { t_val } else { f_val })
             .collect();
 
-        let condition_bytes: StdArc<[u8]> = bytemuck::cast_slice(&condition_data).to_vec().into();
+        let condition_bytes: Arc<[u8]> = bytemuck::cast_slice(&condition_data).to_vec().into();
         let condition_buffer_view = BufferView::new(
             condition_bytes,
             vec![condition_data.len()],
             std::mem::size_of::<u32>(),
         );
 
-        let true_values_bytes: StdArc<[u8]> =
+        let true_values_bytes: Arc<[u8]> =
             bytemuck::cast_slice(&true_values_data).to_vec().into();
         let true_values_buffer_view = BufferView::new(
             true_values_bytes,
@@ -88,7 +89,7 @@ mod tests {
             std::mem::size_of::<f32>(),
         );
 
-        let false_values_bytes: StdArc<[u8]> =
+        let false_values_bytes: Arc<[u8]> =
             bytemuck::cast_slice(&false_values_data).to_vec().into();
         let false_values_buffer_view = BufferView::new(
             false_values_bytes,
@@ -96,7 +97,7 @@ mod tests {
             std::mem::size_of::<f32>(),
         );
 
-        let output_buffer_placeholder_bytes: StdArc<[u8]> =
+        let output_buffer_placeholder_bytes: Arc<[u8]> =
             vec![0u8; expected_output_data.len() * std::mem::size_of::<f32>()].into();
         let output_buffer_view = BufferView::new(
             output_buffer_placeholder_bytes,
