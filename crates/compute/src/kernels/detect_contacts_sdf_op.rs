@@ -84,7 +84,7 @@ pub fn handle_detect_contacts_sdf(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, 
     Ok(vec![out_bytes])
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "mock"))]
 mod tests {
     use super::*;
     use crate::{ComputeBackend, Kernel, backend::mock_cpu::MockCpu};

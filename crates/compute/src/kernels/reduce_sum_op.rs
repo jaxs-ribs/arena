@@ -18,7 +18,7 @@ pub fn handle_reduce_sum(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeEr
     Ok(vec![out_bytes])
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "mock"))]
 mod tests {
     use super::*;
     use crate::{ComputeBackend, Kernel, backend::mock_cpu::MockCpu};

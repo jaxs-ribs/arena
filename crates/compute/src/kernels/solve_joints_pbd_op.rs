@@ -110,7 +110,7 @@ pub fn handle_solve_joints_pbd(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
     Ok(vec![updated_bytes])
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "mock"))]
 mod tests {
     use super::*;
     use crate::{ComputeBackend, Kernel, backend::mock_cpu::MockCpu};

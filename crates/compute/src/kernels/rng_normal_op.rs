@@ -20,7 +20,7 @@ pub fn handle_rng_normal(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeEr
     Ok(vec![out_bytes])
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "mock"))]
 mod tests {
     use super::*;
     use crate::{ComputeBackend, Kernel, backend::mock_cpu::MockCpu};

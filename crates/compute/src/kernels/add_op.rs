@@ -44,7 +44,7 @@ pub fn handle_add(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     Ok(vec![out_bytes])
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "mock"))]
 mod tests {
     use crate::{BufferView, ComputeBackend, Kernel, backend::mock_cpu::MockCpu}; // Removed unused Arc
     use std::sync::Arc as StdArc;

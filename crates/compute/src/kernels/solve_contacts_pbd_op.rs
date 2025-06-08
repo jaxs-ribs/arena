@@ -77,7 +77,7 @@ pub fn handle_solve_contacts_pbd(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, C
     Ok(vec![out_bytes])
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "mock"))]
 mod tests {
     use super::*;
     use crate::{ComputeBackend, Kernel, backend::mock_cpu::MockCpu};
