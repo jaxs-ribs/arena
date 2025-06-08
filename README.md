@@ -73,6 +73,11 @@ cargo run -p runtime --features render -- --draw
 This will open a window and draw the sphere positions after each simulation
 step.
 
+## JSON Schema
+
+The file [docs/README.md](docs/README.md) describes the JSON format used to
+construct creature bodies.
+
 ## Status
 
 The codebase is early and experimental. Right now it demonstrates the core pieces needed to integrate physics simulation with GPU kernels compiled from WGSL. The intention is to evolve this into a Brax‑like environment where reinforcement learning policies can be trained directly on a differentiable WebGPU simulator.
