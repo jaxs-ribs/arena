@@ -32,10 +32,10 @@ const WORKGROUP_SIZE: u32 = 256;
 impl PhysicsSim {
     #[must_use]
     pub fn new_single_sphere(initial_height: f32) -> Self {
-        let sphere = Sphere {
-            pos: Vec3::new(0.0, initial_height, 0.0),
-            vel: Vec3::new(0.0, 0.0, 0.0),
-        };
+        let sphere = Sphere::new(
+            Vec3::new(0.0, initial_height, 0.0),
+            Vec3::new(0.0, 0.0, 0.0),
+        );
         let spheres = vec![sphere];
 
         let params = PhysParams {

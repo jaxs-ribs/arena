@@ -14,7 +14,10 @@ fn two_spheres_collide_in_free_fall() {
 
     let mut sim = PhysicsSim::new_single_sphere(5.0);
     sim.spheres[0].vel = Vec3::new(0.0, -2.0, 0.0);
-    sim.spheres.push(Sphere { pos: Vec3::new(0.0, 2.0, 0.0), vel: Vec3::new(0.0, 0.0, 0.0) });
+    sim.spheres.push(Sphere::new(
+        Vec3::new(0.0, 2.0, 0.0),
+        Vec3::new(0.0, 0.0, 0.0),
+    ));
     sim.params.forces.push([0.0, 0.0]);
 
     let _ = sim.run(0.01, 51).unwrap();
