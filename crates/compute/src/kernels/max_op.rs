@@ -63,7 +63,11 @@ mod tests {
         let out_bytes = Arc::from(bytemuck::cast_slice(&out_data));
         let out = BufferView::new(out_bytes, vec![out_data.len()], std::mem::size_of::<f32>());
 
-        let dispatch_binds = vec![a, b, out];
+        let config_data = vec![0u32];
+        let config_bytes = Arc::from(bytemuck::cast_slice(&config_data));
+        let config = BufferView::new(config_bytes, vec![config_data.len()], std::mem::size_of::<u32>());
+
+        let dispatch_binds = vec![a, b, out, config];
         let result_buffers = cpu.dispatch(&Kernel::Max, &dispatch_binds, [1, 1, 1]).unwrap();
 
         let result: &[f32] = bytemuck::cast_slice(&result_buffers[0]);

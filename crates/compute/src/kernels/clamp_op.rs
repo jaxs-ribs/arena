@@ -59,17 +59,32 @@ mod tests {
     fn test_clamp() {
         let cpu = CpuBackend::new();
 
-        let a = BufferView::from(Arc::new(vec![-10.0, 10.0, 0.0, 0.5, 0.7]));
-        let min = BufferView::from(Arc::new(vec![0.0]));
-        let max = BufferView::from(Arc::new(vec![1.0]));
-        let out = BufferView::new(Arc::new(vec![0.0; 5]), ());
+        let a_data = vec![-10.0f32, 10.0, 0.0, 0.5, 0.7];
+        let a_bytes: Arc<[u8]> = bytemuck::cast_slice(&a_data).to_vec().into();
+        let a = BufferView::new(a_bytes, vec![a_data.len()], std::mem::size_of::<f32>());
 
-        let dispatch_binds = &[&a, &min, &max, &out];
+        let min_data = vec![0.0f32; a_data.len()];
+        let min_bytes: Arc<[u8]> = bytemuck::cast_slice(&min_data).to_vec().into();
+        let min = BufferView::new(min_bytes, vec![min_data.len()], std::mem::size_of::<f32>());
+
+        let max_data = vec![1.0f32; a_data.len()];
+        let max_bytes: Arc<[u8]> = bytemuck::cast_slice(&max_data).to_vec().into();
+        let max = BufferView::new(max_bytes, vec![max_data.len()], std::mem::size_of::<f32>());
+
+        let out_data = vec![0.0f32; 5];
+        let out_bytes: Arc<[u8]> = bytemuck::cast_slice(&out_data).to_vec().into();
+        let out = BufferView::new(out_bytes, vec![out_data.len()], std::mem::size_of::<f32>());
+
+        let config_data = vec![0u32];
+        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
+        let config = BufferView::new(config_bytes, vec![config_data.len()], std::mem::size_of::<u32>());
+
+        let dispatch_binds = vec![a, min, max, out, config];
         let result_buffers = cpu
             .dispatch(&Kernel::Clamp, &dispatch_binds, [1, 1, 1])
             .unwrap();
 
-        let result = result_buffers[0].as_slice::<f32>().unwrap();
+        let result: &[f32] = bytemuck::cast_slice(&result_buffers[0]);
         assert_eq!(result, &[0.0, 1.0, 0.0, 0.5, 0.7]);
     }
 }
