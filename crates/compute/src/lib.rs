@@ -3,9 +3,16 @@
 use std::sync::Arc;
 use thiserror::Error;
 
-mod kernels;
+mod cpu_backend;
+#[cfg(feature = "gpu")]
+pub mod wgpu_backend;
+
+pub mod kernels;
 pub mod layout;
-pub mod backend;
+
+pub use cpu_backend::CpuBackend;
+#[cfg(feature = "gpu")]
+pub use wgpu_backend::WgpuBackend;
 
 #[derive(Error, Debug)]
 pub enum ComputeError {
@@ -109,31 +116,16 @@ pub trait ComputeBackend: Send + Sync + 'static {
     ) -> Result<Vec<Vec<u8>>, ComputeError>;
 }
 
-
-/// Returns a compute backend if available, falling back to the CPU implementation.
+/// The default backend for the current configuration.
 ///
-/// On macOS with the `metal` feature enabled this will attempt to create a
-/// [`WgpuMetal`] backend. If GPU initialization fails or the feature/OS is not
-/// available, a [`MockCpu`] backend is returned.
-#[must_use]
-pub fn default_backend() -> std::sync::Arc<dyn ComputeBackend> {
-    #[cfg(all(target_os = "macos", feature = "metal"))]
+/// This will be the `WgpuBackend` if the `gpu` feature is enabled, otherwise it will be the `CpuBackend`.
+pub fn default_backend() -> Arc<dyn ComputeBackend> {
+    #[cfg(feature = "gpu")]
     {
-        if let Ok(gpu) = backend::wgpu_metal::WgpuMetal::try_new() {
-            tracing::info!("Using WgpuMetal backend.");
-            return std::sync::Arc::new(gpu);
-        }
-        tracing::warn!("WgpuMetal backend initialization failed, falling back...");
+        Arc::new(WgpuBackend::new().unwrap())
     }
-
-    #[cfg(feature = "mock")]
+    #[cfg(not(feature = "gpu"))]
     {
-        tracing::info!("Using MockCpu backend.");
-        return std::sync::Arc::new(backend::mock_cpu::MockCpu::default());
-    }
-
-    #[cfg(not(feature = "mock"))]
-    {
-        compile_error!("No compute backend available. Enable the 'mock' feature or ensure a GPU backend can initialize.");
+        Arc::new(CpuBackend::new())
     }
 }
