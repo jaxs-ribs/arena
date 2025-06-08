@@ -23,7 +23,7 @@ pub fn handle_log(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BufferView, Kernel, CpuBackend};
+    use crate::{BufferView, CpuBackend, Kernel, ComputeBackend};
     use std::sync::Arc;
 
     #[test]
