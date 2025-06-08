@@ -41,7 +41,7 @@ impl PhysicsSim {
         let params = PhysParams {
             gravity: Vec3::new(0.0, -9.81, 0.0),
             dt: 0.01,
-            force: [0.0, 0.0],
+            forces: vec![[0.0, 0.0]],
         };
 
         let backend = compute::default_backend();
@@ -69,15 +69,32 @@ impl PhysicsSim {
             size_of::<Sphere>(),
         );
 
-        let params_bytes: Arc<[u8]> = bytemuck::bytes_of(&self.params).to_vec().into();
-        let params_buffer_view = compute::BufferView::new(params_bytes, vec![1], size_of::<PhysParams>());
+        #[repr(C)]
+        #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+        struct RawPhysParams {
+            gravity: Vec3,
+            dt: f32,
+        }
+        let raw_params = RawPhysParams {
+            gravity: self.params.gravity,
+            dt: self.params.dt,
+        };
+        let params_bytes: Arc<[u8]> = bytemuck::bytes_of(&raw_params).to_vec().into();
+        let params_buffer_view = compute::BufferView::new(params_bytes, vec![1], size_of::<RawPhysParams>());
+
+        let forces_bytes: Arc<[u8]> = bytemuck::cast_slice(&self.params.forces).to_vec().into();
+        let forces_buffer_view = compute::BufferView::new(
+            forces_bytes,
+            vec![self.params.forces.len()],
+            std::mem::size_of::<[f32; 2]>(),
+        );
 
         let num_spheres = self.spheres.len() as u32;
         let workgroups_x = (num_spheres + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
 
         let result_buffers = self.backend.dispatch(
             &compute::Kernel::IntegrateBodies,
-            &[sphere_buffer_view.clone(), params_buffer_view],
+            &[sphere_buffer_view.clone(), params_buffer_view, forces_buffer_view],
             [workgroups_x, 1, 1],
         )?;
 

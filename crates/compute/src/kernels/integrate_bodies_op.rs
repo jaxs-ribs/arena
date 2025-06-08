@@ -1,9 +1,9 @@
 use crate::{BufferView, ComputeError};
 
 pub fn handle_integrate_bodies(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
-    if binds.len() < 2 {
+    if binds.len() < 3 {
         return Err(ComputeError::ShapeMismatch(
-            "IntegrateBodies expects at least 2 buffers (spheres, params)",
+            "IntegrateBodies expects 3 buffers (spheres, params, forces)",
         ));
     }
 
@@ -28,9 +28,16 @@ pub fn handle_integrate_bodies(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
         _padding1: f32,
         _padding2: f32,
     }
+    #[repr(C)]
+    #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+    struct TestForce {
+        x: f32,
+        y: f32,
+    }
 
     let spheres_data_view = &binds[0];
     let params_data_view = &binds[1];
+    let forces_data_view = &binds[2];
 
     if params_data_view.data.len() != std::mem::size_of::<TestPhysParams>()
         || params_data_view.shape != vec![1]
@@ -53,12 +60,21 @@ pub fn handle_integrate_bodies(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
         ));
     }
 
+    if forces_data_view.data.len() != num_spheres * std::mem::size_of::<TestForce>()
+        || forces_data_view.shape != vec![num_spheres]
+    {
+        return Err(ComputeError::ShapeMismatch(
+            "Forces buffer for IntegrateBodies has incorrect size or shape",
+        ));
+    }
+
     let mut updated_spheres =
         bytemuck::cast_slice::<_, TestSphere>(&spheres_data_view.data).to_vec();
+    let forces: &[TestForce] = bytemuck::cast_slice(&forces_data_view.data);
 
-    for sphere in &mut updated_spheres {
-        sphere.vel.x += params.gravity.x * params.dt;
-        sphere.vel.y += params.gravity.y * params.dt;
+    for (sphere, f) in updated_spheres.iter_mut().zip(forces) {
+        sphere.vel.x += (params.gravity.x + f.x) * params.dt;
+        sphere.vel.y += (params.gravity.y + f.y) * params.dt;
         sphere.vel.z += params.gravity.z * params.dt;
 
         sphere.pos.x += sphere.vel.x * params.dt;
@@ -104,6 +120,12 @@ mod tests {
             _padding1: f32,
             _padding2: f32,
         }
+        #[repr(C)]
+        #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+        struct TestForce {
+            x: f32,
+            y: f32,
+        }
 
         let cpu = MockCpu::default();
 
@@ -141,10 +163,15 @@ mod tests {
         let params_buffer_view =
             BufferView::new(params_bytes, vec![1], std::mem::size_of::<TestPhysParams>());
 
+        let forces = vec![TestForce { x: 0.0, y: 0.0 }];
+        let forces_bytes: StdArc<[u8]> = bytemuck::cast_slice(&forces).to_vec().into();
+        let forces_buffer_view =
+            BufferView::new(forces_bytes, vec![forces.len()], std::mem::size_of::<TestForce>());
+
         let result_buffers = cpu
             .dispatch(
                 &Kernel::IntegrateBodies,
-                &[sphere_buffer_view.clone(), params_buffer_view],
+                &[sphere_buffer_view.clone(), params_buffer_view, forces_buffer_view],
                 [1, 1, 1],
             )
             .expect("Dispatch for IntegrateBodies failed");
