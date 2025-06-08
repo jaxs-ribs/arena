@@ -26,7 +26,7 @@ mod tests {
     fn test_sqrt() {
         let cpu = CpuBackend::new();
 
-        let a = BufferView::from(Arc::new(vec![1.0, 4.0, 9.0, 16.0]));
+        let a = BufferView::from(Arc::new(vec![4.0, 9.0, 0.0, 16.0]));
         let out = BufferView::new(Arc::new(vec![0.0; 4]), ());
 
         let dispatch_binds = &[&a, &out];
@@ -35,7 +35,7 @@ mod tests {
             .unwrap();
 
         let result = result_buffers[0].as_slice::<f32>().unwrap();
-        assert_eq!(result, &[1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(result, &[2.0, 3.0, 0.0, 4.0]);
     }
 }
 */

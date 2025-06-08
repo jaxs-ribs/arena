@@ -54,7 +54,8 @@ pub fn handle_scatter_add(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeE
 
 #[cfg(test)]
 mod tests {
-    use crate::{CpuBackend, Kernel, BufferView};
+    use super::*;
+    use std::sync::Arc as StdArc;
 
     #[test]
     fn mock_scatter_add_adds_values_to_indices() {

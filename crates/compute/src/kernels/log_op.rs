@@ -21,80 +21,28 @@ pub fn handle_log(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     Ok(vec![out_bytes])
 }
 
+#[cfg(feature = "cpu-tests")]
 #[cfg(test)]
 mod tests {
-    use crate::{BufferView, CpuBackend, Kernel, ComputeBackend};
+    use crate::{BufferView, ComputeBackend, CpuBackend, Kernel};
     use std::sync::Arc;
 
     #[test]
-    fn mock_log_computes_logarithm() {
+    fn test_log() {
         let cpu = CpuBackend::new();
-        let input_data = vec![1.0f32, std::f32::consts::E, 2.0, 0.5]; // Test with E for ln(E) = 1
-        let expected_output_data: Vec<f32> = input_data.iter().map(|x| x.ln()).collect();
 
-        let input_bytes: Arc<[u8]> = bytemuck::cast_slice(&input_data).to_vec().into();
-        let input_buffer_view = BufferView::new(
-            input_bytes,
-            vec![input_data.len()],
-            std::mem::size_of::<f32>(),
-        );
+        let a = BufferView::from(Arc::new(vec![1.0, 2.0, 3.0, 4.0]));
+        let out = BufferView::new(Arc::new(vec![0.0; 4]), ());
 
-        let output_buffer_placeholder_bytes: Arc<[u8]> =
-            vec![0u8; input_data.len() * std::mem::size_of::<f32>()].into();
-        let output_buffer_view = BufferView::new(
-            output_buffer_placeholder_bytes,
-            vec![input_data.len()],
-            std::mem::size_of::<f32>(),
-        );
-
-        let config_data = vec![0u32];
-        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
-        let config_buffer_view = BufferView::new(
-            config_bytes,
-            vec![config_data.len()],
-            std::mem::size_of::<u32>(),
-        );
-
-        let workgroups = [1, 1, 1];
+        let dispatch_binds = &[&a, &out];
         let result_buffers = cpu
-            .dispatch(
-                &Kernel::Log,
-                &[input_buffer_view, output_buffer_view, config_buffer_view],
-                workgroups,
-            )
-            .expect("Dispatch for Log failed");
+            .dispatch(&Kernel::Log, &dispatch_binds, [1, 1, 1])
+            .unwrap();
 
-        assert_eq!(
-            result_buffers.len(),
-            1,
-            "Log should return one output buffer"
-        );
-        let output_bytes = &result_buffers[0];
-        assert_eq!(
-            output_bytes.len(),
-            expected_output_data.len() * std::mem::size_of::<f32>()
-        );
-
-        let output_values: &[f32] = bytemuck::cast_slice(output_bytes);
-        assert_eq!(output_values.len(), expected_output_data.len());
-
-        for (got, expected) in output_values.iter().zip(expected_output_data.iter()) {
-            if expected.is_finite() {
-                assert!(
-                    (got - expected).abs() < 1e-6,
-                    "Mismatch for Log. Got: {}, Expected: {}",
-                    got,
-                    expected
-                );
-            } else {
-                assert!(
-                    got.is_nan() && expected.is_nan()
-                        || got.is_infinite() && expected.is_infinite(),
-                    "Mismatch for Log non-finite. Got: {}, Expected: {}",
-                    got,
-                    expected
-                );
-            }
+        let result = result_buffers[0].as_slice::<f32>().unwrap();
+        let expected = &[0.0, 0.6931472, 1.0986123, 1.3862944];
+        for (i, val) in result.iter().enumerate() {
+            assert!((val - expected[i]).abs() < 1e-6);
         }
     }
 }

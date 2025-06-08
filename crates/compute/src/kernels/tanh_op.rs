@@ -26,8 +26,8 @@ mod tests {
     fn test_tanh() {
         let cpu = CpuBackend::new();
 
-        let a = BufferView::from(Arc::new(vec![0.0, 1.0, -1.0, 0.5]));
-        let out = BufferView::new(Arc::new(vec![0.0; 4]), ());
+        let a = BufferView::from(Arc::new(vec![0.0, 1.0, -1.0, 5.0, -5.0]));
+        let out = BufferView::new(Arc::new(vec![0.0; 5]), ());
 
         let dispatch_binds = &[&a, &out];
         let result_buffers = cpu
@@ -35,10 +35,10 @@ mod tests {
             .unwrap();
 
         let result = result_buffers[0].as_slice::<f32>().unwrap();
-        assert_eq!(
-            result,
-            &[0.0f32.tanh(), 1.0f32.tanh(), -1.0f32.tanh(), 0.5f32.tanh()]
-        );
+        let expected = &[0.0, 0.7615942, -0.7615942, 0.9999092, -0.9999092];
+        for (i, val) in result.iter().enumerate() {
+            assert!((val - expected[i]).abs() < 1e-6);
+        }
     }
 }
 */

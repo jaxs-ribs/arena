@@ -158,8 +158,8 @@ pub fn handle_detect_contacts_box(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, 
 
 #[cfg(test)]
 mod tests {
-    use crate::{BufferView, Kernel, CpuBackend};
-    use std::sync::Arc;
+    use super::*;
+    use std::sync::Arc as StdArc;
 
     #[test]
     fn contact_generated_for_sphere_touching_box_top() {
@@ -169,22 +169,25 @@ mod tests {
             pos: TestVec3 { x: 0.0, y: 1.5, z: 0.0 },
         }];
 
-        let bodies_bytes: Arc<[u8]> = bytemuck::cast_slice(&bodies).to_vec().into();
+        let bodies_bytes: StdArc<[u8]> = bytemuck::cast_slice(&bodies).to_vec().into();
         let bodies_view = BufferView::new(bodies_bytes, vec![bodies.len()], core::mem::size_of::<TestBody>());
 
         let bx = TestBox {
             center: TestVec3 { x: 0.0, y: 0.0, z: 0.0 },
             half_extents: TestVec3 { x: 1.0, y: 1.0, z: 1.0 },
         };
-        let bx_bytes: Arc<[u8]> = bytemuck::bytes_of(&bx).to_vec().into();
+        let bx_bytes: StdArc<[u8]> = bytemuck::bytes_of(&bx).to_vec().into();
         let bx_view = BufferView::new(bx_bytes, vec![1], core::mem::size_of::<TestBox>());
 
-        let out_placeholder: Arc<[u8]> = vec![0u8; core::mem::size_of::<TestContact>()].into();
+        let out_placeholder: StdArc<[u8]> = vec![0u8; core::mem::size_of::<TestContact>()].into();
         let out_view = BufferView::new(out_placeholder, vec![1], core::mem::size_of::<TestContact>());
 
-        let dispatch_binds = &[bodies_view, bx_view, out_view];
         let result = cpu
-            .dispatch(&Kernel::DetectContactsBox, dispatch_binds, [1, 1, 1])
+            .dispatch(
+                &Kernel::DetectContactsBox,
+                &[bodies_view, bx_view, out_view],
+                [1, 1, 1],
+            )
             .expect("dispatch failed");
 
         assert_eq!(result.len(), 1);
@@ -202,22 +205,25 @@ mod tests {
             pos: TestVec3 { x: 3.0, y: 0.0, z: 0.0 },
         }];
 
-        let bodies_bytes: Arc<[u8]> = bytemuck::cast_slice(&bodies).to_vec().into();
+        let bodies_bytes: StdArc<[u8]> = bytemuck::cast_slice(&bodies).to_vec().into();
         let bodies_view = BufferView::new(bodies_bytes, vec![bodies.len()], core::mem::size_of::<TestBody>());
 
         let bx = TestBox {
             center: TestVec3 { x: 0.0, y: 0.0, z: 0.0 },
             half_extents: TestVec3 { x: 1.0, y: 1.0, z: 1.0 },
         };
-        let bx_bytes: Arc<[u8]> = bytemuck::bytes_of(&bx).to_vec().into();
+        let bx_bytes: StdArc<[u8]> = bytemuck::bytes_of(&bx).to_vec().into();
         let bx_view = BufferView::new(bx_bytes, vec![1], core::mem::size_of::<TestBox>());
 
-        let out_placeholder: Arc<[u8]> = vec![0u8; core::mem::size_of::<TestContact>()].into();
+        let out_placeholder: StdArc<[u8]> = vec![0u8; core::mem::size_of::<TestContact>()].into();
         let out_view = BufferView::new(out_placeholder, vec![1], core::mem::size_of::<TestContact>());
 
-        let dispatch_binds = &[bodies_view, bx_view, out_view];
         let result = cpu
-            .dispatch(&Kernel::DetectContactsBox, dispatch_binds, [1, 1, 1])
+            .dispatch(
+                &Kernel::DetectContactsBox,
+                &[bodies_view, bx_view, out_view],
+                [1, 1, 1],
+            )
             .expect("dispatch failed");
 
         assert_eq!(result.len(), 1);

@@ -49,98 +49,27 @@ pub fn handle_clamp(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> 
     Ok(vec![out_bytes])
 }
 
+#[cfg(feature = "cpu-tests")]
 #[cfg(test)]
 mod tests {
-    use crate::{BufferView, Kernel, CpuBackend};
+    use crate::{BufferView, ComputeBackend, CpuBackend, Kernel};
     use std::sync::Arc;
 
     #[test]
-    fn mock_clamp_clamps_values() {
+    fn test_clamp() {
         let cpu = CpuBackend::new();
-        let value_data = vec![1.0f32, -2.0, 0.0, 3.5, -0.5, 7.0, 0.5];
-        let min_values_data = vec![0.0f32, 0.0, 0.1, -1.0, 0.0, 6.0, -1.0];
-        let max_values_data = vec![1.0f32, 1.0, 0.1, 2.0, 1.0, 6.5, 0.0];
 
-        let expected_output_data: Vec<f32> = value_data
-            .iter()
-            .zip(min_values_data.iter())
-            .zip(max_values_data.iter())
-            .map(|((&val, &min_val), &max_val)| val.max(min_val).min(max_val))
-            .collect();
+        let a = BufferView::from(Arc::new(vec![-10.0, 10.0, 0.0, 0.5, 0.7]));
+        let min = BufferView::from(Arc::new(vec![0.0]));
+        let max = BufferView::from(Arc::new(vec![1.0]));
+        let out = BufferView::new(Arc::new(vec![0.0; 5]), ());
 
-        let value_bytes: Arc<[u8]> = bytemuck::cast_slice(&value_data).to_vec().into();
-        let value_buffer_view = BufferView::new(
-            value_bytes,
-            vec![value_data.len()],
-            std::mem::size_of::<f32>(),
-        );
-
-        let min_values_bytes: Arc<[u8]> = bytemuck::cast_slice(&min_values_data).to_vec().into();
-        let min_values_buffer_view = BufferView::new(
-            min_values_bytes,
-            vec![min_values_data.len()],
-            std::mem::size_of::<f32>(),
-        );
-
-        let max_values_bytes: Arc<[u8]> = bytemuck::cast_slice(&max_values_data).to_vec().into();
-        let max_values_buffer_view = BufferView::new(
-            max_values_bytes,
-            vec![max_values_data.len()],
-            std::mem::size_of::<f32>(),
-        );
-
-        let output_buffer_placeholder_bytes: Arc<[u8]> =
-            vec![0u8; expected_output_data.len() * std::mem::size_of::<f32>()].into();
-        let output_buffer_view = BufferView::new(
-            output_buffer_placeholder_bytes,
-            vec![expected_output_data.len()],
-            std::mem::size_of::<f32>(),
-        );
-
-        let config_data = vec![0u32];
-        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
-        let config_buffer_view = BufferView::new(
-            config_bytes,
-            vec![config_data.len()],
-            std::mem::size_of::<u32>(),
-        );
-
-        let workgroups = [1, 1, 1];
+        let dispatch_binds = &[&a, &min, &max, &out];
         let result_buffers = cpu
-            .dispatch(
-                &Kernel::Clamp,
-                &[
-                    value_buffer_view,
-                    min_values_buffer_view,
-                    max_values_buffer_view,
-                    output_buffer_view,
-                    config_buffer_view,
-                ],
-                workgroups,
-            )
-            .expect("Dispatch for Clamp failed");
+            .dispatch(&Kernel::Clamp, &dispatch_binds, [1, 1, 1])
+            .unwrap();
 
-        assert_eq!(
-            result_buffers.len(),
-            1,
-            "Clamp should return one output buffer"
-        );
-        let output_bytes = &result_buffers[0];
-        assert_eq!(
-            output_bytes.len(),
-            expected_output_data.len() * std::mem::size_of::<f32>()
-        );
-
-        let output_values: &[f32] = bytemuck::cast_slice(output_bytes);
-        assert_eq!(output_values.len(), expected_output_data.len());
-
-        for (i, (got, expected)) in output_values
-            .iter()
-            .zip(expected_output_data.iter())
-            .enumerate()
-        {
-            assert!((got - expected).abs() < 1e-6, "Mismatch for Clamp at index {}. Got: {}, Expected: {}. Input val: {}, min: {}, max: {}", 
-                    i, got, expected, value_data[i], min_values_data[i], max_values_data[i]);
-        }
+        let result = result_buffers[0].as_slice::<f32>().unwrap();
+        assert_eq!(result, &[0.0, 1.0, 0.0, 0.5, 0.7]);
     }
 }

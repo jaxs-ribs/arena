@@ -18,7 +18,7 @@ pub fn handle_rsqrt(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> 
     Ok(vec![out_bytes])
 }
 
-/*
+#[cfg(feature = "cpu-tests")]
 #[cfg(test)]
 mod tests {
     use crate::{BufferView, ComputeBackend, CpuBackend, Kernel};
@@ -28,7 +28,7 @@ mod tests {
     fn test_rsqrt() {
         let cpu = CpuBackend::new();
 
-        let a = BufferView::from(Arc::new(vec![1.0, 4.0, 9.0, 16.0]));
+        let a = BufferView::from(Arc::new(vec![4.0, 9.0, 1.0, 16.0]));
         let out = BufferView::new(Arc::new(vec![0.0; 4]), ());
 
         let dispatch_binds = &[&a, &out];
@@ -37,7 +37,6 @@ mod tests {
             .unwrap();
 
         let result = result_buffers[0].as_slice::<f32>().unwrap();
-        assert_eq!(result, &[1.0, 0.5, 1.0 / 3.0, 0.25]);
+        assert_eq!(result, &[0.5, 0.33333334, 1.0, 0.25]);
     }
 }
-*/

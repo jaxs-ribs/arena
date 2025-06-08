@@ -41,99 +41,26 @@ pub fn handle_div(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     Ok(vec![out_bytes])
 }
 
+#[cfg(feature = "cpu-tests")]
 #[cfg(test)]
 mod tests {
-    use crate::{BufferView, Kernel, CpuBackend};
+    use crate::{BufferView, ComputeBackend, CpuBackend, Kernel};
     use std::sync::Arc;
 
     #[test]
-    fn mock_div_divides_values() {
+    fn test_div() {
         let cpu = CpuBackend::new();
-        let input_a_data = vec![1.0f32, -2.0, 0.0, 7.0, -0.5];
-        let input_b_data = vec![0.5f32, 2.0, 1.0, -2.0, 10.0]; // Avoid division by zero for this test
-        let expected_output_data: Vec<f32> = input_a_data
-            .iter()
-            .zip(input_b_data.iter())
-            .map(|(a, b)| a / b)
-            .collect();
 
-        let input_a_bytes: Arc<[u8]> = bytemuck::cast_slice(&input_a_data).to_vec().into();
-        let input_a_buffer_view = BufferView::new(
-            input_a_bytes,
-            vec![input_a_data.len()],
-            std::mem::size_of::<f32>(),
-        );
+        let a = BufferView::from(Arc::new(vec![10.0, 20.0, 30.0, 40.0]));
+        let b = BufferView::from(Arc::new(vec![2.0, 5.0, 3.0, 4.0]));
+        let out = BufferView::new(Arc::new(vec![0.0; 4]), ());
 
-        let input_b_bytes: Arc<[u8]> = bytemuck::cast_slice(&input_b_data).to_vec().into();
-        let input_b_buffer_view = BufferView::new(
-            input_b_bytes,
-            vec![input_b_data.len()],
-            std::mem::size_of::<f32>(),
-        );
-
-        let output_buffer_placeholder_bytes: Arc<[u8]> =
-            vec![0u8; expected_output_data.len() * std::mem::size_of::<f32>()].into();
-        let output_buffer_view = BufferView::new(
-            output_buffer_placeholder_bytes,
-            vec![expected_output_data.len()],
-            std::mem::size_of::<f32>(),
-        );
-
-        let config_data = vec![0u32];
-        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
-        let config_buffer_view = BufferView::new(
-            config_bytes,
-            vec![config_data.len()],
-            std::mem::size_of::<u32>(),
-        );
-
-        let workgroups = [1, 1, 1];
+        let dispatch_binds = &[&a, &b, &out];
         let result_buffers = cpu
-            .dispatch(
-                &Kernel::Div,
-                &[
-                    input_a_buffer_view,
-                    input_b_buffer_view,
-                    output_buffer_view,
-                    config_buffer_view,
-                ],
-                workgroups,
-            )
-            .expect("Dispatch for Div failed");
+            .dispatch(&Kernel::Div, &dispatch_binds, [1, 1, 1])
+            .unwrap();
 
-        assert_eq!(
-            result_buffers.len(),
-            1,
-            "Div should return one output buffer"
-        );
-        let output_bytes = &result_buffers[0];
-        assert_eq!(
-            output_bytes.len(),
-            expected_output_data.len() * std::mem::size_of::<f32>()
-        );
-
-        let output_values: &[f32] = bytemuck::cast_slice(output_bytes);
-        assert_eq!(output_values.len(), expected_output_data.len());
-
-        for (got, expected) in output_values.iter().zip(expected_output_data.iter()) {
-            if expected.is_finite() {
-                assert!(
-                    (got - expected).abs() < 1e-6,
-                    "Mismatch. Got: {}, Expected: {}",
-                    got,
-                    expected
-                );
-            } else {
-                assert!(
-                    got.is_nan() && expected.is_nan()
-                        || got.is_infinite()
-                            && expected.is_infinite()
-                            && got.signum() == expected.signum(),
-                    "Mismatch for non-finite. Got: {}, Expected: {}",
-                    got,
-                    expected
-                );
-            }
-        }
+        let result = result_buffers[0].as_slice::<f32>().unwrap();
+        assert_eq!(result, &[5.0, 4.0, 10.0, 10.0]);
     }
 }

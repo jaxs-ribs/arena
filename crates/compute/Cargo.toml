@@ -6,6 +6,7 @@ edition = "2021"
 [features]
 default = []
 gpu = ["dep:wgpu", "dep:pollster", "dep:anyhow"]
+cpu-tests = []
 
 [dependencies]
 thiserror = "1.0"

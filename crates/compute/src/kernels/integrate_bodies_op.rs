@@ -108,8 +108,8 @@ pub fn handle_integrate_bodies(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, Com
 
 #[cfg(test)]
 mod tests {
-    use crate::{BufferView, Kernel, CpuBackend};
-    use std::sync::Arc;
+    use super::*;
+    use std::sync::Arc as StdArc;
 
     #[test]
     fn mock_integrate_bodies_updates_sphere() {

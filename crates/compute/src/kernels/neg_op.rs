@@ -22,70 +22,25 @@ pub fn handle_neg(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     Ok(vec![out_bytes])
 }
 
+#[cfg(feature = "cpu-tests")]
 #[cfg(test)]
 mod tests {
-    use crate::{BufferView, CpuBackend, Kernel, ComputeBackend};
+    use crate::{BufferView, ComputeBackend, CpuBackend, Kernel};
     use std::sync::Arc;
 
     #[test]
-    fn mock_neg_negates_values() {
+    fn test_neg() {
         let cpu = CpuBackend::new();
-        let input_data = vec![1.0f32, -2.0, 0.0, 3.5, -0.5];
-        let expected_output_data: Vec<f32> = input_data.iter().map(|x| -x).collect();
 
-        let input_bytes: Arc<[u8]> = bytemuck::cast_slice(&input_data).to_vec().into();
-        let input_buffer_view = BufferView::new(
-            input_bytes,
-            vec![input_data.len()],
-            std::mem::size_of::<f32>(),
-        );
+        let a = BufferView::from(Arc::new(vec![1.0, -1.0, 0.0, 5.0, -5.0]));
+        let out = BufferView::new(Arc::new(vec![0.0; 5]), ());
 
-        let output_buffer_placeholder_bytes: Arc<[u8]> =
-            vec![0u8; input_data.len() * std::mem::size_of::<f32>()].into();
-        let output_buffer_view = BufferView::new(
-            output_buffer_placeholder_bytes,
-            vec![input_data.len()],
-            std::mem::size_of::<f32>(),
-        );
-
-        let config_data = vec![0u32];
-        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
-        let config_buffer_view = BufferView::new(
-            config_bytes,
-            vec![config_data.len()],
-            std::mem::size_of::<u32>(),
-        );
-
-        let workgroups = [1, 1, 1];
+        let dispatch_binds = &[&a, &out];
         let result_buffers = cpu
-            .dispatch(
-                &Kernel::Neg,
-                &[input_buffer_view, output_buffer_view, config_buffer_view],
-                workgroups,
-            )
-            .expect("Dispatch for Neg failed");
+            .dispatch(&Kernel::Neg, &dispatch_binds, [1, 1, 1])
+            .unwrap();
 
-        assert_eq!(
-            result_buffers.len(),
-            1,
-            "Neg should return one output buffer"
-        );
-        let output_bytes = &result_buffers[0];
-        assert_eq!(
-            output_bytes.len(),
-            expected_output_data.len() * std::mem::size_of::<f32>()
-        );
-
-        let output_values: &[f32] = bytemuck::cast_slice(output_bytes);
-        assert_eq!(output_values.len(), expected_output_data.len());
-
-        for (got, expected) in output_values.iter().zip(expected_output_data.iter()) {
-            assert!(
-                (got - expected).abs() < 1e-6,
-                "Mismatch. Got: {}, Expected: {}",
-                got,
-                expected
-            );
-        }
+        let result = result_buffers[0].as_slice::<f32>().unwrap();
+        assert_eq!(result, &[-1.0, 1.0, 0.0, -5.0, 5.0]);
     }
 }

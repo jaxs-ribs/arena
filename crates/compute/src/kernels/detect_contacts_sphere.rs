@@ -97,8 +97,8 @@ pub fn handle_detect_contacts_sphere(binds: &[BufferView]) -> Result<Vec<Vec<u8>
 
 #[cfg(test)]
 mod tests {
-    use crate::{BufferView, Kernel, CpuBackend};
-    use std::sync::Arc;
+    use super::*;
+    use std::sync::Arc as StdArc;
 
     #[test]
     fn contacts_generated_for_overlapping_spheres() {
@@ -113,7 +113,7 @@ mod tests {
             },
         ];
 
-        let bodies_bytes: Arc<[u8]> = bytemuck::cast_slice(&bodies).to_vec().into();
+        let bodies_bytes: StdArc<[u8]> = bytemuck::cast_slice(&bodies).to_vec().into();
         let bodies_view = BufferView::new(bodies_bytes, vec![bodies.len()], std::mem::size_of::<TestBody>());
 
         let out_placeholder: StdArc<[u8]> = vec![0u8; std::mem::size_of::<TestContact>() * 2].into();

@@ -86,10 +86,11 @@ pub fn handle_detect_contacts_sdf(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, 
 
 #[cfg(test)]
 mod tests {
-    use crate::{BufferView, CpuBackend, Kernel};
+    use super::*;
+    use std::sync::Arc as StdArc;
 
     #[test]
-    fn test_detect_contacts_sdf() {
+    fn contact_generated_for_body_below_plane() {
         let cpu = CpuBackend::new();
 
         let bodies = vec![
@@ -127,10 +128,13 @@ mod tests {
             std::mem::size_of::<TestContact>(),
         );
 
-        let dispatch_binds = &[bodies_view, plane_view, out_view];
         let result = cpu
-            .dispatch(&Kernel::DetectContactsSDF, dispatch_binds, [1, 1, 1])
-            .unwrap();
+            .dispatch(
+                &Kernel::DetectContactsSDF,
+                &[bodies_view, plane_view, out_view],
+                [1, 1, 1],
+            )
+            .expect("Dispatch failed");
 
         assert_eq!(result.len(), 1);
         let contacts: &[TestContact] = bytemuck::cast_slice(&result[0]);
@@ -140,7 +144,7 @@ mod tests {
     }
 
     #[test]
-    fn test_no_contacts() {
+    fn no_contact_for_body_above_plane() {
         let cpu = CpuBackend::new();
 
         let bodies = vec![TestBody {
@@ -166,10 +170,13 @@ mod tests {
         let out_view =
             BufferView::new(out_placeholder, vec![1], std::mem::size_of::<TestContact>());
 
-        let dispatch_binds = &[bodies_view, plane_view, out_view];
         let result = cpu
-            .dispatch(&Kernel::DetectContactsSDF, dispatch_binds, [1, 1, 1])
-            .unwrap();
+            .dispatch(
+                &Kernel::DetectContactsSDF,
+                &[bodies_view, plane_view, out_view],
+                [1, 1, 1],
+            )
+            .expect("Dispatch failed");
 
         assert_eq!(result.len(), 1);
         let contacts: &[TestContact] = if result[0].is_empty() {

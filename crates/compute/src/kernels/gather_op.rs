@@ -46,7 +46,8 @@ pub fn handle_gather(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError>
 
 #[cfg(test)]
 mod tests {
-    use crate::{CpuBackend, Kernel, BufferView};
+    use super::*;
+    use std::sync::Arc as StdArc;
 
     #[test]
     fn mock_gather_collects_values_from_indices() {
