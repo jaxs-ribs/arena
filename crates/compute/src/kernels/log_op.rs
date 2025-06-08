@@ -31,15 +31,24 @@ mod tests {
     fn test_log() {
         let cpu = CpuBackend::new();
 
-        let a = BufferView::from(Arc::new(vec![1.0, 2.0, 3.0, 4.0]));
-        let out = BufferView::new(Arc::new(vec![0.0; 4]), ());
+        let a_data = vec![1.0f32, 2.0, 3.0, 4.0];
+        let a_bytes: Arc<[u8]> = bytemuck::cast_slice(&a_data).to_vec().into();
+        let a = BufferView::new(a_bytes, vec![a_data.len()], std::mem::size_of::<f32>());
 
-        let dispatch_binds = &[&a, &out];
+        let out_data = vec![0.0f32; 4];
+        let out_bytes: Arc<[u8]> = bytemuck::cast_slice(&out_data).to_vec().into();
+        let out = BufferView::new(out_bytes, vec![out_data.len()], std::mem::size_of::<f32>());
+
+        let config_data = vec![0u32];
+        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
+        let config = BufferView::new(config_bytes, vec![config_data.len()], std::mem::size_of::<u32>());
+
+        let dispatch_binds = vec![a, out, config];
         let result_buffers = cpu
             .dispatch(&Kernel::Log, &dispatch_binds, [1, 1, 1])
             .unwrap();
 
-        let result = result_buffers[0].as_slice::<f32>().unwrap();
+        let result: &[f32] = bytemuck::cast_slice(&result_buffers[0]);
         let expected = &[0.0, 0.6931472, 1.0986123, 1.3862944];
         for (i, val) in result.iter().enumerate() {
             assert!((val - expected[i]).abs() < 1e-6);

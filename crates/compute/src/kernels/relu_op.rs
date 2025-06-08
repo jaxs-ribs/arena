@@ -20,7 +20,9 @@ pub fn handle_relu(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{BufferView, ComputeBackend, CpuBackend, Kernel};
     use std::sync::Arc as StdArc;
+    use std::sync::Arc;
 
     #[test]
     fn mock_relu_computes_rectified_linear_unit() {
@@ -89,7 +91,11 @@ mod tests {
         let out_bytes = Arc::from(bytemuck::cast_slice(&out_data));
         let out = BufferView::new(out_bytes, vec![out_data.len()], std::mem::size_of::<f32>());
 
-        let dispatch_binds = vec![a, out];
+        let config_data = vec![0u32];
+        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
+        let config = BufferView::new(config_bytes, vec![config_data.len()], std::mem::size_of::<u32>());
+
+        let dispatch_binds = vec![a, out, config];
         let result_buffers = cpu.dispatch(&Kernel::Relu, &dispatch_binds, [1, 1, 1]).unwrap();
 
         let result: &[f32] = bytemuck::cast_slice(&result_buffers[0]);

@@ -87,7 +87,8 @@ pub fn handle_detect_contacts_sdf(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, 
 #[cfg(feature = "cpu-tests")]
 #[cfg(test)]
 mod tests {
-    use crate::{CpuBackend, Kernel, BufferView, ComputeBackend};
+    use crate::{BufferView, ComputeBackend, CpuBackend, Kernel};
+    use super::{TestBody, TestContact, TestPlane, TestVec3};
     use std::sync::Arc;
 
     #[test]

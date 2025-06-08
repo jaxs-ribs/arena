@@ -7,13 +7,21 @@ mod tests {
     fn test_unary_op(kernel: Kernel, input: Vec<f32>, expected: Vec<f32>) {
         let cpu = CpuBackend::new();
 
-        let input_buffer = BufferView::from(Arc::new(input));
-        let output_placeholder = BufferView::new(Arc::new(vec![0.0f32; expected.len()]), ());
+        let input_bytes: Arc<[u8]> = bytemuck::cast_slice(&input).to_vec().into();
+        let input_buffer = BufferView::new(input_bytes, vec![input.len()], std::mem::size_of::<f32>());
 
-        let dispatch_binds = &[&input_buffer, &output_placeholder];
+        let out_data = vec![0.0f32; expected.len()];
+        let out_bytes: Arc<[u8]> = bytemuck::cast_slice(&out_data).to_vec().into();
+        let output_placeholder = BufferView::new(out_bytes, vec![expected.len()], std::mem::size_of::<f32>());
+
+        let config_data = vec![0u32];
+        let config_bytes: Arc<[u8]> = bytemuck::cast_slice(&config_data).to_vec().into();
+        let config = BufferView::new(config_bytes, vec![config_data.len()], std::mem::size_of::<u32>());
+
+        let dispatch_binds = vec![input_buffer, output_placeholder, config];
         let result_buffers = cpu.dispatch(&kernel, &dispatch_binds, [1, 1, 1]).unwrap();
 
-        let result = result_buffers[0].as_slice::<f32>().unwrap();
+        let result: &[f32] = bytemuck::cast_slice(&result_buffers[0]);
 
         assert_eq!(result.len(), expected.len());
         for (a, b) in result.iter().zip(expected.iter()) {
