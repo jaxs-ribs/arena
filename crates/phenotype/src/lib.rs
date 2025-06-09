@@ -1,4 +1,9 @@
 #![deny(clippy::all, clippy::pedantic)]
+//! Defines the JSON-deserializable description of simulated creatures.
+//!
+//! `Phenotype` provides a way to load physics bodies and joints from a simple
+//! schema. The runtime can then construct a [`PhysicsSim`] from this structure
+//! which allows ML policies to control procedurally generated agents.
 
 use anyhow::Result;
 use physics::{PhysicsSim, Vec3};

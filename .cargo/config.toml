@@ -1,0 +1,2 @@
+[alias]
+doc-open = "doc --workspace --open"

@@ -62,6 +62,9 @@ cargo bench
 
 # Launch the renderer example
 cargo run -p runtime --features render -- --draw
+
+# Build and open API documentation in a browser
+cargo doc-open
 ```
 
 ## Visualizing the simulation

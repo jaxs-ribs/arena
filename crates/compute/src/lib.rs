@@ -1,4 +1,15 @@
 #![deny(clippy::all, clippy::pedantic)]
+//! Unified CPU and GPU compute abstraction.
+//!
+//! This crate defines the [`ComputeBackend`] trait along with helper types
+//! and kernel enumerations used throughout the rest of the workspace. The
+//! [`CpuBackend`] provides a reference implementation and tests while the
+//! optional [`WgpuBackend`] enables GPU acceleration when the `gpu` feature
+//! is enabled.
+//!
+//! Most consumers should acquire a backend via [`default_backend`] and then
+//! call [`ComputeBackend::dispatch`] with the desired [`Kernel`] and
+//! [`BufferView`] bindings.
 
 use std::sync::Arc;
 use thiserror::Error;
@@ -75,10 +86,20 @@ impl Kernel {
 }
 
 #[derive(Clone)]
+/// Lightweight view over a typed buffer used when dispatching kernels.
+///
+/// The `data` field holds a reference counted slice of raw bytes while `shape`
+/// describes the logical dimensions of the buffer. `element_size_in_bytes`
+/// corresponds to the innermost dimension's element size. No validation is
+/// performed on construction; the [`ComputeBackend`] implementation may return
+/// [`ComputeError::ShapeMismatch`] if inconsistent views are passed.
 pub struct BufferView {
+    /// Raw buffer contents.
     pub data: Arc<[u8]>,
-    pub shape: Vec<usize>,            // Number of elements per dimension
-    pub element_size_in_bytes: usize, // Size of a single element described by the innermost dimension of shape
+    /// Number of elements per dimension.
+    pub shape: Vec<usize>,
+    /// Size in bytes of a single element described by the innermost dimension.
+    pub element_size_in_bytes: usize,
 }
 
 impl BufferView {
