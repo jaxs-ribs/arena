@@ -1,5 +1,5 @@
 use physics::{PhysicsSim, Sphere, Vec3, Joint};
-use crate::rl::Env;
+use crate::env::Env;
 
 /// Environment for balancing a stick by applying a horizontal force to the base sphere.
 ///
