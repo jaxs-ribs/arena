@@ -51,6 +51,31 @@ impl Vec3 {
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
     }
+
+    pub const ZERO: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+    };
+
+    pub fn normalize(&self) -> Self {
+        let len = (self.x * self.x + self.y * self.y + self.z * self.z).sqrt();
+        if len > 0.0 {
+            Self {
+                x: self.x / len,
+                y: self.y / len,
+                z: self.z / len,
+            }
+        } else {
+            Self::ZERO
+        }
+    }
+}
+
+impl From<Vec3> for [f32; 3] {
+    fn from(val: Vec3) -> Self {
+        [val.x, val.y, val.z]
+    }
 }
 
 #[repr(C)]

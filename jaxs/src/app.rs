@@ -22,7 +22,8 @@
 //! on servers or in environments where a GUI is not available.
 
 use anyhow::Result;
-use physics::PhysicsSim;
+use physics::{PhysicsSim, Plane, Vec3};
+use std::time::{Duration, Instant};
 
 #[cfg(feature = "render")]
 use render::Renderer;
@@ -65,57 +66,95 @@ pub fn run(enable_render: bool) -> Result<()> {
     };
 
     tracing::info!("Initializing physics simulation...");
-    let mut sim = PhysicsSim::new_single_sphere(10.0);
-    let dt = 0.01_f32;
-    let num_steps = 200;
+    let mut sim = PhysicsSim::new();
+    let p = Plane {
+        normal: Vec3::new(0.1, 1.0, 0.0).normalize(),
+        d: 0.0,
+    };
+    sim.add_plane(p.normal, p.d);
+    sim.add_sphere(Vec3::new(0.0, 5.0, 0.0), Vec3::ZERO);
+    sim.add_cylinder(Vec3::new(1.0, 2.0, 1.0), 1.0, 1.0, Vec3::ZERO);
+    sim.add_joint(0, 0, 5.0);
 
-    tracing::info!(
-        "Starting simulation loop for {} steps with dt = {}...",
-        num_steps,
-        dt
-    );
+    let dt = 0.016_f32;
 
-    let mut should_continue = true;
-    for i in 0..num_steps {
-        if let Err(e) = sim.run(dt, 1) {
-            tracing::error!("Error during simulation step {}: {:?}", i, e);
-            break;
+    if enable_render {
+        tracing::info!("Starting simulation loop with dt = {}...", dt);
+        let mut i = 0;
+        let target_fps = 60.0;
+        let frame_duration = Duration::from_secs_f32(1.0 / target_fps);
+        
+        loop {
+            let frame_start = Instant::now();
+            
+            if let Err(e) = sim.run(dt, 1) {
+                tracing::error!("Error during simulation step {}: {:?}", i, e);
+                break;
+            }
+
+            #[cfg(feature = "render")]
+            if let Some(r) = renderer.as_mut() {
+                r.update_scene(&sim.spheres, &sim.boxes, &sim.cylinders, &sim.planes);
+                if !r.render()? {
+                    break;
+                }
+            }
+
+            if (i + 1) % 50 == 0 {
+                if !sim.spheres.is_empty() {
+                    tracing::info!(
+                        "Simulation step {} complete. Sphere_y: {}",
+                        i + 1,
+                        sim.spheres[0].pos.y
+                    );
+                } else {
+                    tracing::info!(
+                        "Simulation step {} complete. No spheres to report position.",
+                        i + 1
+                    );
+                }
+            }
+            
+            // Frame rate limiting
+            let frame_time = frame_start.elapsed();
+            if frame_time < frame_duration {
+                std::thread::sleep(frame_duration - frame_time);
+            }
+            
+            i += 1;
         }
-        #[cfg(feature = "render")]
-        if let Some(r) = renderer.as_mut() {
-            r.update_spheres(&sim.spheres);
-            should_continue = r.render()?;
-        }
-        if (i + 1) % 50 == 0 {
-            if !sim.spheres.is_empty() {
-                tracing::info!(
-                    "Simulation step {} complete. Sphere_y: {}",
-                    i + 1,
-                    sim.spheres[0].pos.y
-                );
-            } else {
-                tracing::info!(
-                    "Simulation step {} complete. No spheres to report position.",
-                    i + 1
-                );
+    } else {
+        // Headless mode
+        let num_steps = 1000;
+        tracing::info!(
+            "Starting simulation loop for {} steps with dt = {}...",
+            num_steps,
+            dt
+        );
+        for i in 0..num_steps {
+            if let Err(e) = sim.run(dt, 1) {
+                tracing::error!("Error during simulation step {}: {:?}", i, e);
+                break;
+            }
+            if (i + 1) % 50 == 0 {
+                if !sim.spheres.is_empty() {
+                    tracing::info!(
+                        "Simulation step {} complete. Sphere_y: {}",
+                        i + 1,
+                        sim.spheres[0].pos.y
+                    );
+                } else {
+                    tracing::info!(
+                        "Simulation step {} complete. No spheres to report position.",
+                        i + 1
+                    );
+                }
             }
         }
     }
 
-    tracing::info!("Simulation loop finished after {} steps.", num_steps);
     if !sim.spheres.is_empty() {
         tracing::info!("Final sphere position: {:?}", sim.spheres[0].pos);
-    }
-
-    #[cfg(feature = "render")]
-    if let Some(mut renderer) = renderer {
-        // Create a new simulation loop that just renders the final state.
-        while should_continue {
-            should_continue = renderer.render()?;
-            // The renderer does not have its own physics loop, so we manually update positions.
-            // For this example, we'll just keep rendering the final state.
-            std::thread::sleep(std::time::Duration::from_millis(16));
-        }
     }
 
     Ok(())

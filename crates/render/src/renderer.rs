@@ -1,34 +1,40 @@
 use anyhow::{Context, Result};
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Vec3};
-use physics::Sphere;
+use physics::{BoxBody, Cylinder, Plane, Sphere};
+use std::collections::HashSet;
 use std::time::Duration;
 use wgpu::util::DeviceExt;
-use winit::event::{Event, WindowEvent};
+use winit::event::{DeviceEvent, ElementState, Event, MouseButton, WindowEvent};
 use winit::event_loop::EventLoop;
-use winit::platform::pump_events::{EventLoopExtPumpEvents, PumpStatus};
+use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::platform::pump_events::EventLoopExtPumpEvents;
 use winit::window::{Window, WindowBuilder};
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
-/// Uniform buffer representation of the camera matrices used by the shaders.
+/// Uniform buffer that stores camera matrices for the SDF renderer.
 ///
-/// The struct is marked as [`Pod`] so it can be transferred directly to the GPU
-/// without any padding concerns.
+/// The buffer contains both the view projection matrix and its inverse as well
+/// as the current eye position which are required by the ray marching shader.
 struct CameraUniform {
-    /// Combined view projection matrix used by the vertex shader.
+    /// Combined view projection matrix used for rendering.
     view_proj: [[f32; 4]; 4],
+    /// Inverse of [`view_proj`] used to transform rays into world space.
+    view_proj_inv: [[f32; 4]; 4],
+    /// Camera position in world coordinates.
+    eye: [f32; 4],
 }
 
-/// Simple perspective camera used for the debug renderer.
+/// Simple first person camera used by [`Renderer`].
 struct Camera {
-    /// Camera position in world space.
+    /// Camera position.
     eye: Vec3,
-    /// Point the camera is looking at.
+    /// Look at target.
     target: Vec3,
-    /// Up vector of the camera.
+    /// Up vector.
     up: Vec3,
-    /// Aspect ratio of the render target.
+    /// Render target aspect ratio.
     aspect: f32,
     /// Field of view in radians.
     fovy: f32,
@@ -36,10 +42,14 @@ struct Camera {
     znear: f32,
     /// Far clipping plane distance.
     zfar: f32,
+    /// Horizontal rotation of the camera.
+    yaw: f32,
+    /// Vertical rotation of the camera.
+    pitch: f32,
 }
 
 impl Camera {
-    /// Creates a combined view projection matrix from the camera parameters.
+    /// Computes a view projection matrix from the camera parameters.
     fn build_view_projection_matrix(&self) -> Mat4 {
         let view = Mat4::look_at_rh(self.eye, self.target, self.up);
         let proj = Mat4::perspective_rh(self.fovy, self.aspect, self.znear, self.zfar);
@@ -47,43 +57,107 @@ impl Camera {
     }
 }
 
-/// Extremely small renderer that draws simple colored triangles for debugging.
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+/// GPU representation of a [`Sphere`].
+struct SphereGpu {
+    /// Sphere position.
+    pos: [f32; 3],
+    _pad: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+/// GPU representation of a box.
+struct BoxGpu {
+    /// Box centre position.
+    pos: [f32; 3],
+    _pad1: f32,
+    /// Half extents of the box.
+    half_extents: [f32; 3],
+    _pad2: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+/// GPU representation of a cylinder.
+struct CylinderGpu {
+    /// Cylinder centre position.
+    pos: [f32; 3],
+    /// Cylinder radius.
+    radius: f32,
+    /// Height of the cylinder.
+    height: f32,
+    _pad0: [f32; 3],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+/// GPU representation of a plane.
+struct PlaneGpu {
+    /// Plane normal.
+    normal: [f32; 3],
+    /// Distance from the origin.
+    d: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+/// Keeps track of how many primitives are currently stored in the scene buffers.
+struct SceneCounts {
+    spheres: u32,
+    boxes: u32,
+    cylinders: u32,
+    planes: u32,
+}
+
+/// A simple ray-marched renderer used for visualising signed distance fields.
 pub struct Renderer {
     event_loop: EventLoop<()>,
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
     queue: wgpu::Queue,
-    _config: wgpu::SurfaceConfiguration,
     pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
-    vertices: Vec<[f32; 3]>,
-    _camera: Camera,
+    camera: Camera,
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
-    camera_bind_group: wgpu::BindGroup,
-    _window: Window,
+    counts_buffer: wgpu::Buffer,
+    spheres_buffer: wgpu::Buffer,
+    boxes_buffer: wgpu::Buffer,
+    cylinders_buffer: wgpu::Buffer,
+    planes_buffer: wgpu::Buffer,
+    bind_group: wgpu::BindGroup,
+    window: Window,
+    pressed_keys: HashSet<KeyCode>,
 }
 
 impl Renderer {
-    /// Create a new renderer and open a window.
+    /// Create a new renderer and associated window.
     ///
-    /// The function initialises `wgpu`, sets up a pipeline for drawing colored
-    /// triangles and allocates buffers required for rendering.
+    /// This sets up all GPU resources necessary for rendering the SDF scene and
+    /// returns an instance ready to be updated each frame.
+    #[allow(clippy::too_many_lines)]
     pub fn new() -> Result<Self> {
         let event_loop = EventLoop::new().context("create event loop")?;
         let window = WindowBuilder::new()
-            .with_title("JAXS Renderer")
+            .with_title("JAXS SDF Renderer")
+            .with_inner_size(winit::dpi::LogicalSize::new(800, 600))
+            .with_visible(true)
+            .with_resizable(true)
             .build(&event_loop)
             .context("failed to create window")?;
+        
+        window.set_visible(true);
+        window.request_redraw();
+        let _ = window.set_cursor_grab(winit::window::CursorGrabMode::Locked);
+        let _ = window.set_cursor_visible(false);
+        tracing::info!("Window created successfully");
 
         let instance = wgpu::Instance::default();
         let surface = instance.create_surface(&window)?;
-        // We need to convince Rust that the surface is allowed to live as long as the
-        // renderer, so we transmute its lifetime to `'static`.
-        // This is safe because we also store the window in the renderer, and ensure
-        // that it is dropped after the surface.
-        let surface =
-            unsafe { std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(surface) };
+        // Safety: surface lives as long as window
+        let surface = unsafe { std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(surface) };
 
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
@@ -94,7 +168,7 @@ impl Renderer {
 
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
-                label: Some("Renderer Device"),
+                label: Some("SDF Renderer Device"),
                 required_features: wgpu::Features::empty(),
                 required_limits: wgpu::Limits::default(),
             },
@@ -118,19 +192,24 @@ impl Renderer {
         surface.configure(&device, &config);
 
         let camera = Camera {
-            eye: Vec3::new(0.0, 5.0, 15.0),
-            target: Vec3::ZERO,
+            eye: Vec3::new(0.0, 2.0, 8.0),
+            target: Vec3::new(0.0, 1.0, 0.0),
             up: Vec3::Y,
             aspect: config.width as f32 / config.height as f32,
             fovy: 45.0f32.to_radians(),
             znear: 0.1,
             zfar: 100.0,
+            yaw: 0.0,
+            pitch: -0.1,
         };
 
-        let mut camera_uniform = CameraUniform {
-            view_proj: Mat4::IDENTITY.to_cols_array_2d(),
+        let view_proj = camera.build_view_projection_matrix();
+        let view_proj_inv = view_proj.inverse();
+        let camera_uniform = CameraUniform {
+            view_proj: view_proj.to_cols_array_2d(),
+            view_proj_inv: view_proj_inv.to_cols_array_2d(),
+            eye: [camera.eye.x, camera.eye.y, camera.eye.z, 0.0],
         };
-        camera_uniform.view_proj = camera.build_view_projection_matrix().to_cols_array_2d();
 
         let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Camera Buffer"),
@@ -138,56 +217,154 @@ impl Renderer {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        let camera_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
+        let counts = SceneCounts { spheres: 0, boxes: 0, cylinders: 0, planes: 0 };
+        let counts_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Counts"),
+            contents: bytemuck::bytes_of(&counts),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let spheres_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("spheres"),
+            size: 1024,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let boxes_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("boxes"),
+            size: 1024,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let cylinders_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("cylinders"),
+            size: 1024,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let planes_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("planes"),
+            size: 1024,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("bind layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
                         min_binding_size: None,
                     },
                     count: None,
-                }],
-                label: Some("camera_bind_group_layout"),
-            });
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 5,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        });
 
-        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &camera_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: camera_buffer.as_entire_binding(),
-            }],
-            label: Some("camera_bind_group"),
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("bind group"),
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: camera_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: counts_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: spheres_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: boxes_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: cylinders_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: planes_buffer.as_entire_binding(),
+                },
+            ],
         });
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("3D shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+            label: Some("SDF Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("renderer.wgsl").into()),
         });
 
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[&camera_bind_group_layout],
-            push_constant_ranges: &[],
-        });
+        let render_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("SDF Pipeline Layout"),
+                bind_group_layouts: &[&bind_group_layout],
+                push_constant_ranges: &[],
+            });
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
-            layout: Some(&pipeline_layout),
+            label: Some("SDF Pipeline"),
+            layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<[f32; 3]>() as u64,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &[wgpu::VertexAttribute {
-                        format: wgpu::VertexFormat::Float32x3,
-                        offset: 0,
-                        shader_location: 0,
-                    }],
-                }],
+                buffers: &[],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -199,19 +376,24 @@ impl Renderer {
                 })],
             }),
             primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                ..Default::default()
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
             },
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
         });
 
-        let vertices: Vec<[f32; 3]> = Vec::new();
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("vertices"),
-            contents: bytemuck::cast_slice(&vertices),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Vertex Buffer"),
+            size: 4 * std::mem::size_of::<f32>() as u64,
+            usage: wgpu::BufferUsages::VERTEX,
+            mapped_at_creation: false,
         });
 
         Ok(Self {
@@ -219,150 +401,177 @@ impl Renderer {
             surface,
             device,
             queue,
-            _config: config,
             pipeline,
             vertex_buffer,
-            vertices,
-            _camera: camera,
+            camera,
             camera_uniform,
             camera_buffer,
-            camera_bind_group,
-            _window: window,
+            counts_buffer,
+            spheres_buffer,
+            boxes_buffer,
+            cylinders_buffer,
+            planes_buffer,
+            bind_group,
+            window,
+            pressed_keys: HashSet::new(),
         })
     }
 
-    /// Update the internal vertex buffer with a set of spheres.
-    ///
-    /// Each sphere is approximated with a small cube to keep the vertex count
-    /// very small. The vertices are uploaded to the GPU on the next render
-    /// call.
-    pub fn update_spheres(&mut self, spheres: &[Sphere]) {
-        self.vertices.clear();
-        let point_size = 0.5;
+    /// Updates the GPU buffers with the latest positions of all scene objects.
+    pub fn update_scene(
+        &mut self,
+        spheres: &[Sphere],
+        boxes: &[BoxBody],
+        cylinders: &[Cylinder],
+        planes: &[Plane],
+    ) {
+        let sphere_data: Vec<_> = spheres
+            .iter()
+            .map(|s| SphereGpu { pos: s.pos.into(), _pad: 0.0 })
+            .collect();
+        self.queue.write_buffer(
+            &self.spheres_buffer,
+            0,
+            bytemuck::cast_slice(&sphere_data),
+        );
 
-        // Add a plane
-        self.vertices.push([-10.0, 0.0, -10.0]);
-        self.vertices.push([10.0, 0.0, -10.0]);
-        self.vertices.push([10.0, 0.0, 10.0]);
-        self.vertices.push([-10.0, 0.0, -10.0]);
-        self.vertices.push([10.0, 0.0, 10.0]);
-        self.vertices.push([-10.0, 0.0, 10.0]);
+        let box_data: Vec<_> = boxes
+            .iter()
+            .map(|b| BoxGpu {
+                pos: b.pos.into(),
+                half_extents: b.half_extents.into(),
+                _pad1: 0.0,
+                _pad2: 0.0,
+            })
+            .collect();
+        self.queue.write_buffer(&self.boxes_buffer, 0, bytemuck::cast_slice(&box_data));
 
-        for s in spheres {
-            let x = s.pos.x;
-            let y = s.pos.y;
-            let z = s.pos.z;
+        let cylinder_data: Vec<_> = cylinders
+            .iter()
+            .map(|c| CylinderGpu {
+                pos: c.pos.into(),
+                radius: c.radius,
+                height: c.height,
+                _pad0: [0.0; 3],
+            })
+            .collect();
+        self.queue
+            .write_buffer(&self.cylinders_buffer, 0, bytemuck::cast_slice(&cylinder_data));
 
-            // Simple cube for each sphere
-            // Front
-            self.vertices.push([x - point_size, y - point_size, z + point_size]);
-            self.vertices.push([x + point_size, y - point_size, z + point_size]);
-            self.vertices.push([x + point_size, y + point_size, z + point_size]);
-            self.vertices.push([x - point_size, y - point_size, z + point_size]);
-            self.vertices.push([x + point_size, y + point_size, z + point_size]);
-            self.vertices.push([x - point_size, y + point_size, z + point_size]);
-            // Back
-            self.vertices.push([x - point_size, y - point_size, z - point_size]);
-            self.vertices.push([x + point_size, y - point_size, z - point_size]);
-            self.vertices.push([x + point_size, y + point_size, z - point_size]);
-            self.vertices.push([x - point_size, y - point_size, z - point_size]);
-            self.vertices.push([x + point_size, y + point_size, z - point_size]);
-            self.vertices.push([x - point_size, y + point_size, z - point_size]);
-            // Top
-            self.vertices.push([x - point_size, y + point_size, z - point_size]);
-            self.vertices.push([x + point_size, y + point_size, z - point_size]);
-            self.vertices.push([x + point_size, y + point_size, z + point_size]);
-            self.vertices.push([x - point_size, y + point_size, z - point_size]);
-            self.vertices.push([x + point_size, y + point_size, z + point_size]);
-            self.vertices.push([x - point_size, y + point_size, z + point_size]);
-            // Bottom
-            self.vertices.push([x - point_size, y - point_size, z - point_size]);
-            self.vertices.push([x + point_size, y - point_size, z - point_size]);
-            self.vertices.push([x + point_size, y - point_size, z + point_size]);
-            self.vertices.push([x - point_size, y - point_size, z - point_size]);
-            self.vertices.push([x + point_size, y - point_size, z + point_size]);
-            self.vertices.push([x - point_size, y - point_size, z + point_size]);
-            // Right
-            self.vertices.push([x + point_size, y - point_size, z - point_size]);
-            self.vertices.push([x + point_size, y + point_size, z - point_size]);
-            self.vertices.push([x + point_size, y + point_size, z + point_size]);
-            self.vertices.push([x + point_size, y - point_size, z - point_size]);
-            self.vertices.push([x + point_size, y + point_size, z + point_size]);
-            self.vertices.push([x + point_size, y - point_size, z + point_size]);
-            // Left
-            self.vertices.push([x - point_size, y - point_size, z - point_size]);
-            self.vertices.push([x - point_size, y + point_size, z - point_size]);
-            self.vertices.push([x - point_size, y + point_size, z + point_size]);
-            self.vertices.push([x - point_size, y - point_size, z - point_size]);
-            self.vertices.push([x - point_size, y + point_size, z + point_size]);
-            self.vertices.push([x - point_size, y - point_size, z + point_size]);
-        }
+        let plane_data: Vec<_> = planes
+            .iter()
+            .map(|p| PlaneGpu { normal: p.normal.into(), d: p.d })
+            .collect();
+        self.queue.write_buffer(&self.planes_buffer, 0, bytemuck::cast_slice(&plane_data));
 
-        if !self.vertices.is_empty() {
-            let vertex_data_bytes = bytemuck::cast_slice(&self.vertices);
-            if self.vertex_buffer.size() < vertex_data_bytes.len() as u64 {
-                self.vertex_buffer =
-                    self.device
-                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some("vertices"),
-                            contents: vertex_data_bytes,
-                            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                        });
-            } else {
-                self.queue
-                    .write_buffer(&self.vertex_buffer, 0, vertex_data_bytes);
-            }
-        }
+        let counts = SceneCounts {
+            spheres: spheres.len() as u32,
+            boxes: boxes.len() as u32,
+            cylinders: cylinders.len() as u32,
+            planes: planes.len() as u32,
+        };
+        self.queue
+            .write_buffer(&self.counts_buffer, 0, bytemuck::bytes_of(&counts));
     }
 
-    /// Render a single frame and poll the window for events.
-    ///
-    /// Returns `Ok(false)` when the window was closed and the application
-    /// should exit. Otherwise `Ok(true)` is returned.
-    pub fn render(&mut self) -> Result<bool> {
-        let mut exit_requested = false;
-        let status = self
-            .event_loop
-            .pump_events(Some(Duration::ZERO), |event, elwt| {
-                if let Event::WindowEvent {
-                    event: WindowEvent::CloseRequested,
-                    ..
-                } = &event
-                {
-                    exit_requested = true;
-                    elwt.exit();
-                }
-            });
+    /// Update the camera based on keyboard input.
+    fn update_camera(&mut self, dt: f32) {
+        let speed = 10.0 * dt;
+        let forward = self.get_forward_dir();
+        let right = forward.cross(self.camera.up).normalize();
+        
+        for key in &self.pressed_keys {
+            match key {
+                KeyCode::KeyW => self.camera.eye += forward * speed,
+                KeyCode::KeyS => self.camera.eye -= forward * speed,
+                KeyCode::KeyA => self.camera.eye -= right * speed,
+                KeyCode::KeyD => self.camera.eye += right * speed,
+                KeyCode::KeyQ => self.camera.eye.y -= speed,
+                KeyCode::KeyE => self.camera.eye.y += speed,
+                _ => {}
+            }
+        }
 
-        if matches!(status, PumpStatus::Exit(_)) || exit_requested {
+        self.camera.target = self.camera.eye + forward;
+    }
+
+    fn get_forward_dir(&self) -> Vec3 {
+        let forward = Vec3::new(
+            self.camera.yaw.cos() * self.camera.pitch.cos(),
+            self.camera.pitch.sin(),
+            self.camera.yaw.sin() * self.camera.pitch.cos(),
+        )
+        .normalize();
+        forward
+    }
+
+    /// Render the scene and handle window events.
+    ///
+    /// The method returns `Ok(false)` if the window was closed and `Ok(true)`
+    /// otherwise.
+    pub fn render(&mut self) -> Result<bool> {
+        self.update_camera(0.016);
+
+        let mut exit_requested = false;
+        let mut events_to_handle = Vec::new();
+
+        self.event_loop.pump_events(Some(Duration::from_millis(1)), |event, elwt| {
+            if let Event::WindowEvent { event: WindowEvent::CloseRequested, .. } = &event {
+                exit_requested = true;
+                elwt.exit();
+            }
+            events_to_handle.push(event);
+        });
+
+        for event in events_to_handle {
+            match event {
+                Event::WindowEvent { window_id, event } if window_id == self.window.id() => {
+                    self.handle_window_event(event);
+                }
+                Event::DeviceEvent { event, .. } => self.handle_device_event(event),
+                _ => {}
+            }
+        }
+
+
+        if exit_requested || self.pressed_keys.contains(&KeyCode::Escape) {
             return Ok(false);
         }
 
+        let output = self.surface.get_current_texture()?;
+        let view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
+
+        let view_proj = self.camera.build_view_projection_matrix();
+        let view_proj_inv = view_proj.inverse();
+        self.camera_uniform.view_proj = view_proj.to_cols_array_2d();
+        self.camera_uniform.view_proj_inv = view_proj_inv.to_cols_array_2d();
+        self.camera_uniform.eye = [self.camera.eye.x, self.camera.eye.y, self.camera.eye.z, 0.0];
         self.queue.write_buffer(
             &self.camera_buffer,
             0,
             bytemuck::bytes_of(&self.camera_uniform),
         );
 
-        let output = self
-            .surface
-            .get_current_texture()
-            .context("failed to acquire surface texture")?;
-        let view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-
-        let mut encoder =
-            self.device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("enc") });
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("rpass"),
+                label: Some("SDF Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.1,
+                            g: 0.2,
+                            b: 0.3,
+                            a: 1.0,
+                        }),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -371,12 +580,92 @@ impl Renderer {
                 occlusion_query_set: None,
             });
             rpass.set_pipeline(&self.pipeline);
-            rpass.set_bind_group(0, &self.camera_bind_group, &[]);
+            rpass.set_bind_group(0, &self.bind_group, &[]);
             rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            rpass.draw(0..self.vertices.len() as u32, 0..1);
+            rpass.draw(0..4, 0..1);
         }
         self.queue.submit(Some(encoder.finish()));
         output.present();
+        
+        self.window.request_redraw();
+
         Ok(true)
     }
-} 
+
+    fn handle_device_event(&mut self, event: DeviceEvent) {
+        if let DeviceEvent::MouseMotion { delta } = event {
+            let sensitivity = 0.003;
+            self.camera.yaw += (delta.0 as f32) * sensitivity;
+            self.camera.pitch -= (delta.1 as f32) * sensitivity;  // Invert Y for natural mouse look
+            self.camera.pitch = self.camera.pitch.clamp(-1.57, 1.57); // ±90 degrees
+        }
+    }
+
+    fn handle_window_event(&mut self, event: WindowEvent) {
+        if let WindowEvent::KeyboardInput { event, .. } = &event {
+            if event.state == ElementState::Pressed {
+                match event.physical_key {
+                    PhysicalKey::Code(KeyCode::KeyW) => {
+                        self.pressed_keys.insert(KeyCode::KeyW);
+                    }
+                    PhysicalKey::Code(KeyCode::KeyS) => {
+                        self.pressed_keys.insert(KeyCode::KeyS);
+                    }
+                    PhysicalKey::Code(KeyCode::KeyA) => {
+                        self.pressed_keys.insert(KeyCode::KeyA);
+                    }
+                    PhysicalKey::Code(KeyCode::KeyD) => {
+                        self.pressed_keys.insert(KeyCode::KeyD);
+                    }
+                    PhysicalKey::Code(KeyCode::KeyQ) => {
+                        self.pressed_keys.insert(KeyCode::KeyQ);
+                    }
+                    PhysicalKey::Code(KeyCode::KeyE) => {
+                        self.pressed_keys.insert(KeyCode::KeyE);
+                    }
+                    PhysicalKey::Code(KeyCode::Escape) => {
+                        self.pressed_keys.insert(KeyCode::Escape);
+                    }
+                    _ => {}
+                }
+            } else if event.state == ElementState::Released {
+                match event.physical_key {
+                    PhysicalKey::Code(KeyCode::KeyW) => {
+                        self.pressed_keys.remove(&KeyCode::KeyW);
+                    }
+                    PhysicalKey::Code(KeyCode::KeyS) => {
+                        self.pressed_keys.remove(&KeyCode::KeyS);
+                    }
+                    PhysicalKey::Code(KeyCode::KeyA) => {
+                        self.pressed_keys.remove(&KeyCode::KeyA);
+                    }
+                    PhysicalKey::Code(KeyCode::KeyD) => {
+                        self.pressed_keys.remove(&KeyCode::KeyD);
+                    }
+                    PhysicalKey::Code(KeyCode::KeyQ) => {
+                        self.pressed_keys.remove(&KeyCode::KeyQ);
+                    }
+                    PhysicalKey::Code(KeyCode::KeyE) => {
+                        self.pressed_keys.remove(&KeyCode::KeyE);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if let WindowEvent::MouseInput { state, button, .. } = &event {
+            if *button == MouseButton::Left && *state == ElementState::Pressed {
+                let _ = self.window.set_cursor_grab(winit::window::CursorGrabMode::Locked);
+                let _ = self.window.set_cursor_visible(false);
+            }
+        }
+        if let WindowEvent::Focused(focused) = &event {
+            if *focused {
+                let _ = self.window.set_cursor_grab(winit::window::CursorGrabMode::Locked);
+                let _ = self.window.set_cursor_visible(false);
+            } else {
+                let _ = self.window.set_cursor_grab(winit::window::CursorGrabMode::None);
+                let _ = self.window.set_cursor_visible(true);
+            }
+        }
+    }
+}
