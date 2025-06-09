@@ -22,9 +22,9 @@
 //! mode is primarily used for testing and debugging purposes.
 
 use crate::types::{
-    BoundingBox, BoxBody, Cylinder, ForceDebugInfo, Joint, JointParams, 
-    Material, PhysicsDebugInfo, PhysParams, Plane, Sphere, SpatialGrid, SpatialGridDebugInfo, 
-    Vec3, VelocityDebugInfo,
+    BoundingBox, BoxBody, Cylinder, ForceDebugInfo, Joint, JointParams, RevoluteJoint,
+    PrismaticJoint, BallJoint, FixedJoint, Material, PhysicsDebugInfo, PhysParams, Plane,
+    Sphere, SpatialGrid, SpatialGridDebugInfo, Vec3, VelocityDebugInfo,
 };
 use compute::{ComputeBackend, ComputeError};
 use std::mem::size_of;
@@ -88,6 +88,14 @@ pub struct PhysicsSim {
     pub params: PhysParams,
     /// The list of distance constraints between spheres.
     pub joints: Vec<Joint>,
+    /// Revolute (hinge) joints.
+    pub revolute_joints: Vec<RevoluteJoint>,
+    /// Prismatic (sliding) joints.
+    pub prismatic_joints: Vec<PrismaticJoint>,
+    /// Ball joints allowing free rotation.
+    pub ball_joints: Vec<BallJoint>,
+    /// Fixed joints that lock bodies together.
+    pub fixed_joints: Vec<FixedJoint>,
     /// The parameters for the joint solver.
     pub joint_params: JointParams,
     /// Spatial grid for broad-phase collision detection.
@@ -129,6 +137,10 @@ impl PhysicsSim {
                 forces: Vec::new(),
             },
             joints: Vec::new(),
+            revolute_joints: Vec::new(),
+            prismatic_joints: Vec::new(),
+            ball_joints: Vec::new(),
+            fixed_joints: Vec::new(),
             joint_params: JointParams {
                 compliance: 0.0,
                 _pad: [0.0; 3],
@@ -181,6 +193,10 @@ impl PhysicsSim {
             planes: Vec::new(),
             params,
             joints: Vec::new(),
+            revolute_joints: Vec::new(),
+            prismatic_joints: Vec::new(),
+            ball_joints: Vec::new(),
+            fixed_joints: Vec::new(),
             joint_params: JointParams {
                 compliance: 0.0,
                 _pad: [0.0; 3],
@@ -304,6 +320,98 @@ impl PhysicsSim {
             rest_length,
             _padding: 0,
         });
+    }
+
+    /// Adds a revolute joint to the simulation.
+    pub fn add_revolute_joint(
+        &mut self,
+        body_a: usize,
+        body_b: usize,
+        anchor_a: Vec3,
+        anchor_b: Vec3,
+        axis: Vec3,
+    ) -> usize {
+        let idx = self.revolute_joints.len();
+        self.revolute_joints.push(RevoluteJoint {
+            body_a: body_a as u32,
+            body_b: body_b as u32,
+            anchor_a,
+            anchor_b,
+            axis,
+            lower_limit: 0.0,
+            upper_limit: 0.0,
+            motor_speed: 0.0,
+            motor_max_force: 0.0,
+            enable_motor: 0,
+            enable_limit: 0,
+            _pad: 0.0,
+        });
+        idx
+    }
+
+    /// Adds a prismatic joint to the simulation.
+    pub fn add_prismatic_joint(
+        &mut self,
+        body_a: usize,
+        body_b: usize,
+        anchor_a: Vec3,
+        anchor_b: Vec3,
+        axis: Vec3,
+    ) -> usize {
+        let idx = self.prismatic_joints.len();
+        self.prismatic_joints.push(PrismaticJoint {
+            body_a: body_a as u32,
+            body_b: body_b as u32,
+            anchor_a,
+            anchor_b,
+            axis,
+            lower_limit: 0.0,
+            upper_limit: 0.0,
+            motor_speed: 0.0,
+            motor_max_force: 0.0,
+            enable_motor: 0,
+            enable_limit: 0,
+            _pad: 0.0,
+        });
+        idx
+    }
+
+    /// Adds a ball joint to the simulation.
+    pub fn add_ball_joint(
+        &mut self,
+        body_a: usize,
+        body_b: usize,
+        anchor_a: Vec3,
+        anchor_b: Vec3,
+    ) -> usize {
+        let idx = self.ball_joints.len();
+        self.ball_joints.push(BallJoint {
+            body_a: body_a as u32,
+            body_b: body_b as u32,
+            anchor_a,
+            anchor_b,
+            _pad: [0.0; 2],
+        });
+        idx
+    }
+
+    /// Adds a fixed joint to the simulation.
+    pub fn add_fixed_joint(
+        &mut self,
+        body_a: usize,
+        body_b: usize,
+        anchor_a: Vec3,
+        anchor_b: Vec3,
+    ) -> usize {
+        let idx = self.fixed_joints.len();
+        self.fixed_joints.push(FixedJoint {
+            body_a: body_a as u32,
+            body_b: body_b as u32,
+            anchor_a,
+            anchor_b,
+            relative_rotation: [0.0, 0.0, 0.0, 1.0],
+        });
+        idx
     }
 
     /// Sets an external force to be applied to a specific sphere.
@@ -758,7 +866,7 @@ impl PhysicsSim {
 
         let solved = self.backend.dispatch(
             &compute::Kernel::SolveJointsPBD,
-            &[body_view, joint_view, joint_param_view],
+            &[body_view.clone(), joint_view, joint_param_view.clone()],
             [1, 1, 1],
         )?;
 
@@ -774,6 +882,47 @@ impl PhysicsSim {
                     sphere.pos.z = upd.pos.z;
                 }
             }
+        }
+
+        // Additional joint types are currently solved by no-op kernels.
+        if !self.revolute_joints.is_empty() {
+            let joint_bytes: Arc<[u8]> = bytemuck::cast_slice(&self.revolute_joints).to_vec().into();
+            let joint_view = compute::BufferView::new(joint_bytes, vec![self.revolute_joints.len()], size_of::<RevoluteJoint>());
+            let _ = self.backend.dispatch(
+                &compute::Kernel::SolveRevoluteJoints,
+                &[body_view.clone(), joint_view, joint_param_view.clone()],
+                [1, 1, 1],
+            )?;
+        }
+
+        if !self.prismatic_joints.is_empty() {
+            let joint_bytes: Arc<[u8]> = bytemuck::cast_slice(&self.prismatic_joints).to_vec().into();
+            let joint_view = compute::BufferView::new(joint_bytes, vec![self.prismatic_joints.len()], size_of::<PrismaticJoint>());
+            let _ = self.backend.dispatch(
+                &compute::Kernel::SolvePrismaticJoints,
+                &[body_view.clone(), joint_view, joint_param_view.clone()],
+                [1, 1, 1],
+            )?;
+        }
+
+        if !self.ball_joints.is_empty() {
+            let joint_bytes: Arc<[u8]> = bytemuck::cast_slice(&self.ball_joints).to_vec().into();
+            let joint_view = compute::BufferView::new(joint_bytes, vec![self.ball_joints.len()], size_of::<BallJoint>());
+            let _ = self.backend.dispatch(
+                &compute::Kernel::SolveBallJoints,
+                &[body_view.clone(), joint_view, joint_param_view.clone()],
+                [1, 1, 1],
+            )?;
+        }
+
+        if !self.fixed_joints.is_empty() {
+            let joint_bytes: Arc<[u8]> = bytemuck::cast_slice(&self.fixed_joints).to_vec().into();
+            let joint_view = compute::BufferView::new(joint_bytes, vec![self.fixed_joints.len()], size_of::<FixedJoint>());
+            let _ = self.backend.dispatch(
+                &compute::Kernel::SolveFixedJoints,
+                &[body_view, joint_view, joint_param_view],
+                [1, 1, 1],
+            )?;
         }
 
         Ok(())

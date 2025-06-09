@@ -244,6 +244,76 @@ pub struct Joint {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+/// A hinge joint allowing rotation around a single axis.
+pub struct RevoluteJoint {
+    /// Index of the first body.
+    pub body_a: u32,
+    /// Index of the second body.
+    pub body_b: u32,
+    /// Anchor point on body A in local coordinates.
+    pub anchor_a: Vec3,
+    /// Anchor point on body B in local coordinates.
+    pub anchor_b: Vec3,
+    /// Rotation axis in world coordinates.
+    pub axis: Vec3,
+    /// Lower angular limit in radians.
+    pub lower_limit: f32,
+    /// Upper angular limit in radians.
+    pub upper_limit: f32,
+    /// Target motor speed in radians per second.
+    pub motor_speed: f32,
+    /// Maximum motor force.
+    pub motor_max_force: f32,
+    /// Enable motor when non-zero.
+    pub enable_motor: u32,
+    /// Enable limits when non-zero.
+    pub enable_limit: u32,
+    pub _pad: f32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+/// A sliding joint constraining motion along an axis.
+pub struct PrismaticJoint {
+    pub body_a: u32,
+    pub body_b: u32,
+    pub anchor_a: Vec3,
+    pub anchor_b: Vec3,
+    pub axis: Vec3,
+    pub lower_limit: f32,
+    pub upper_limit: f32,
+    pub motor_speed: f32,
+    pub motor_max_force: f32,
+    pub enable_motor: u32,
+    pub enable_limit: u32,
+    pub _pad: f32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+/// A ball-and-socket joint allowing 3 DoF rotation.
+pub struct BallJoint {
+    pub body_a: u32,
+    pub body_b: u32,
+    pub anchor_a: Vec3,
+    pub anchor_b: Vec3,
+    pub _pad: [f32; 2],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+/// A rigid joint locking two bodies together.
+pub struct FixedJoint {
+    pub body_a: u32,
+    pub body_b: u32,
+    pub anchor_a: Vec3,
+    pub anchor_b: Vec3,
+    /// Relative rotation stored as a quaternion.
+    pub relative_rotation: [f32; 4],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 /// Global parameters that control the behavior of the joint solver.
 pub struct JointParams {
     /// The compliance of the position-based dynamics (PBD) joints. A higher
