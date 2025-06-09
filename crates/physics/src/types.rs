@@ -72,3 +72,26 @@ pub struct JointParams {
     pub compliance: f32,
     pub _pad: [f32; 3],
 }
+
+#[derive(Copy, Clone, Debug)]
+pub struct BoxBody {
+    pub pos: Vec3,
+    pub half_extents: Vec3,
+    pub vel: Vec3,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct Cylinder {
+    pub pos: Vec3,
+    pub vel: Vec3,
+    pub radius: f32,
+    pub height: f32,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct Plane {
+    /// Plane normal should be normalized
+    pub normal: Vec3,
+    /// Plane equation: normal.dot(x) + d = 0
+    pub d: f32,
+}

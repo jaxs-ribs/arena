@@ -1,4 +1,6 @@
-use crate::types::{Joint, JointParams, PhysParams, Sphere, Vec3};
+use crate::types::{
+    BoxBody, Cylinder, Joint, JointParams, PhysParams, Plane, Sphere, Vec3,
+};
 use compute::{ComputeBackend, ComputeError};
 use std::mem::size_of;
 use std::sync::Arc;
@@ -21,6 +23,9 @@ impl From<ComputeError> for PhysicsError {
 
 pub struct PhysicsSim {
     pub spheres: Vec<Sphere>,
+    pub boxes: Vec<BoxBody>,
+    pub cylinders: Vec<Cylinder>,
+    pub planes: Vec<Plane>,
     pub params: PhysParams,
     pub joints: Vec<Joint>,
     pub joint_params: JointParams,
@@ -35,6 +40,9 @@ impl PhysicsSim {
     pub fn new() -> Self {
         Self {
             spheres: Vec::new(),
+            boxes: Vec::new(),
+            cylinders: Vec::new(),
+            planes: Vec::new(),
             params: PhysParams {
                 gravity: Vec3::new(0.0, -9.81, 0.0),
                 dt: 0.01,
@@ -66,6 +74,9 @@ impl PhysicsSim {
 
         Self {
             spheres,
+            boxes: Vec::new(),
+            cylinders: Vec::new(),
+            planes: Vec::new(),
             params,
             joints: Vec::new(),
             joint_params: JointParams {
@@ -81,6 +92,38 @@ impl PhysicsSim {
         let index = self.spheres.len();
         self.spheres.push(Sphere::new(pos, vel));
         self.params.forces.push([0.0, 0.0]);
+        index
+    }
+
+    /// Adds a box to the simulation and returns its index.
+    pub fn add_box(&mut self, pos: Vec3, half_extents: Vec3, vel: Vec3) -> usize {
+        let index = self.boxes.len();
+        self.boxes.push(BoxBody { pos, half_extents, vel });
+        index
+    }
+
+    /// Adds a cylinder to the simulation and returns its index.
+    pub fn add_cylinder(
+        &mut self,
+        pos: Vec3,
+        radius: f32,
+        height: f32,
+        vel: Vec3,
+    ) -> usize {
+        let index = self.cylinders.len();
+        self.cylinders.push(Cylinder {
+            pos,
+            vel,
+            radius,
+            height,
+        });
+        index
+    }
+
+    /// Adds a static plane. Returns index.
+    pub fn add_plane(&mut self, normal: Vec3, d: f32) -> usize {
+        let index = self.planes.len();
+        self.planes.push(Plane { normal, d });
         index
     }
 
@@ -390,6 +433,113 @@ impl PhysicsSim {
         Ok(())
     }
 
+    pub fn step_cpu(&mut self) {
+        let dt = self.params.dt;
+        // Spheres
+        for (sphere, force) in self.spheres.iter_mut().zip(&self.params.forces) {
+            sphere.vel.x += (self.params.gravity.x + force[0]) * dt;
+            sphere.vel.y += (self.params.gravity.y + force[1]) * dt;
+            sphere.vel.z += self.params.gravity.z * dt;
+
+            sphere.pos.x += sphere.vel.x * dt;
+            sphere.pos.y += sphere.vel.y * dt;
+            sphere.pos.z += sphere.vel.z * dt;
+
+            for plane in &self.planes {
+                let dist = sphere.pos.x * plane.normal.x
+                    + sphere.pos.y * plane.normal.y
+                    + sphere.pos.z * plane.normal.z
+                    + plane.d;
+                let radius = 1.0_f32;
+                if dist < radius {
+                    let correction = radius - dist;
+                    sphere.pos.x += plane.normal.x * correction;
+                    sphere.pos.y += plane.normal.y * correction;
+                    sphere.pos.z += plane.normal.z * correction;
+                    let vn = sphere.vel.x * plane.normal.x
+                        + sphere.vel.y * plane.normal.y
+                        + sphere.vel.z * plane.normal.z;
+                    if vn < 0.0 {
+                        sphere.vel.x -= vn * plane.normal.x;
+                        sphere.vel.y -= vn * plane.normal.y;
+                        sphere.vel.z -= vn * plane.normal.z;
+                    }
+                }
+            }
+        }
+
+        // Boxes
+        for bx in &mut self.boxes {
+            bx.vel.x += self.params.gravity.x * dt;
+            bx.vel.y += self.params.gravity.y * dt;
+            bx.vel.z += self.params.gravity.z * dt;
+
+            bx.pos.x += bx.vel.x * dt;
+            bx.pos.y += bx.vel.y * dt;
+            bx.pos.z += bx.vel.z * dt;
+
+            for plane in &self.planes {
+                let support = bx.half_extents.x.abs() * plane.normal.x.abs()
+                    + bx.half_extents.y.abs() * plane.normal.y.abs()
+                    + bx.half_extents.z.abs() * plane.normal.z.abs();
+                let dist = bx.pos.x * plane.normal.x
+                    + bx.pos.y * plane.normal.y
+                    + bx.pos.z * plane.normal.z
+                    + plane.d
+                    - support;
+                if dist < 0.0 {
+                    let correction = -dist;
+                    bx.pos.x += plane.normal.x * correction;
+                    bx.pos.y += plane.normal.y * correction;
+                    bx.pos.z += plane.normal.z * correction;
+                    let vn = bx.vel.x * plane.normal.x
+                        + bx.vel.y * plane.normal.y
+                        + bx.vel.z * plane.normal.z;
+                    if vn < 0.0 {
+                        bx.vel.x -= vn * plane.normal.x;
+                        bx.vel.y -= vn * plane.normal.y;
+                        bx.vel.z -= vn * plane.normal.z;
+                    }
+                }
+            }
+        }
+
+        // Cylinders
+        for cyl in &mut self.cylinders {
+            cyl.vel.x += self.params.gravity.x * dt;
+            cyl.vel.y += self.params.gravity.y * dt;
+            cyl.vel.z += self.params.gravity.z * dt;
+
+            cyl.pos.x += cyl.vel.x * dt;
+            cyl.pos.y += cyl.vel.y * dt;
+            cyl.pos.z += cyl.vel.z * dt;
+
+            for plane in &self.planes {
+                let support = cyl.radius * (plane.normal.x.abs() + plane.normal.z.abs())
+                    + cyl.height * 0.5 * plane.normal.y.abs();
+                let dist = cyl.pos.x * plane.normal.x
+                    + cyl.pos.y * plane.normal.y
+                    + cyl.pos.z * plane.normal.z
+                    + plane.d
+                    - support;
+                if dist < 0.0 {
+                    let correction = -dist;
+                    cyl.pos.x += plane.normal.x * correction;
+                    cyl.pos.y += plane.normal.y * correction;
+                    cyl.pos.z += plane.normal.z * correction;
+                    let vn = cyl.vel.x * plane.normal.x
+                        + cyl.vel.y * plane.normal.y
+                        + cyl.vel.z * plane.normal.z;
+                    if vn < 0.0 {
+                        cyl.vel.x -= vn * plane.normal.x;
+                        cyl.vel.y -= vn * plane.normal.y;
+                        cyl.vel.z -= vn * plane.normal.z;
+                    }
+                }
+            }
+        }
+    }
+
     pub fn run(&mut self, dt: f32, steps: usize) -> Result<SphereState, PhysicsError> {
         if self.spheres.is_empty() {
             return Err(PhysicsError::NoSpheres);
@@ -403,5 +553,12 @@ impl PhysicsSim {
         Ok(SphereState {
             pos: self.spheres[0].pos,
         })
+    }
+
+    pub fn run_cpu(&mut self, dt: f32, steps: usize) {
+        self.params.dt = dt;
+        for _ in 0..steps {
+            self.step_cpu();
+        }
     }
 }
