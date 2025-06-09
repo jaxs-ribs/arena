@@ -53,6 +53,9 @@ pub const fn binding_count(kernel: &crate::Kernel) -> u32 {
         crate::Kernel::IntegrateBodies => 3, // BODIES_INOUT, PARAMS_UNIFORM, FORCES_IN
         crate::Kernel::DetectContactsSphere => 2, // BODIES_IN, CONTACTS_OUT
         crate::Kernel::DetectContactsBox => 3, // BODIES_IN, BOX_IN, CONTACTS_OUT
+        crate::Kernel::DetectContactsSphereCylinder => 3, // SPHERES_IN, CYLINDERS_IN, CONTACTS_OUT
+        crate::Kernel::DetectContactsCylinderCylinder => 2, // CYLINDERS_IN, CONTACTS_OUT
+        crate::Kernel::DetectContactsBoxCylinder => 3, // BOXES_IN, CYLINDERS_IN, CONTACTS_OUT
         crate::Kernel::DetectContactsSDF => 3, // BODIES_IN, SDF_DATA_UNIFORM_OR_STORAGE, CONTACTS_OUT
         crate::Kernel::SolveContactsPBD => 3,  // BODIES_INOUT, CONTACTS_IN, PARAMS_UNIFORM
         crate::Kernel::SolveJointsPBD | crate::Kernel::SolveRevoluteJoints
