@@ -1,5 +1,9 @@
-// This file will contain the WGPU backend implementation.
-// It is part of the plan to create a GPU-accelerated compute backend. 
+//! GPU implementation of [`ComputeBackend`] built on [`wgpu`].
+//!
+//! The `WgpuBackend` compiles WGSL shaders at runtime and dispatches them on
+//! the user's graphics device. It mirrors the CPU backend's behavior but offloads
+//! heavy computation to the GPU for significant speedups. Initialization will
+//! fail if no compatible adapter is found.
 
 use crate::{BufferView, ComputeBackend, ComputeError, Kernel};
 use anyhow::Result;

@@ -1,9 +1,19 @@
+//! CPU fallback implementation of [`ComputeBackend`].
+//!
+//! This backend executes compute kernels directly on the CPU. It is primarily
+//! used during testing or when the optional GPU feature is disabled. While not
+//! particularly fast, it allows validating kernel logic without requiring a GPU
+//! or the `wgpu` dependency.
+
 use crate::{kernels, BufferView, ComputeBackend, ComputeError, Kernel};
 
 #[derive(Default, Debug, Clone)]
+/// Simple compute backend that runs kernels on the host CPU.
 pub struct CpuBackend;
 
 impl CpuBackend {
+    /// Creates a new [`CpuBackend`].
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
