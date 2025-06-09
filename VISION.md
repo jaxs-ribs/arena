@@ -1,6 +1,6 @@
-# Project Vision
+# JAXS Vision
 
-This repository aims to build a full stack differentiable physics and machine learning environment with a design inspired by [Brax](https://github.com/google/brax). Everything is implemented in **Rust** and targets **WebGPU** so that experiments can run efficiently on desktop GPUs and eventually in the browser. The long term goal is to explore rich artificial life through a combination of physics simulation, reinforcement learning, and evolutionary search.
+JAXS (Just Another Exploration Substrate) aims to build a full stack differentiable physics and machine learning environment with a design inspired by [Brax](https://github.com/google/brax). Everything is implemented in **Rust** and targets **WebGPU** so that experiments can run efficiently on desktop GPUs and eventually in the browser. The long term goal is to explore rich artificial life through a combination of physics simulation, reinforcement learning, and evolutionary search.
 
 ## Goals
 

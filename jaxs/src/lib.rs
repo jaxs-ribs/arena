@@ -1,7 +1,6 @@
-//! # JAXS: A Differentiable Physics and Machine Learning Environment
+//! # JAXS: Just Another Exploration Substrate
 //!
-//! Welcome to the JAXS project! This documentation serves as a comprehensive
-//! guide to the architecture, components, and long-term vision of JAXS.
+//! Welcome to the documentation for JAXS (Just Another Exploration Substrate).
 //!
 //! ## Overview
 //!

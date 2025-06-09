@@ -1,6 +1,6 @@
 //! # JAXS Application Logic
 //!
-//! This module orchestrates the main simulation loop, integrating the physics engine,
+//! This module orchestrates the main simulation loop for JAXS (Just Another Exploration Substrate), integrating the physics engine,
 //! rendering, and live shader reloading capabilities.
 //!
 //! The primary function, [`run`], is the entry point for the application's core

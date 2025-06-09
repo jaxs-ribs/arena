@@ -1,6 +1,6 @@
-# Differentiable-Physics
+# JAXS: Just Another Exploration Substrate
 
-This project aims to build a full stack physics and machine learning environment inspired by [Brax](https://github.com/google/brax) but designed around **WebGPU** and implemented entirely in Rust.  The goal is to provide fast differentiable physics, a compute backend that works on desktop and in browsers, and a minimal runtime for training ML policies directly against the simulator.
+JAXS aims to build a full stack physics and machine learning environment inspired by [Brax](https://github.com/google/brax) but designed around **WebGPU** and implemented entirely in Rust.  The goal is to provide fast differentiable physics, a compute backend that works on desktop and in browsers, and a minimal runtime for training ML policies directly against the simulator.
 
 > *See [VISION.md](VISION.md) for the long-term roadmap, including novelty-driven search with Dreamer V3.*
 

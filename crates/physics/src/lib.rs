@@ -2,7 +2,7 @@
 #![allow(clippy::module_name_repetitions)]
 //! # JAXS Physics Engine
 //!
-//! A minimal, differentiable physics engine for rigid body simulation.
+//! A minimal, differentiable physics engine for the JAXS project (Just Another Exploration Substrate).
 //!
 //! This crate provides the foundational physics layer for the JAXS project. It
 //! features a small set of rigid body types and a GPU-accelerated simulation

@@ -72,7 +72,7 @@ impl Renderer {
     pub fn new() -> Result<Self> {
         let event_loop = EventLoop::new().context("create event loop")?;
         let window = WindowBuilder::new()
-            .with_title("Arena Renderer")
+            .with_title("JAXS Renderer")
             .build(&event_loop)
             .context("failed to create window")?;
 

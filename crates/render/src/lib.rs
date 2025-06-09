@@ -3,7 +3,7 @@
 //! A simple `wgpu`-based rendering engine for visualizing physics simulations.
 //!
 //! This crate provides two lightweight rendering utilities for the JAXS
-//! project: [`Renderer`] and [`SdfRenderer`]. These renderers are designed to
+//! project (Just Another Exploration Substrate): [`Renderer`] and [`SdfRenderer`]. These renderers are designed to
 //! be simple and efficient, providing a convenient way to visualize the state
 //! of physics simulations during development and testing.
 //!
