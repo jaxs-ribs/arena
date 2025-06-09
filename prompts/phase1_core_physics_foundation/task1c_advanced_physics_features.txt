@@ -1,0 +1,361 @@
+# JAXS Development Task: Advanced Physics Features
+
+## Project Description
+
+JAXS (Just Another Exploration Substrate) is a differentiable physics and machine learning environment built in Rust with WebGPU. The project aims to create a platform for novelty-driven artificial life through physics simulation and reinforcement learning.
+
+**Key Architecture Principles:**
+- **WebGPU-First**: All compute operations target GPU via WGSL shaders
+- **Modular Design**: Clean separation between compute, physics, ML, render, and phenotype crates
+- **Zero-Copy**: Efficient GPU memory management with bytemuck for data layout
+- **Differentiable**: All operations must preserve gradient flow for end-to-end optimization
+
+**Critical Guidelines:**
+- Maintain GPU/CPU backend compatibility in the compute crate
+- Use `#[repr(C)]` and `bytemuck::Pod` for all GPU data structures
+- Follow existing test patterns with comprehensive coverage
+- Preserve backwards compatibility for existing APIs
+- Document all public interfaces with rustdoc
+- Use existing error types and handling patterns
+
+**Testing Requirements:**
+- Add unit tests for all new functionality
+- Include integration tests for cross-crate features
+- Verify GPU/CPU parity for compute operations
+- Test edge cases and error conditions
+- Maintain performance benchmarks where applicable
+
+## Phase 1: Core Physics Foundation
+
+**Goal**: Complete the physics engine's fundamental capabilities to support complex simulations
+
+This phase focuses on building the essential physics infrastructure needed for articulated bodies and complex simulations. The current physics engine supports basic rigid bodies and distance joints, but lacks the joint types necessary for realistic creature simulation. This phase will complete the joint system, collision detection matrix, and add advanced physics features to create a robust foundation for the evolution and ML phases.
+
+## Task 1C: Advanced Physics Features
+
+**Crate**: `crates/physics/`
+**Primary Files**: `src/simulation.rs`, `src/types.rs`, integration kernels
+**New Files**: `/shaders/continuous_collision_detection.wgsl`, `/shaders/adaptive_integration.wgsl`
+**Test Files**: `tests/advanced_physics_features.rs`
+**Complexity**: Medium
+**Dependencies**: Task 1B (collision system completion)
+
+### Objective
+
+Add advanced simulation capabilities to improve stability, accuracy, and realism. This includes continuous collision detection to prevent tunneling, advanced integration methods for better accuracy, and enhanced material properties for more realistic physics behavior.
+
+### Implementation Details
+
+1. **Continuous Collision Detection (CCD)**:
+
+   **New Types** in `src/types.rs`:
+   ```rust
+   #[repr(C)]
+   #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+   pub struct CCDResult {
+       pub has_collision: u32,
+       pub time_of_impact: f32,
+       pub contact_point: Vec3,
+       pub contact_normal: Vec3,
+       _pad: f32,
+   }
+
+   #[derive(Clone, Debug)]
+   pub struct CCDSettings {
+       pub enable_ccd: bool,
+       pub max_ccd_iterations: u32,
+       pub ccd_tolerance: f32,
+       pub velocity_threshold: f32, // Only apply CCD above this speed
+   }
+   ```
+
+   **Implementation** in `src/simulation.rs`:
+   ```rust
+   impl PhysicsSim {
+       pub fn continuous_collision_check(&self, body_a: &Sphere, body_b: &Sphere, dt: f32) -> Option<CCDResult> {
+           // Implement swept sphere collision detection
+           // Use binary search for time of impact
+           // Return first collision time and contact data
+       }
+
+       pub fn apply_ccd_constraints(&mut self, dt: f32) -> Result<(), PhysicsError> {
+           // Check all fast-moving object pairs
+           // Apply CCD for objects above velocity threshold
+           // Integrate objects to collision time, resolve, continue
+       }
+   }
+   ```
+
+   **GPU Kernel** `/shaders/continuous_collision_detection.wgsl`:
+   ```wgsl
+   struct CCDInput {
+       pos_start: vec3<f32>,
+       pos_end: vec3<f32>,
+       radius: f32,
+       _pad: f32,
+   }
+
+   struct CCDOutput {
+       has_collision: u32,
+       time_of_impact: f32,
+       contact_point: vec3<f32>,
+       contact_normal: vec3<f32>,
+   }
+
+   @compute @workgroup_size(256)
+   fn continuous_collision_detection(
+       @builtin(global_invocation_id) global_id: vec3<u32>
+   ) {
+       // Implement swept collision detection on GPU
+       // Use binary search for precise TOI calculation
+   }
+   ```
+
+2. **Advanced Integration Methods**:
+
+   **Integration Options** in `src/types.rs`:
+   ```rust
+   #[derive(Clone, Debug)]
+   pub enum IntegrationMethod {
+       Verlet,           // Current method
+       RungeKutta4,      // 4th order RK for accuracy
+       AdaptiveRK,       // Adaptive timestep RK
+       SemiImplicit,     // Semi-implicit Euler
+   }
+
+   #[derive(Clone, Debug)]
+   pub struct IntegrationSettings {
+       pub method: IntegrationMethod,
+       pub adaptive_tolerance: f32,
+       pub min_timestep: f32,
+       pub max_timestep: f32,
+       pub stability_threshold: f32,
+   }
+   ```
+
+   **Implementation** in `src/simulation.rs`:
+   ```rust
+   impl PhysicsSim {
+       pub fn integrate_rk4(&mut self, dt: f32) -> Result<(), PhysicsError> {
+           // Implement 4th order Runge-Kutta integration
+           // Evaluate derivatives at 4 points
+           // Combine for higher accuracy
+       }
+
+       pub fn integrate_adaptive(&mut self, dt: f32) -> Result<f32, PhysicsError> {
+           // Adaptive timestep integration
+           // Estimate error and adjust timestep
+           // Return actual timestep used
+       }
+
+       pub fn check_stability(&self) -> bool {
+           // Monitor for simulation instability
+           // Check for NaN/infinity values
+           // Verify energy conservation bounds
+       }
+   }
+   ```
+
+   **GPU Kernel** `/shaders/adaptive_integration.wgsl`:
+   ```wgsl
+   struct IntegrationState {
+       pos: vec3<f32>,
+       vel: vec3<f32>,
+       acc: vec3<f32>,
+       error_estimate: f32,
+   }
+
+   @compute @workgroup_size(256)
+   fn adaptive_integration_step(
+       @builtin(global_invocation_id) global_id: vec3<u32>
+   ) {
+       // Implement adaptive timestep integration
+       // Calculate error estimates
+       // Adjust timestep per object if needed
+   }
+   ```
+
+3. **Enhanced Material Properties**:
+
+   **Extended Material System** in `src/types.rs`:
+   ```rust
+   #[repr(C)]
+   #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+   pub struct AdvancedMaterial {
+       pub friction: f32,
+       pub restitution: f32,
+       pub rolling_resistance: f32,
+       pub spinning_resistance: f32,
+       pub friction_anisotropy: Vec3,    // Different friction in different directions
+       pub temperature: f32,
+       pub thermal_conductivity: f32,
+       pub linear_damping: f32,
+       pub angular_damping: f32,
+       _pad: [f32; 3],
+   }
+
+   #[derive(Clone, Debug)]
+   pub struct MaterialCombinationRules {
+       pub friction_combine: CombineMode,
+       pub restitution_combine: CombineMode,
+       pub damping_combine: CombineMode,
+   }
+
+   #[derive(Clone, Debug)]
+   pub enum CombineMode {
+       Average,
+       Minimum,
+       Maximum,
+       Multiply,
+       GeometricMean,
+   }
+   ```
+
+   **Implementation**:
+   ```rust
+   impl AdvancedMaterial {
+       pub fn combine_with(&self, other: &AdvancedMaterial, rules: &MaterialCombinationRules) -> AdvancedMaterial {
+           // Combine materials based on specified rules
+       }
+
+       pub fn apply_temperature_effects(&mut self, dt: f32) {
+           // Modify properties based on temperature
+           // Implement thermal equilibration
+       }
+   }
+   ```
+
+4. **Stability Monitoring and Recovery**:
+
+   **Stability System** in `src/simulation.rs`:
+   ```rust
+   #[derive(Clone, Debug)]
+   pub struct StabilityMonitor {
+       pub energy_history: Vec<f32>,
+       pub velocity_history: Vec<f32>,
+       pub position_drift: Vec<f32>,
+       pub instability_detected: bool,
+       pub recovery_attempts: u32,
+   }
+
+   impl PhysicsSim {
+       pub fn monitor_stability(&mut self) {
+           // Track energy conservation
+           // Monitor for exploding velocities
+           // Detect constraint drift
+       }
+
+       pub fn attempt_recovery(&mut self) -> Result<(), PhysicsError> {
+           // Reduce timestep
+           // Apply additional damping
+           // Reset problematic constraints
+       }
+   }
+   ```
+
+5. **Advanced Constraint Stabilization**:
+
+   **Baumgarte Stabilization**:
+   ```rust
+   impl PhysicsSim {
+       pub fn apply_baumgarte_stabilization(&mut self, beta: f32, dt: f32) {
+           // Apply Baumgarte stabilization to constraints
+           // Correct constraint drift gradually
+           // Maintain constraint accuracy over time
+       }
+   }
+   ```
+
+6. **Comprehensive Testing** in `tests/advanced_physics_features.rs`:
+   ```rust
+   #[test]
+   fn test_continuous_collision_detection() {
+       let mut sim = PhysicsSim::new();
+       
+       // Create fast-moving spheres that would tunnel without CCD
+       let sphere_a = sim.add_sphere(Vec3::new(-5.0, 0.0, 0.0), Vec3::new(100.0, 0.0, 0.0), 0.5);
+       let sphere_b = sim.add_sphere(Vec3::new(5.0, 0.0, 0.0), Vec3::new(-100.0, 0.0, 0.0), 0.5);
+       
+       sim.enable_continuous_collision_detection(true);
+       
+       // Should detect collision despite high speeds
+       for _ in 0..10 {
+           sim.step_cpu();
+       }
+       
+       // Verify collision was detected and resolved
+       assert!(collision_occurred(&sim));
+       assert!(spheres_separated(&sim));
+   }
+
+   #[test]
+   fn test_adaptive_integration_accuracy() {
+       let mut sim = PhysicsSim::new();
+       sim.set_integration_method(IntegrationMethod::AdaptiveRK);
+       
+       // Test against analytical solution for simple harmonic motion
+       let spring_system = setup_spring_system(&mut sim);
+       
+       let analytical_solution = harmonic_motion_solution(5.0); // 5 second simulation
+       let simulated_result = sim.run(0.01, 500);
+       
+       assert!((analytical_solution - simulated_result).magnitude() < 0.01);
+   }
+
+   #[test]
+   fn test_material_anisotropic_friction() {
+       let mut sim = PhysicsSim::new();
+       
+       let anisotropic_material = AdvancedMaterial {
+           friction_anisotropy: Vec3::new(0.9, 0.1, 0.5), // High X, low Y, medium Z
+           ..Default::default()
+       };
+       
+       // Test that friction varies by direction
+       test_directional_friction(&mut sim, anisotropic_material);
+   }
+
+   #[test]
+   fn test_stability_monitoring() {
+       let mut sim = PhysicsSim::new();
+       sim.enable_stability_monitoring(true);
+       
+       // Create unstable scenario
+       setup_unstable_configuration(&mut sim);
+       
+       // Should detect instability and attempt recovery
+       for _ in 0..100 {
+           if sim.step_cpu().is_err() {
+               assert!(sim.stability_monitor.instability_detected);
+               assert!(sim.stability_monitor.recovery_attempts > 0);
+               break;
+           }
+       }
+   }
+   ```
+
+### Performance Considerations
+
+- CCD should only activate for high-speed objects to minimize overhead
+- Adaptive integration should adjust globally or per-object based on error estimates
+- Material property calculations should be cached when possible
+- Stability monitoring should have minimal performance impact
+
+### Success Criteria
+
+- Fast-moving objects no longer tunnel through each other
+- Simulation remains stable for complex scenarios (chains, stacks, etc.)
+- Integration accuracy improved for precise simulations
+- Material properties provide realistic physical behavior
+- Stability monitoring prevents simulation explosions
+- Performance impact is reasonable (<20% for typical scenarios)
+- All tests pass with comprehensive edge case coverage
+- GPU and CPU implementations maintain parity
+
+### Integration Notes
+
+- Depends on Task 1B for complete collision detection system
+- CCD will benefit from Phase 3 visualization for debugging
+- Advanced materials will be used in Phase 4 for creature diversity
+- Stability features will be crucial for long-running evolution experiments
+- Document performance trade-offs and recommended settings clearly

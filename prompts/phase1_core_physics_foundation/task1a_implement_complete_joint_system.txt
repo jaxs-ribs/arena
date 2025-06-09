@@ -1,0 +1,210 @@
+# JAXS Development Task: Complete Joint System Implementation
+
+## Project Description
+
+JAXS (Just Another Exploration Substrate) is a differentiable physics and machine learning environment built in Rust with WebGPU. The project aims to create a platform for novelty-driven artificial life through physics simulation and reinforcement learning.
+
+**Key Architecture Principles:**
+- **WebGPU-First**: All compute operations target GPU via WGSL shaders
+- **Modular Design**: Clean separation between compute, physics, ML, render, and phenotype crates
+- **Zero-Copy**: Efficient GPU memory management with bytemuck for data layout
+- **Differentiable**: All operations must preserve gradient flow for end-to-end optimization
+
+**Critical Guidelines:**
+- Maintain GPU/CPU backend compatibility in the compute crate
+- Use `#[repr(C)]` and `bytemuck::Pod` for all GPU data structures
+- Follow existing test patterns with comprehensive coverage
+- Preserve backwards compatibility for existing APIs
+- Document all public interfaces with rustdoc
+- Use existing error types and handling patterns
+
+**Testing Requirements:**
+- Add unit tests for all new functionality
+- Include integration tests for cross-crate features
+- Verify GPU/CPU parity for compute operations
+- Test edge cases and error conditions
+- Maintain performance benchmarks where applicable
+
+## Phase 1: Core Physics Foundation
+
+**Goal**: Complete the physics engine's fundamental capabilities to support complex simulations
+
+This phase focuses on building the essential physics infrastructure needed for articulated bodies and complex simulations. The current physics engine supports basic rigid bodies and distance joints, but lacks the joint types necessary for realistic creature simulation. This phase will complete the joint system, collision detection matrix, and add advanced physics features to create a robust foundation for the evolution and ML phases.
+
+## Task 1A: Implement Complete Joint System
+
+**Crate**: `crates/physics/`
+**Primary Files**: `src/types.rs`, `src/simulation.rs`
+**New Files**: Joint-specific WGSL shaders in `/shaders/`
+**Test Files**: `tests/joint_comprehensive.rs`
+**Complexity**: Medium
+**Dependencies**: None
+
+### Objective
+
+Implement missing joint types to enable articulated bodies and complex creature structures. The current system only has distance joints - we need revolute (hinge), prismatic (sliding), ball (spherical), and fixed joints to support realistic creature simulation.
+
+### Implementation Details
+
+1. **Add Joint Type Definitions** in `src/types.rs`:
+   ```rust
+   #[repr(C)]
+   #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+   pub struct RevoluteJoint {
+       pub body_a: u32,
+       pub body_b: u32,
+       pub anchor_a: Vec3,
+       pub anchor_b: Vec3,
+       pub axis: Vec3,
+       pub lower_limit: f32,
+       pub upper_limit: f32,
+       pub motor_speed: f32,
+       pub motor_max_force: f32,
+       pub enable_motor: u32,
+       pub enable_limit: u32,
+       _pad: f32,
+   }
+
+   #[repr(C)]
+   #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+   pub struct PrismaticJoint {
+       pub body_a: u32,
+       pub body_b: u32,
+       pub anchor_a: Vec3,
+       pub anchor_b: Vec3,
+       pub axis: Vec3,
+       pub lower_limit: f32,
+       pub upper_limit: f32,
+       pub motor_speed: f32,
+       pub motor_max_force: f32,
+       pub enable_motor: u32,
+       pub enable_limit: u32,
+       _pad: f32,
+   }
+
+   #[repr(C)]
+   #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+   pub struct BallJoint {
+       pub body_a: u32,
+       pub body_b: u32,
+       pub anchor_a: Vec3,
+       pub anchor_b: Vec3,
+       _pad: [f32; 2],
+   }
+
+   #[repr(C)]
+   #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+   pub struct FixedJoint {
+       pub body_a: u32,
+       pub body_b: u32,
+       pub anchor_a: Vec3,
+       pub anchor_b: Vec3,
+       pub relative_rotation: [f32; 4], // quaternion
+   }
+   ```
+
+2. **Update PhysicsSim Structure** in `src/simulation.rs`:
+   ```rust
+   pub struct PhysicsSim {
+       // ... existing fields ...
+       pub revolute_joints: Vec<RevoluteJoint>,
+       pub prismatic_joints: Vec<PrismaticJoint>,
+       pub ball_joints: Vec<BallJoint>,
+       pub fixed_joints: Vec<FixedJoint>,
+   }
+   ```
+
+3. **Add Joint Builder Methods**:
+   ```rust
+   impl PhysicsSim {
+       pub fn add_revolute_joint(&mut self, body_a: usize, body_b: usize, anchor_a: Vec3, anchor_b: Vec3, axis: Vec3) -> usize {
+           // Implementation
+       }
+
+       pub fn add_prismatic_joint(&mut self, body_a: usize, body_b: usize, anchor_a: Vec3, anchor_b: Vec3, axis: Vec3) -> usize {
+           // Implementation  
+       }
+
+       pub fn add_ball_joint(&mut self, body_a: usize, body_b: usize, anchor_a: Vec3, anchor_b: Vec3) -> usize {
+           // Implementation
+       }
+
+       pub fn add_fixed_joint(&mut self, body_a: usize, body_b: usize, anchor_a: Vec3, anchor_b: Vec3) -> usize {
+           // Implementation
+       }
+   }
+   ```
+
+4. **Create WGSL Joint Solver Kernels**:
+   - `/shaders/solve_revolute_joints.wgsl`
+   - `/shaders/solve_prismatic_joints.wgsl`
+   - `/shaders/solve_ball_joints.wgsl`
+   - `/shaders/solve_fixed_joints.wgsl`
+
+   Each kernel should implement position-based dynamics constraint solving for the specific joint type.
+
+5. **Add Compute Kernel Registrations** in `crates/compute/src/lib.rs`:
+   ```rust
+   pub enum Kernel {
+       // ... existing kernels ...
+       SolveRevoluteJoints,
+       SolvePrismaticJoints,
+       SolveBallJoints,
+       SolveFixedJoints,
+   }
+   ```
+
+6. **Update GPU Stepping** in `src/simulation.rs`:
+   Integrate joint solving into the main simulation step_gpu() method after contact resolution.
+
+7. **Comprehensive Testing** in `tests/joint_comprehensive.rs`:
+   ```rust
+   #[test]
+   fn test_revolute_joint_limits() {
+       // Test angular limits work correctly
+   }
+
+   #[test]
+   fn test_revolute_joint_motor() {
+       // Test motor forces applied correctly
+   }
+
+   #[test]
+   fn test_prismatic_joint_sliding() {
+       // Test sliding constraint along axis
+   }
+
+   #[test]
+   fn test_ball_joint_3dof() {
+       // Test 3 degrees of freedom
+   }
+
+   #[test]
+   fn test_fixed_joint_rigidity() {
+       // Test bodies remain rigidly connected
+   }
+
+   #[test]
+   fn test_joint_chain_stability() {
+       // Test complex joint chains don't explode
+   }
+   ```
+
+### Success Criteria
+
+- All four joint types (revolute, prismatic, ball, fixed) are implemented and functional
+- Joints maintain proper constraints under various loads and configurations
+- Motor functionality works for revolute and prismatic joints
+- Joint limits are enforced correctly
+- Complex joint chains (pendulums, robotic arms) remain stable
+- All tests pass with comprehensive coverage
+- GPU and CPU implementations maintain parity
+- Performance impact is minimal (<10% overhead for typical joint counts)
+
+### Integration Notes
+
+- This task is completely independent and won't conflict with other Phase 1 tasks
+- The joint system will be used extensively in Phase 4 (Evolution) for creature articulation
+- Joint visualization will be added in Phase 3 (Visualization)
+- Ensure proper error handling for invalid joint configurations
+- Document joint coordinate systems and conventions clearly

@@ -1,0 +1,256 @@
+# JAXS Development Task: Complete Collision Detection Matrix
+
+## Project Description
+
+JAXS (Just Another Exploration Substrate) is a differentiable physics and machine learning environment built in Rust with WebGPU. The project aims to create a platform for novelty-driven artificial life through physics simulation and reinforcement learning.
+
+**Key Architecture Principles:**
+- **WebGPU-First**: All compute operations target GPU via WGSL shaders
+- **Modular Design**: Clean separation between compute, physics, ML, render, and phenotype crates
+- **Zero-Copy**: Efficient GPU memory management with bytemuck for data layout
+- **Differentiable**: All operations must preserve gradient flow for end-to-end optimization
+
+**Critical Guidelines:**
+- Maintain GPU/CPU backend compatibility in the compute crate
+- Use `#[repr(C)]` and `bytemuck::Pod` for all GPU data structures
+- Follow existing test patterns with comprehensive coverage
+- Preserve backwards compatibility for existing APIs
+- Document all public interfaces with rustdoc
+- Use existing error types and handling patterns
+
+**Testing Requirements:**
+- Add unit tests for all new functionality
+- Include integration tests for cross-crate features
+- Verify GPU/CPU parity for compute operations
+- Test edge cases and error conditions
+- Maintain performance benchmarks where applicable
+
+## Phase 1: Core Physics Foundation
+
+**Goal**: Complete the physics engine's fundamental capabilities to support complex simulations
+
+This phase focuses on building the essential physics infrastructure needed for articulated bodies and complex simulations. The current physics engine supports basic rigid bodies and distance joints, but lacks the joint types necessary for realistic creature simulation. This phase will complete the joint system, collision detection matrix, and add advanced physics features to create a robust foundation for the evolution and ML phases.
+
+## Task 1B: Complete Collision Detection Matrix
+
+**Crate**: `crates/physics/`, `crates/compute/`
+**Primary Files**: Contact detection WGSL shaders, `src/simulation.rs`
+**New Files**: `/shaders/detect_contacts_sphere_cylinder.wgsl`, `/shaders/detect_contacts_cylinder_cylinder.wgsl`, `/shaders/detect_contacts_box_cylinder.wgsl`
+**Test Files**: `tests/collision_matrix_comprehensive.rs`
+**Complexity**: Medium
+**Dependencies**: None
+
+### Objective
+
+Complete collision detection and response for all primitive shape pairs. Currently, the system handles sphere-sphere, sphere-plane, and basic box collisions, but is missing several critical collision types needed for complex simulations. This task will implement the missing collision pairs and optimize the collision pipeline.
+
+### Current State Analysis
+
+Existing collision detection:
+- ✅ Sphere-Sphere: Fully implemented with proper response
+- ✅ Sphere-Plane: Working correctly
+- ✅ Sphere-Box: Basic implementation exists
+- ❌ Sphere-Cylinder: Missing
+- ❌ Cylinder-Cylinder: Missing  
+- ❌ Box-Cylinder: Missing
+- ❌ Cylinder-Plane: Needs verification
+
+### Implementation Details
+
+1. **Sphere-Cylinder Collision** (`/shaders/detect_contacts_sphere_cylinder.wgsl`):
+   ```wgsl
+   struct SphereCylinderContact {
+       sphere_index: u32,
+       cylinder_index: u32,
+       contact_point: vec3<f32>,
+       normal: vec3<f32>,
+       depth: f32,
+       _pad: vec3<f32>,
+   }
+   
+   @compute @workgroup_size(256)
+   fn detect_sphere_cylinder_contacts(
+       @builtin(global_invocation_id) global_id: vec3<u32>
+   ) {
+       // Implement sphere-cylinder collision detection
+       // Handle end caps and cylindrical surface separately
+   }
+   ```
+
+2. **Cylinder-Cylinder Collision** (`/shaders/detect_contacts_cylinder_cylinder.wgsl`):
+   ```wgsl
+   struct CylinderCylinderContact {
+       cylinder_a_index: u32,
+       cylinder_b_index: u32,
+       contact_point: vec3<f32>,
+       normal: vec3<f32>,
+       depth: f32,
+       _pad: vec3<f32>,
+   }
+   
+   @compute @workgroup_size(256) 
+   fn detect_cylinder_cylinder_contacts(
+       @builtin(global_invocation_id) global_id: vec3<u32>
+   ) {
+       // Implement cylinder-cylinder collision detection
+       // Handle parallel, intersecting, and skew cases
+   }
+   ```
+
+3. **Box-Cylinder Collision** (`/shaders/detect_contacts_box_cylinder.wgsl`):
+   ```wgsl
+   struct BoxCylinderContact {
+       box_index: u32,
+       cylinder_index: u32,
+       contact_point: vec3<f32>,
+       normal: vec3<f32>,
+       depth: f32,
+       _pad: vec3<f32>,
+   }
+   
+   @compute @workgroup_size(256)
+   fn detect_box_cylinder_contacts(
+       @builtin(global_invocation_id) global_id: vec3<u32>
+   ) {
+       // Implement box-cylinder collision detection
+       // Use separating axis theorem adapted for cylinder
+   }
+   ```
+
+4. **Add Compute Kernel Registrations** in `crates/compute/src/lib.rs`:
+   ```rust
+   pub enum Kernel {
+       // ... existing kernels ...
+       DetectContactsSphereCylinder,
+       DetectContactsCylinderCylinder, 
+       DetectContactsBoxCylinder,
+   }
+   ```
+
+5. **Implement Kernel Handlers** in `crates/compute/src/kernels/`:
+   - `detect_contacts_sphere_cylinder.rs`
+   - `detect_contacts_cylinder_cylinder.rs`
+   - `detect_contacts_box_cylinder.rs`
+
+6. **Update Physics Integration** in `crates/physics/src/simulation.rs`:
+   ```rust
+   impl PhysicsSim {
+       pub fn step_gpu(&mut self) -> Result<(), PhysicsError> {
+           // ... existing integration ...
+           
+           // Add missing collision detection calls
+           if !self.cylinders.is_empty() && !self.spheres.is_empty() {
+               let sphere_cylinder_contacts = self.detect_sphere_cylinder_contacts()?;
+               contacts.extend(sphere_cylinder_contacts);
+           }
+           
+           if self.cylinders.len() > 1 {
+               let cylinder_cylinder_contacts = self.detect_cylinder_cylinder_contacts()?;
+               contacts.extend(cylinder_cylinder_contacts);
+           }
+           
+           if !self.boxes.is_empty() && !self.cylinders.is_empty() {
+               let box_cylinder_contacts = self.detect_box_cylinder_contacts()?;
+               contacts.extend(box_cylinder_contacts);
+           }
+           
+           // ... continue with contact resolution ...
+       }
+   }
+   ```
+
+7. **Collision Pipeline Optimization**:
+   - Implement broad-phase filtering to reduce collision pairs
+   - Add spatial coherence optimization
+   - Optimize GPU memory access patterns
+   - Add collision culling for distant objects
+
+8. **CPU Implementation Parity** in `crates/physics/src/simulation.rs`:
+   ```rust
+   impl PhysicsSim {
+       pub fn step_cpu(&mut self) {
+           // ... existing CPU collision detection ...
+           
+           // Add missing collision pairs for CPU backend
+           self.detect_sphere_cylinder_collisions_cpu();
+           self.detect_cylinder_cylinder_collisions_cpu();
+           self.detect_box_cylinder_collisions_cpu();
+           
+           // ... continue with response ...
+       }
+   }
+   ```
+
+9. **Comprehensive Testing** in `tests/collision_matrix_comprehensive.rs`:
+   ```rust
+   #[test]
+   fn test_collision_matrix_completeness() {
+       // Verify all shape pairs can collide
+       let mut sim = PhysicsSim::new();
+       
+       // Add one of each primitive type
+       sim.add_sphere(Vec3::new(0.0, 0.0, 0.0), Vec3::ZERO, 1.0);
+       sim.add_box(Vec3::new(2.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0), Vec3::ZERO);
+       sim.add_cylinder(Vec3::new(4.0, 0.0, 0.0), 1.0, 2.0, Vec3::ZERO);
+       sim.add_plane(Vec3::new(0.0, 1.0, 0.0), -5.0);
+       
+       // Test all collision combinations
+       test_sphere_cylinder_collision(&mut sim);
+       test_cylinder_cylinder_collision(&mut sim);
+       test_box_cylinder_collision(&mut sim);
+   }
+
+   #[test]
+   fn test_sphere_cylinder_edge_cases() {
+       // Test collision with end caps
+       // Test grazing collisions
+       // Test high-speed impacts
+   }
+
+   #[test]
+   fn test_collision_performance() {
+       // Benchmark collision detection performance
+       // Verify O(n log n) or better complexity
+   }
+
+   #[test]
+   fn test_gpu_cpu_collision_parity() {
+       // Verify GPU and CPU backends produce identical results
+   }
+   ```
+
+### Advanced Features
+
+1. **Spatial Acceleration Integration**:
+   - Extend spatial grid to handle cylinder bounding volumes
+   - Implement hierarchical spatial structures for complex scenes
+   - Add temporal coherence for moving objects
+
+2. **Collision Optimization**:
+   - Early exit for separated objects
+   - Cached collision results for static objects
+   - Adaptive collision detection based on object speeds
+
+3. **Collision Quality Improvements**:
+   - Multiple contact points for large contact areas
+   - Proper friction direction calculation
+   - Collision warmstarting for stability
+
+### Success Criteria
+
+- All primitive shape pairs can collide correctly (sphere, box, cylinder, plane)
+- Collision detection produces stable, realistic contact forces
+- GPU and CPU implementations produce identical results
+- Performance scales well with scene complexity (target: 1000+ objects at 60fps)
+- Edge cases handled gracefully (grazing contacts, high speeds)
+- Energy and momentum conservation maintained across all collision types
+- Comprehensive test coverage for all collision combinations
+- No regression in existing collision detection quality
+
+### Integration Notes
+
+- This task is independent of Task 1A (joint system) and can be developed in parallel
+- Collision improvements will benefit all future development phases
+- Ensure contact data structure compatibility with existing constraint solver
+- Consider future soft body and deformable object support in API design
+- Document collision detection algorithms and edge case handling

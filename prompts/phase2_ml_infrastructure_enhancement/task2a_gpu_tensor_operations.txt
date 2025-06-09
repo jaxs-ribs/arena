@@ -1,0 +1,438 @@
+# JAXS Development Task: GPU Tensor Operations
+
+## Project Description
+
+JAXS (Just Another Exploration Substrate) is a differentiable physics and machine learning environment built in Rust with WebGPU. The project aims to create a platform for novelty-driven artificial life through physics simulation and reinforcement learning.
+
+**Key Architecture Principles:**
+- **WebGPU-First**: All compute operations target GPU via WGSL shaders
+- **Modular Design**: Clean separation between compute, physics, ML, render, and phenotype crates
+- **Zero-Copy**: Efficient GPU memory management with bytemuck for data layout
+- **Differentiable**: All operations must preserve gradient flow for end-to-end optimization
+
+**Critical Guidelines:**
+- Maintain GPU/CPU backend compatibility in the compute crate
+- Use `#[repr(C)]` and `bytemuck::Pod` for all GPU data structures
+- Follow existing test patterns with comprehensive coverage
+- Preserve backwards compatibility for existing APIs
+- Document all public interfaces with rustdoc
+- Use existing error types and handling patterns
+
+**Testing Requirements:**
+- Add unit tests for all new functionality
+- Include integration tests for cross-crate features
+- Verify GPU/CPU parity for compute operations
+- Test edge cases and error conditions
+- Maintain performance benchmarks where applicable
+
+## Phase 2: ML Infrastructure Enhancement
+
+**Goal**: Upgrade the ML framework to support modern RL algorithms and GPU acceleration
+
+This phase focuses on enhancing the machine learning capabilities to support advanced algorithms like Dreamer V3 and enable efficient training through GPU acceleration. The current ML framework operates on CPU with basic tensor operations and simple neural networks. This phase will add GPU tensor operations, implement the Dreamer V3 world model architecture, and expand the RL algorithm library to support state-of-the-art methods.
+
+## Task 2A: GPU Tensor Operations
+
+**Crate**: `crates/ml/`, `crates/compute/`
+**Primary Files**: `src/tensor.rs`, new GPU kernels
+**New Files**: `/shaders/conv2d.wgsl`, `/shaders/lstm_cell.wgsl`, `/shaders/batch_norm.wgsl`, etc.
+**Test Files**: `tests/gpu_tensor_ops.rs`
+**Complexity**: Medium-High
+**Dependencies**: None
+
+### Objective
+
+Accelerate ML operations by implementing comprehensive GPU tensor operations. Currently, all ML computation happens on CPU, which severely limits training speed and scalability. This task will implement essential neural network operations as GPU compute kernels while maintaining the existing CPU fallback functionality.
+
+### Current State Analysis
+
+**Existing ML Operations (CPU only)**:
+- ✅ Basic tensor arithmetic (add, mul, div, sub)
+- ✅ Matrix multiplication
+- ✅ Element-wise functions (relu, sigmoid, tanh)
+- ✅ Reductions (sum, mean)
+- ✅ Automatic differentiation (tape-based)
+- ❌ Convolution operations
+- ❌ Normalization layers
+- ❌ Recurrent operations (LSTM, GRU)
+- ❌ Advanced activations and pooling
+
+### Implementation Details
+
+1. **Convolution Operations** (`/shaders/conv1d.wgsl`, `/shaders/conv2d.wgsl`, `/shaders/conv3d.wgsl`):
+
+   **Conv2D Kernel**:
+   ```wgsl
+   struct Conv2DParams {
+       input_height: u32,
+       input_width: u32,
+       input_channels: u32,
+       output_channels: u32,
+       kernel_height: u32,
+       kernel_width: u32,
+       stride_h: u32,
+       stride_w: u32,
+       pad_h: u32,
+       pad_w: u32,
+       dilation_h: u32,
+       dilation_w: u32,
+   }
+
+   @compute @workgroup_size(16, 16, 1)
+   fn conv2d_forward(
+       @builtin(global_invocation_id) global_id: vec3<u32>
+   ) {
+       let batch_idx = global_id.z;
+       let out_y = global_id.y;
+       let out_x = global_id.x;
+       
+       // Implement convolution with optimized memory access
+       // Use shared memory for input tile caching
+       // Handle boundary conditions and padding
+   }
+   ```
+
+   **CPU Implementation** in `crates/ml/src/tensor.rs`:
+   ```rust
+   impl Tensor {
+       pub fn conv2d(&self, kernel: &Tensor, stride: [usize; 2], padding: [usize; 2]) -> Result<Tensor, TensorError> {
+           // CPU fallback implementation
+           // Use optimized BLAS if available
+           // Maintain exact parity with GPU version
+       }
+
+       pub fn conv2d_backward(&self, grad_output: &Tensor, input: &Tensor, kernel: &Tensor) -> Result<(Tensor, Tensor), TensorError> {
+           // Implement convolution gradients
+           // Return gradients for input and kernel
+       }
+   }
+   ```
+
+2. **Normalization Operations** (`/shaders/batch_norm.wgsl`, `/shaders/layer_norm.wgsl`):
+
+   **Batch Normalization**:
+   ```wgsl
+   struct BatchNormParams {
+       num_features: u32,
+       eps: f32,
+       momentum: f32,
+       training: u32,
+   }
+
+   @compute @workgroup_size(256, 1, 1)
+   fn batch_norm_forward(
+       @builtin(global_invocation_id) global_id: vec3<u32>
+   ) {
+       // Implement batch normalization
+       // Compute running statistics during training
+       // Apply learned scale and bias parameters
+   }
+   ```
+
+   **Layer Normalization**:
+   ```wgsl
+   @compute @workgroup_size(256, 1, 1) 
+   fn layer_norm_forward(
+       @builtin(global_invocation_id) global_id: vec3<u32>
+   ) {
+       // Implement layer normalization
+       // Normalize across feature dimension
+       // Apply learned parameters
+   }
+   ```
+
+3. **Recurrent Operations** (`/shaders/lstm_cell.wgsl`, `/shaders/gru_cell.wgsl`):
+
+   **LSTM Cell Implementation**:
+   ```wgsl
+   struct LSTMParams {
+       input_size: u32,
+       hidden_size: u32,
+       batch_size: u32,
+   }
+
+   @compute @workgroup_size(256, 1, 1)
+   fn lstm_cell_forward(
+       @builtin(global_invocation_id) global_id: vec3<u32>
+   ) {
+       // Implement LSTM forward pass
+       // Compute forget, input, output gates
+       // Update cell state and hidden state
+       
+       let batch_idx = global_id.x;
+       let hidden_idx = global_id.y;
+       
+       // Gate computations with sigmoid and tanh
+       // Efficient memory access patterns
+   }
+   ```
+
+4. **Pooling Operations** (`/shaders/pooling.wgsl`):
+
+   ```wgsl
+   @compute @workgroup_size(16, 16, 1)
+   fn max_pool2d_forward(
+       @builtin(global_invocation_id) global_id: vec3<u32>
+   ) {
+       // Implement max pooling with index tracking for backprop
+   }
+
+   @compute @workgroup_size(16, 16, 1)
+   fn avg_pool2d_forward(
+       @builtin(global_invocation_id) global_id: vec3<u32>
+   ) {
+       // Implement average pooling
+   }
+   ```
+
+5. **Advanced Activations** (`/shaders/activations.wgsl`):
+
+   ```wgsl
+   @compute @workgroup_size(256, 1, 1)
+   fn gelu_forward(
+       @builtin(global_invocation_id) global_id: vec3<u32>
+   ) {
+       // Implement GELU activation
+       // x * 0.5 * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x³)))
+   }
+
+   @compute @workgroup_size(256, 1, 1)
+   fn swish_forward(
+       @builtin(global_invocation_id) global_id: vec3<u32>
+   ) {
+       // Implement Swish activation: x * sigmoid(x)
+   }
+   ```
+
+6. **Compute Kernel Registration** in `crates/compute/src/lib.rs`:
+
+   ```rust
+   pub enum Kernel {
+       // ... existing kernels ...
+       
+       // Convolution
+       Conv1D,
+       Conv2D,
+       Conv3D,
+       Conv1DBackward,
+       Conv2DBackward,
+       Conv3DBackward,
+       
+       // Normalization
+       BatchNorm,
+       BatchNormBackward,
+       LayerNorm,
+       LayerNormBackward,
+       
+       // Recurrent
+       LSTMCell,
+       LSTMCellBackward,
+       GRUCell,
+       GRUCellBackward,
+       
+       // Pooling
+       MaxPool2D,
+       MaxPool2DBackward,
+       AvgPool2D,
+       AvgPool2DBackward,
+       
+       // Activations
+       GELU,
+       GELUBackward,
+       Swish,
+       SwishBackward,
+   }
+   ```
+
+7. **ML Framework Integration** in `crates/ml/src/tensor.rs`:
+
+   ```rust
+   impl Tensor {
+       pub fn use_gpu(&mut self, enable: bool) {
+           self.backend = if enable { Backend::GPU } else { Backend::CPU };
+       }
+
+       pub fn conv2d_gpu(&self, kernel: &Tensor, params: Conv2DParams) -> Result<Tensor, TensorError> {
+           // Dispatch to GPU kernel
+           let buffer_views = self.prepare_conv2d_buffers(kernel, &params)?;
+           let result = self.backend.dispatch(&Kernel::Conv2D, &buffer_views, params.workgroups())?;
+           Ok(Tensor::from_gpu_buffer(result[0].clone()))
+       }
+
+       pub fn lstm_forward_gpu(&self, hidden: &Tensor, cell: &Tensor, weights: &LSTMWeights) -> Result<(Tensor, Tensor), TensorError> {
+           // GPU LSTM implementation
+           // Return new hidden and cell states
+       }
+   }
+   ```
+
+8. **Gradient Computation Updates** in `crates/ml/src/tape.rs`:
+
+   ```rust
+   impl Tape {
+       pub fn record_conv2d(&mut self, input: TensorId, kernel: TensorId, output: TensorId, params: Conv2DParams) {
+           self.operations.push(Operation::Conv2D {
+               input,
+               kernel,
+               output,
+               params,
+           });
+       }
+
+       pub fn backward_conv2d(&self, grad_output: &Tensor, input: &Tensor, kernel: &Tensor, params: &Conv2DParams) -> Result<(Tensor, Tensor), TensorError> {
+           // Compute gradients for convolution
+           // Return input gradient and kernel gradient
+       }
+   }
+   ```
+
+9. **Neural Network Layer Updates** in `crates/ml/src/nn.rs`:
+
+   ```rust
+   pub struct Conv2D {
+       weight: Tensor,
+       bias: Option<Tensor>,
+       stride: [usize; 2],
+       padding: [usize; 2],
+       use_gpu: bool,
+   }
+
+   impl Conv2D {
+       pub fn forward(&self, input: &Tensor) -> Result<Tensor, MLError> {
+           if self.use_gpu {
+               input.conv2d_gpu(&self.weight, self.conv_params())
+           } else {
+               input.conv2d(&self.weight, self.stride, self.padding)
+           }
+       }
+   }
+
+   pub struct LSTM {
+       weight_ih: Tensor,
+       weight_hh: Tensor,
+       bias_ih: Option<Tensor>,
+       bias_hh: Option<Tensor>,
+       hidden_size: usize,
+       use_gpu: bool,
+   }
+
+   impl LSTM {
+       pub fn forward(&self, input: &Tensor, state: Option<(Tensor, Tensor)>) -> Result<(Tensor, (Tensor, Tensor)), MLError> {
+           // Forward pass through LSTM layer
+           // Handle sequence processing
+       }
+   }
+   ```
+
+10. **Comprehensive Testing** in `tests/gpu_tensor_ops.rs`:
+
+    ```rust
+    #[test]
+    fn test_conv2d_gpu_cpu_parity() {
+        let input = Tensor::randn(&[1, 3, 32, 32]); // NCHW format
+        let kernel = Tensor::randn(&[64, 3, 3, 3]); // OIHW format
+        
+        let output_cpu = input.conv2d(&kernel, [1, 1], [1, 1]).unwrap();
+        let output_gpu = input.conv2d_gpu(&kernel, Conv2DParams::new([1, 1], [1, 1])).unwrap();
+        
+        assert_tensors_close(&output_cpu, &output_gpu, 1e-5);
+    }
+
+    #[test]
+    fn test_lstm_forward_backward() {
+        let seq_len = 10;
+        let batch_size = 4;
+        let input_size = 8;
+        let hidden_size = 16;
+        
+        let input = Tensor::randn(&[seq_len, batch_size, input_size]);
+        let lstm = LSTM::new(input_size, hidden_size, true); // GPU enabled
+        
+        let (output, final_state) = lstm.forward(&input, None).unwrap();
+        
+        // Test shapes
+        assert_eq!(output.shape(), &[seq_len, batch_size, hidden_size]);
+        assert_eq!(final_state.0.shape(), &[batch_size, hidden_size]);
+        assert_eq!(final_state.1.shape(), &[batch_size, hidden_size]);
+        
+        // Test gradient computation
+        let loss = output.sum();
+        let gradients = loss.backward().unwrap();
+        assert!(gradients.contains_key(&input.id()));
+    }
+
+    #[test]
+    fn test_batch_norm_training_inference() {
+        let batch_size = 8;
+        let channels = 16;
+        let height = 32;
+        let width = 32;
+        
+        let input = Tensor::randn(&[batch_size, channels, height, width]);
+        let bn = BatchNorm2D::new(channels, true); // GPU enabled
+        
+        // Training mode
+        bn.train();
+        let output_train = bn.forward(&input).unwrap();
+        
+        // Inference mode
+        bn.eval();
+        let output_eval = bn.forward(&input).unwrap();
+        
+        // Outputs should be different (running stats vs batch stats)
+        assert!(!tensors_equal(&output_train, &output_eval));
+    }
+
+    #[test]
+    fn test_performance_improvement() {
+        let large_input = Tensor::randn(&[32, 128, 224, 224]);
+        let kernel = Tensor::randn(&[256, 128, 3, 3]);
+        
+        let start_cpu = std::time::Instant::now();
+        let _output_cpu = large_input.conv2d(&kernel, [1, 1], [1, 1]).unwrap();
+        let cpu_time = start_cpu.elapsed();
+        
+        let start_gpu = std::time::Instant::now();
+        let _output_gpu = large_input.conv2d_gpu(&kernel, Conv2DParams::new([1, 1], [1, 1])).unwrap();
+        let gpu_time = start_gpu.elapsed();
+        
+        // GPU should be significantly faster for large operations
+        assert!(gpu_time < cpu_time / 5); // At least 5x speedup
+    }
+    ```
+
+### Performance Optimization Strategies
+
+1. **Memory Access Optimization**:
+   - Use shared memory in workgroups for data reuse
+   - Optimize memory coalescing patterns
+   - Minimize global memory transactions
+
+2. **Kernel Fusion**:
+   - Combine operations to reduce memory bandwidth
+   - Fuse activation functions with convolutions
+   - Combine normalization with other operations
+
+3. **Precision Management**:
+   - Support FP16 for memory bandwidth improvement
+   - Mixed precision training capabilities
+   - Automatic precision selection based on operation
+
+### Success Criteria
+
+- 10x+ speedup for large tensor operations on GPU vs CPU
+- Complete GPU/CPU parity for all implemented operations
+- Gradient computation works correctly for all new operations
+- Memory usage is efficient and doesn't exceed GPU limits
+- All neural network layers can run on GPU
+- Comprehensive test coverage with edge cases
+- Performance scales well with input size
+- Integration with existing ML framework is seamless
+
+### Integration Notes
+
+- This task enables GPU acceleration for Tasks 2B and 2C
+- GPU tensor operations will significantly speed up creature evolution in Phase 4
+- Visualization of neural network activations will be added in Phase 3
+- Ensure backwards compatibility with existing CPU-only code
+- Document GPU memory requirements and limitations clearly
