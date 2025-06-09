@@ -32,13 +32,18 @@ pub enum EOp {
 /// A node in the computation graph, representing a single operation.
 #[derive(Clone)]
 pub struct Node {
+    /// The operation this node represents.
     pub op: EOp,
+    /// Identifier of the first input tensor.
     pub a: usize,
+    /// Identifier of the second input tensor.
     pub b: usize,
+    /// Identifier of the output tensor produced by the operation.
     pub out: usize,
 }
 /// A computation graph that records operations but does not compute gradients.
 pub struct Graph {
+    /// Recorded nodes in execution order.
     nodes: Vec<Node>,
 }
 

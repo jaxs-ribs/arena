@@ -29,6 +29,8 @@ impl Dense {
         }
     }
 
+    /// Creates a layer with randomly initialized parameters using
+    /// Glorot uniform initialization.
     pub fn random(in_d: usize, out_d: usize, _seed: u64) -> Self {
         // Glorot initialization
         let limit = (6.0 / (in_d + out_d) as f32).sqrt();
