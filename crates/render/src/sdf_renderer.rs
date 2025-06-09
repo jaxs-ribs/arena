@@ -13,25 +13,43 @@ use winit::window::{Window, WindowBuilder};
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
+/// Uniform buffer that stores camera matrices for the SDF renderer.
+///
+/// The buffer contains both the view projection matrix and its inverse as well
+/// as the current eye position which are required by the ray marching shader.
 struct CameraUniform {
+    /// Combined view projection matrix used for rendering.
     view_proj: [[f32; 4]; 4],
+    /// Inverse of [`view_proj`] used to transform rays into world space.
     view_proj_inv: [[f32; 4]; 4],
+    /// Camera position in world coordinates.
     eye: [f32; 4],
 }
 
+/// Simple first person camera used by [`SdfRenderer`].
 struct Camera {
+    /// Camera position.
     eye: Vec3,
+    /// Look at target.
     target: Vec3,
+    /// Up vector.
     up: Vec3,
+    /// Render target aspect ratio.
     aspect: f32,
+    /// Field of view in radians.
     fovy: f32,
+    /// Near clipping plane distance.
     znear: f32,
+    /// Far clipping plane distance.
     zfar: f32,
+    /// Horizontal rotation of the camera.
     yaw: f32,
+    /// Vertical rotation of the camera.
     pitch: f32,
 }
 
 impl Camera {
+    /// Computes a view projection matrix from the camera parameters.
     fn build_view_projection_matrix(&self) -> Mat4 {
         let view = Mat4::look_at_rh(self.eye, self.target, self.up);
         let proj = Mat4::perspective_rh(self.fovy, self.aspect, self.znear, self.zfar);
@@ -41,38 +59,51 @@ impl Camera {
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
+/// GPU representation of a [`Sphere`].
 struct SphereGpu {
+    /// Sphere position.
     pos: [f32; 3],
     _pad: f32,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
+/// GPU representation of a box.
 struct BoxGpu {
+    /// Box centre position.
     pos: [f32; 3],
     _pad1: f32,
+    /// Half extents of the box.
     half_extents: [f32; 3],
     _pad2: f32,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
+/// GPU representation of a cylinder.
 struct CylinderGpu {
+    /// Cylinder centre position.
     pos: [f32; 3],
+    /// Cylinder radius.
     radius: f32,
+    /// Height of the cylinder.
     height: f32,
     _pad0: [f32; 3],
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
+/// GPU representation of a plane.
 struct PlaneGpu {
+    /// Plane normal.
     normal: [f32; 3],
+    /// Distance from the origin.
     d: f32,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
+/// Keeps track of how many primitives are currently stored in the scene buffers.
 struct SceneCounts {
     spheres: u32,
     boxes: u32,
@@ -80,6 +111,7 @@ struct SceneCounts {
     planes: u32,
 }
 
+/// A simple ray-marched renderer used for visualising signed distance fields.
 pub struct SdfRenderer {
     event_loop: EventLoop<()>,
     surface: wgpu::Surface<'static>,
@@ -103,6 +135,10 @@ pub struct SdfRenderer {
 }
 
 impl SdfRenderer {
+    /// Create a new renderer and associated window.
+    ///
+    /// This sets up all GPU resources necessary for rendering the SDF scene and
+    /// returns an instance ready to be updated each frame.
     #[allow(clippy::too_many_lines)]
     pub fn new() -> Result<Self> {
         let event_loop = EventLoop::new().context("create event loop")?;
@@ -343,6 +379,7 @@ impl SdfRenderer {
         })
     }
 
+    /// Update the GPU buffers with the provided scene objects.
     #[allow(clippy::too_many_arguments)]
     pub fn update_scene(
         &mut self,
@@ -433,6 +470,7 @@ impl SdfRenderer {
         }
     }
 
+    /// Handle keyboard input and update the camera position.
     fn update_camera(&mut self, dt: f32) {
         let speed = 5.0 * dt;
         let mut forward = Vec3::new(self.camera.yaw.cos(), 0.0, self.camera.yaw.sin());
@@ -456,6 +494,9 @@ impl SdfRenderer {
         forward.y = 0.0;
     }
 
+    /// Render a frame of the current scene and process window events.
+    ///
+    /// Returns `Ok(false)` if the window was closed.
     pub fn render(&mut self) -> Result<bool> {
         let mut exit = false;
         let start = std::time::Instant::now();

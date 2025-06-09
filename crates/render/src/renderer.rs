@@ -11,21 +11,35 @@ use winit::window::{Window, WindowBuilder};
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
+/// Uniform buffer representation of the camera matrices used by the shaders.
+///
+/// The struct is marked as [`Pod`] so it can be transferred directly to the GPU
+/// without any padding concerns.
 struct CameraUniform {
+    /// Combined view projection matrix used by the vertex shader.
     view_proj: [[f32; 4]; 4],
 }
 
+/// Simple perspective camera used for the debug renderer.
 struct Camera {
+    /// Camera position in world space.
     eye: Vec3,
+    /// Point the camera is looking at.
     target: Vec3,
+    /// Up vector of the camera.
     up: Vec3,
+    /// Aspect ratio of the render target.
     aspect: f32,
+    /// Field of view in radians.
     fovy: f32,
+    /// Near clipping plane distance.
     znear: f32,
+    /// Far clipping plane distance.
     zfar: f32,
 }
 
 impl Camera {
+    /// Creates a combined view projection matrix from the camera parameters.
     fn build_view_projection_matrix(&self) -> Mat4 {
         let view = Mat4::look_at_rh(self.eye, self.target, self.up);
         let proj = Mat4::perspective_rh(self.fovy, self.aspect, self.znear, self.zfar);
@@ -33,6 +47,7 @@ impl Camera {
     }
 }
 
+/// Extremely small renderer that draws simple colored triangles for debugging.
 pub struct Renderer {
     event_loop: EventLoop<()>,
     surface: wgpu::Surface<'static>,
@@ -50,6 +65,10 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// Create a new renderer and open a window.
+    ///
+    /// The function initialises `wgpu`, sets up a pipeline for drawing colored
+    /// triangles and allocates buffers required for rendering.
     pub fn new() -> Result<Self> {
         let event_loop = EventLoop::new().context("create event loop")?;
         let window = WindowBuilder::new()
@@ -212,6 +231,11 @@ impl Renderer {
         })
     }
 
+    /// Update the internal vertex buffer with a set of spheres.
+    ///
+    /// Each sphere is approximated with a small cube to keep the vertex count
+    /// very small. The vertices are uploaded to the GPU on the next render
+    /// call.
     pub fn update_spheres(&mut self, spheres: &[Sphere]) {
         self.vertices.clear();
         let point_size = 0.5;
@@ -291,6 +315,10 @@ impl Renderer {
         }
     }
 
+    /// Render a single frame and poll the window for events.
+    ///
+    /// Returns `Ok(false)` when the window was closed and the application
+    /// should exit. Otherwise `Ok(true)` is returned.
     pub fn render(&mut self) -> Result<bool> {
         let mut exit_requested = false;
         let status = self
