@@ -1,6 +1,4 @@
-use crate::types::{
-    Joint, JointParams, PhysParams, Sphere, Vec3, JOINT_TYPE_DISTANCE,
-};
+use crate::types::{Joint, JointParams, PhysParams, Sphere, Vec3};
 use compute::{ComputeBackend, ComputeError};
 use std::mem::size_of;
 use std::sync::Arc;
@@ -91,12 +89,8 @@ impl PhysicsSim {
         self.joints.push(Joint {
             body_a,
             body_b,
-            joint_type: JOINT_TYPE_DISTANCE,
             rest_length,
-            local_anchor_a: Vec3::new(0.0, 0.0, 0.0),
-            local_anchor_b: Vec3::new(0.0, 0.0, 0.0),
-            local_axis_a: Vec3::new(0.0, 0.0, 0.0),
-            local_axis_b: Vec3::new(0.0, 0.0, 0.0),
+            _padding: 0,
         });
     }
 
@@ -116,8 +110,6 @@ impl PhysicsSim {
         if self.spheres.is_empty() {
             return Ok(());
         }
-
-        // INTEGRATE
         let sphere_bytes: Arc<[u8]> = bytemuck::cast_slice(&self.spheres).to_vec().into();
         let sphere_buffer_view = compute::BufferView::new(
             sphere_bytes.clone(),
@@ -129,19 +121,18 @@ impl PhysicsSim {
         #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
         struct RawPhysParams {
             gravity: Vec3,
-            _pad1: f32,
             dt: f32,
-            _pad2: [f32; 3],
+            _padding1: f32,
+            _padding2: f32,
         }
         let raw_params = RawPhysParams {
             gravity: self.params.gravity,
-            _pad1: 0.0,
             dt: self.params.dt,
-            _pad2: [0.0; 3],
+            _padding1: 0.0,
+            _padding2: 0.0,
         };
         let params_bytes: Arc<[u8]> = bytemuck::bytes_of(&raw_params).to_vec().into();
-        let params_buffer_view =
-            compute::BufferView::new(params_bytes, vec![1], size_of::<RawPhysParams>());
+        let params_buffer_view = compute::BufferView::new(params_bytes, vec![1], size_of::<RawPhysParams>());
 
         let forces_bytes: Arc<[u8]> = bytemuck::cast_slice(&self.params.forces).to_vec().into();
         let forces_buffer_view = compute::BufferView::new(
@@ -153,135 +144,249 @@ impl PhysicsSim {
         let num_spheres = self.spheres.len() as u32;
         let workgroups_x = (num_spheres + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
 
-        let integration_result = self.backend.dispatch(
+        let result_buffers = self.backend.dispatch(
             &compute::Kernel::IntegrateBodies,
-            &[
-                sphere_buffer_view,
-                params_buffer_view,
-                forces_buffer_view,
-            ],
+            &[sphere_buffer_view.clone(), params_buffer_view, forces_buffer_view],
             [workgroups_x, 1, 1],
         )?;
-        let integrated_spheres_bytes: Arc<[u8]> = if integration_result.is_empty() {
-            sphere_bytes
-        } else {
-            integration_result[0].clone().into()
-        };
 
-        // CONTACTS
+        if let Some(updated) = result_buffers.get(0) {
+            if updated.len() == self.spheres.len() * size_of::<Sphere>() {
+                let new_spheres: Vec<Sphere> = updated
+                    .chunks_exact(size_of::<Sphere>())
+                    .map(bytemuck::pod_read_unaligned)
+                    .collect();
+                self.spheres.clone_from_slice(&new_spheres);
+            }
+        }
+
         #[repr(C)]
         #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-        struct ContactVec3 { x: f32, y: f32, z: f32 }
+        struct ContactVec3 {
+            x: f32,
+            y: f32,
+            z: f32,
+        }
+        #[repr(C)]
+        #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+        struct ContactBody {
+            pos: ContactVec3,
+        }
         #[repr(C)]
         #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
         struct PbdContact {
             body_index: u32,
             normal: ContactVec3,
             depth: f32,
+            _pad: [f32; 3],
+        }
+
+        let contact_bodies: Vec<ContactBody> = self
+            .spheres
+            .iter()
+            .map(|s| ContactBody {
+                pos: ContactVec3 {
+                    x: s.pos.x,
+                    y: s.pos.y,
+                    z: s.pos.z,
+                },
+            })
+            .collect();
+
+        let body_bytes: Arc<[u8]> = bytemuck::cast_slice(&contact_bodies).to_vec().into();
+        let body_view = compute::BufferView::new(body_bytes, vec![contact_bodies.len()], size_of::<ContactBody>());
+
+        let placeholder: Arc<[u8]> =
+            vec![0u8; contact_bodies.len() * contact_bodies.len() * size_of::<PbdContact>()].into();
+        let contacts_view = compute::BufferView::new(
+            placeholder,
+            vec![contact_bodies.len() * contact_bodies.len()],
+            size_of::<PbdContact>(),
+        );
+
+        let sphere_contact_buffers = self.backend.dispatch(
+            &compute::Kernel::DetectContactsSphere,
+            &[body_view, contacts_view],
+            [1, 1, 1],
+        )?;
+
+        let mut contacts_pbd: Vec<PbdContact> = if let Some(bytes) = sphere_contact_buffers.get(0) {
+            bytes
+                .chunks_exact(size_of::<PbdContact>())
+                .map(bytemuck::pod_read_unaligned)
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        #[repr(C)]
+        #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+        struct SdfVec3 {
+            x: f32,
+            y: f32,
+            z: f32,
+        }
+        #[repr(C)]
+        #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+        struct SdfBody {
+            pos: SdfVec3,
+        }
+        #[repr(C)]
+        #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+        struct BoxVec3 {
+            x: f32,
+            y: f32,
+            z: f32,
+        }
+        #[repr(C)]
+        #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+        struct BoxShapeInternal {
+            center: BoxVec3,
+            half_extents: BoxVec3,
         }
         #[repr(C)]
         #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
         struct BoxContact {
             body_index: u32,
-            normal: ContactVec3,
+            normal: BoxVec3,
             depth: f32,
+            _pad: [f32; 3],
         }
 
-        // Sphere-Sphere
-        let sphere_contacts_placeholder: Arc<[u8]> =
-            vec![0u8; self.spheres.len() * self.spheres.len() * size_of::<PbdContact>()].into();
-        
-        let sphere_contact_buffers = self.backend.dispatch(
-            &compute::Kernel::DetectContactsSphere,
-            &[
-                compute::BufferView::new(integrated_spheres_bytes.clone(), vec![self.spheres.len()], size_of::<Sphere>()),
-                compute::BufferView::new(sphere_contacts_placeholder.clone(), vec![self.spheres.len() * self.spheres.len()], size_of::<PbdContact>())
-            ],
-            [1, 1, 1],
-        )?;
-        let sphere_contacts_bytes: Arc<[u8]> = if sphere_contact_buffers.is_empty() {
-            sphere_contacts_placeholder
-        } else {
-            sphere_contact_buffers[0].clone().into()
-        };
+        let bodies: Vec<SdfBody> = self
+            .spheres
+            .iter()
+            .map(|s| SdfBody {
+                pos: SdfVec3 {
+                    x: s.pos.x,
+                    y: s.pos.y,
+                    z: s.pos.z,
+                },
+            })
+            .collect();
 
-        // Sphere-Box
-        #[repr(C)]
-        #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-        struct BoxShapeInternal {
-            center: ContactVec3,
-            _pad1: f32,
-            half_extents: ContactVec3,
-            _pad2: f32,
-        }
+        let bodies_bytes: Arc<[u8]> = bytemuck::cast_slice(&bodies).to_vec().into();
+        let bodies_view = compute::BufferView::new(bodies_bytes, vec![bodies.len()], size_of::<SdfBody>());
+
         let ground_box = BoxShapeInternal {
-            center: ContactVec3 { x: 0.0, y: -1.0, z: 0.0 },
-            _pad1: 0.0,
-            half_extents: ContactVec3 { x: 10.0, y: 1.0, z: 10.0 },
-            _pad2: 0.0,
+            center: BoxVec3 { x: 0.0, y: -1.0, z: 0.0 },
+            half_extents: BoxVec3 { x: 5.0, y: 1.0, z: 5.0 },
         };
         let box_bytes: Arc<[u8]> = bytemuck::bytes_of(&ground_box).to_vec().into();
-        let box_contacts_placeholder: Arc<[u8]> = vec![0u8; self.spheres.len() * size_of::<BoxContact>()].into();
+        let box_view = compute::BufferView::new(box_bytes, vec![1], size_of::<BoxShapeInternal>());
 
-        let box_contact_buffers = self.backend.dispatch(
+        let placeholder: Arc<[u8]> = vec![0u8; bodies.len() * size_of::<BoxContact>()].into();
+        let contacts_view = compute::BufferView::new(placeholder, vec![bodies.len()], size_of::<BoxContact>());
+
+        let contact_buffers = self.backend.dispatch(
             &compute::Kernel::DetectContactsBox,
-            &[
-                compute::BufferView::new(integrated_spheres_bytes.clone(), vec![self.spheres.len()], size_of::<Sphere>()),
-                compute::BufferView::new(box_bytes, vec![1], size_of::<BoxShapeInternal>()),
-                compute::BufferView::new(box_contacts_placeholder.clone(), vec![self.spheres.len()], size_of::<BoxContact>())
-            ],
+            &[bodies_view, box_view, contacts_view],
             [1, 1, 1],
         )?;
-        let box_contacts_bytes: Arc<[u8]> = if box_contact_buffers.is_empty() {
-            box_contacts_placeholder
+
+        let contacts_box: Vec<PbdContact> = if let Some(bytes) = contact_buffers.get(0) {
+            bytes
+                .chunks_exact(size_of::<BoxContact>())
+                .map(bytemuck::pod_read_unaligned)
+                .map(|c: BoxContact| PbdContact {
+                    body_index: c.body_index,
+                    normal: ContactVec3 { x: c.normal.x, y: c.normal.y, z: c.normal.z },
+                    depth: c.depth,
+                    _pad: [0.0; 3],
+                })
+                .collect()
         } else {
-            box_contact_buffers[0].clone().into()
+            Vec::new()
         };
 
-        // Solve Contacts
-        self.backend.dispatch(
+        contacts_pbd.extend(contacts_box);
+
+        let contacts_bytes: Arc<[u8]> = bytemuck::cast_slice(&contacts_pbd).to_vec().into();
+        let contacts_view = compute::BufferView::new(
+            contacts_bytes,
+            vec![contacts_pbd.len()],
+            size_of::<PbdContact>(),
+        );
+
+        let sphere_bytes: Arc<[u8]> = bytemuck::cast_slice(&self.spheres).to_vec().into();
+        let spheres_view = compute::BufferView::new(
+            sphere_bytes.clone(),
+            vec![self.spheres.len()],
+            size_of::<Sphere>(),
+        );
+        let params_placeholder: Arc<[u8]> = vec![0u8; 4].into();
+        let params_view = compute::BufferView::new(params_placeholder, vec![1], 4);
+
+        let solved = self.backend.dispatch(
             &compute::Kernel::SolveContactsPBD,
-            &[
-                compute::BufferView::new(integrated_spheres_bytes.clone(), vec![self.spheres.len()], size_of::<Sphere>()),
-                compute::BufferView::new(box_contacts_bytes, vec![self.spheres.len()], size_of::<BoxContact>()),
-                compute::BufferView::new(sphere_contacts_bytes, vec![self.spheres.len() * self.spheres.len()], size_of::<PbdContact>()),
-            ],
+            &[spheres_view, contacts_view, params_view],
             [1, 1, 1],
         )?;
 
-        // JOINTS
-        if !self.joints.is_empty() {
-            let joint_bytes: Arc<[u8]> = bytemuck::cast_slice(&self.joints).to_vec().into();
-            #[repr(C)]
-            #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-            struct SolveParams {
-                compliance: f32,
-                _pad: [f32; 3],
+        if let Some(bytes) = solved.get(0) {
+            if bytes.len() == self.spheres.len() * size_of::<Sphere>() {
+                let updated: Vec<Sphere> = bytes
+                    .chunks_exact(size_of::<Sphere>())
+                    .map(bytemuck::pod_read_unaligned)
+                    .collect();
+                self.spheres.clone_from_slice(&updated);
             }
-            let solve_params = SolveParams {
-                compliance: self.joint_params.compliance,
-                _pad: [0.0; 3],
-            };
-            let params_bytes: Arc<[u8]> = bytemuck::bytes_of(&solve_params).to_vec().into();
-    
-            self.backend.dispatch(
-                &compute::Kernel::SolveJointsPBD,
-                &[
-                    compute::BufferView::new(integrated_spheres_bytes.clone(), vec![self.spheres.len()], size_of::<Sphere>()),
-                    compute::BufferView::new(joint_bytes, vec![self.joints.len()], size_of::<Joint>()),
-                    compute::BufferView::new(params_bytes, vec![1], size_of::<SolveParams>())
-                ],
-                [1, 1, 1],
-            )?;
         }
 
-        if integrated_spheres_bytes.len() == self.spheres.len() * size_of::<Sphere>() {
-            let new_spheres: Vec<Sphere> = integrated_spheres_bytes
-                .chunks_exact(size_of::<Sphere>())
-                .map(bytemuck::pod_read_unaligned)
-                .collect();
-            self.spheres.clone_from_slice(&new_spheres);
+        #[repr(C)]
+        #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+        struct JointVec3 {
+            x: f32,
+            y: f32,
+            z: f32,
         }
+        #[repr(C)]
+        #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+        struct JointBody {
+            pos: JointVec3,
+        }
+
+        let joint_bodies: Vec<JointBody> = self
+            .spheres
+            .iter()
+            .map(|s| JointBody {
+                pos: JointVec3 {
+                    x: s.pos.x,
+                    y: s.pos.y,
+                    z: s.pos.z,
+                },
+            })
+            .collect();
+
+        let body_bytes: Arc<[u8]> = bytemuck::cast_slice(&joint_bodies).to_vec().into();
+        let body_view = compute::BufferView::new(body_bytes, vec![joint_bodies.len()], size_of::<JointBody>());
+
+        let joint_bytes: Arc<[u8]> = bytemuck::cast_slice(&self.joints).to_vec().into();
+        let joint_view = compute::BufferView::new(joint_bytes, vec![self.joints.len()], size_of::<Joint>());
+
+        let joint_param_bytes: Arc<[u8]> = bytemuck::bytes_of(&self.joint_params).to_vec().into();
+        let joint_param_view = compute::BufferView::new(joint_param_bytes, vec![1], size_of::<JointParams>());
+
+        let solved = self.backend.dispatch(
+            &compute::Kernel::SolveJointsPBD,
+            &[body_view, joint_view, joint_param_view],
+            [1, 1, 1],
+        )?;
+
+        if let Some(bytes) = solved.get(0) {
+            if bytes.len() == self.spheres.len() * size_of::<JointBody>() {
+                let updated: Vec<JointBody> = bytes
+                    .chunks_exact(size_of::<JointBody>())
+                    .map(bytemuck::pod_read_unaligned)
+                    .collect();
+                for (sphere, upd) in self.spheres.iter_mut().zip(updated) {
+                    sphere.pos.x = upd.pos.x;
+                    sphere.pos.y = upd.pos.y;
+                    sphere.pos.z = upd.pos.z;
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -289,7 +394,7 @@ impl PhysicsSim {
         if self.spheres.is_empty() {
             return Err(PhysicsError::NoSpheres);
         }
-        self.params.dt = dt / steps as f32;
+        self.params.dt = dt;
 
         for _ in 0..steps {
             self.step_gpu()?;
