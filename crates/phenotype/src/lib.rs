@@ -7,7 +7,10 @@
 //! crates to build controllable creatures for simulation or training.
 
 use anyhow::Result;
-use physics::{PhysicsSim, Vec3};
+use physics::{
+    types::{Vec2, Vec3},
+    PhysicsSim,
+};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -161,7 +164,7 @@ impl Phenotype {
                     map.insert(id, idx);
                 }
                 Body::Plane { id, normal, d } => {
-                    let idx = sim.add_plane(Vec3::new(normal[0], normal[1], normal[2]), d);
+                    let idx = sim.add_plane(Vec3::new(normal[0], normal[1], normal[2]), d, Vec2::new(0.0, 0.0));
                     map.insert(id, idx);
                 }
             }

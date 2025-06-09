@@ -22,7 +22,10 @@
 //! on servers or in environments where a GUI is not available.
 
 use anyhow::Result;
-use physics::{PhysicsSim, Vec3};
+use physics::{
+    types::{Vec2, Vec3},
+    PhysicsSim,
+};
 use std::time::{Duration, Instant};
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
@@ -67,11 +70,11 @@ pub fn run(enable_render: bool) -> Result<()> {
     sim.params.gravity = Vec3::new(0.0, -9.81, 0.0);
 
     // Ground plane at y=0
-    sim.add_plane(Vec3::new(0.0, 1.0, 0.0), 0.0);
+    sim.add_plane(Vec3::new(0.0, 1.0, 0.0), 0.0, Vec2::new(25.0, 25.0));
 
     // Tilted ramp plane
     let ramp_normal = Vec3::new(0.3, 1.0, 0.0).normalize();
-    sim.add_plane(ramp_normal, -2.0);
+    sim.add_plane(ramp_normal, -2.0, Vec2::new(0.0, 0.0));
 
     // Test sphere-sphere collisions with stacked spheres
     sim.add_sphere(Vec3::new(0.0, 3.0, 0.0), Vec3::ZERO, 1.0); // Bottom sphere on ground

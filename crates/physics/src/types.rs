@@ -351,7 +351,21 @@ pub struct Cylinder {
     pub material: Material,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Vec2 {
+    pub x: f32,
+    pub y: f32,
+}
+
+impl Vec2 {
+    pub const fn new(x: f32, y: f32) -> Self {
+        Self { x, y }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 /// An infinite plane used as a static collision primitive.
 ///
 /// A plane is defined by its normal vector and its distance from the origin.
@@ -363,6 +377,10 @@ pub struct Plane {
     /// The distance of the plane from the origin, along its normal vector.
     /// The plane equation is `normal.dot(x) + d = 0`.
     pub d: f32,
+    /// The extents of the plane, for rendering as a finite quad.
+    /// If `None` or zero, the plane is treated as infinite.
+    pub extents: Vec2,
+    pub _pad: [f32; 2],
 }
 
 /// A uniform spatial grid for broad-phase collision detection.

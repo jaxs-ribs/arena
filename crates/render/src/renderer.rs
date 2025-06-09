@@ -187,6 +187,9 @@ struct PlaneGpu {
     normal: [f32; 3],
     /// Distance from the origin.
     d: f32,
+    /// Plane extents for finite rendering.
+    extents: [f32; 2],
+    _pad: [f32; 2],
 }
 
 #[repr(C)]
@@ -565,7 +568,12 @@ impl Renderer {
 
         let plane_data: Vec<_> = planes
             .iter()
-            .map(|p| PlaneGpu { normal: p.normal.into(), d: p.d })
+            .map(|p| PlaneGpu {
+                normal: p.normal.into(),
+                d: p.d,
+                extents: [p.extents.x, p.extents.y],
+                _pad: [0.0; 2],
+            })
             .collect();
         self.queue.write_buffer(&self.planes_buffer, 0, bytemuck::cast_slice(&plane_data));
 

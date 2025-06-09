@@ -37,6 +37,8 @@ struct Cylinder {
 struct Plane {
     normal: vec3<f32>,
     d: f32,
+    extents: vec2<f32>,
+    _pad: vec2<f32>,
 }
 
 @group(0) @binding(0) var<uniform> camera: CameraUniform;
@@ -45,6 +47,9 @@ struct Plane {
 @group(0) @binding(3) var<storage, read> boxes: array<Box>;
 @group(0) @binding(4) var<storage, read> cylinders: array<Cylinder>;
 @group(0) @binding(5) var<storage, read> planes: array<Plane>;
+
+// Define extents for the ground plane
+const plane_extents: vec2<f32> = vec2<f32>(25.0, 25.0);
 
 @vertex
 fn vs_main(@builtin(vertex_index) vertex_index: u32) -> @builtin(position) vec4<f32> {
@@ -76,9 +81,23 @@ fn sdf_cylinder(p: vec3<f32>, center: vec3<f32>, radius: f32, height: f32) -> f3
     return min(max(d.x, d.y), 0.0) + length(max(d, vec2<f32>(0.0)));
 }
 
-// SDF for plane
-fn sdf_plane(p: vec3<f32>, normal: vec3<f32>, d: f32) -> f32 {
-    return dot(p, normal) + d;
+// SDF for plane, constrained to a large box if extents are provided
+fn sdf_plane(p: vec3<f32>, pl: Plane) -> f32 {
+    let plane_dist = dot(p, pl.normal) + pl.d;
+
+    // If extents are zero, treat as an infinite plane
+    if (pl.extents.x <= 0.0 || pl.extents.y <= 0.0) {
+        return plane_dist;
+    }
+
+    // Project point onto plane to check bounds
+    let projected_p = p - pl.normal * plane_dist;
+    let box_dist = max(abs(projected_p.x) - pl.extents.x, abs(projected_p.z) - pl.extents.y);
+
+    if (box_dist > 0.0) {
+        return 1000.0; // Outside the bounds, return a large distance
+    }
+    return plane_dist;
 }
 
 // Smooth minimum function to reduce morphing artifacts
@@ -130,8 +149,9 @@ fn scene_sdf_detailed(p: vec3<f32>) -> SceneResult {
     
     // Planes
     for (var i = 0u; i < counts.planes; i++) {
-        let plane_dist = sdf_plane(p, planes[i].normal, planes[i].d);
-        if (plane_dist < result.distance) {
+        let pl = planes[i];
+        let plane_dist = sdf_plane(p, pl);
+        if (plane_dist < result.distance && plane_dist < 1000.0) {
             result.distance = plane_dist;
             result.object_type = 3u;
             result.object_index = i;

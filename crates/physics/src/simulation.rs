@@ -24,7 +24,7 @@
 use crate::types::{
     BoundingBox, BoxBody, Cylinder, ForceDebugInfo, Joint, JointParams, RevoluteJoint,
     PrismaticJoint, BallJoint, FixedJoint, Material, PhysicsDebugInfo, PhysParams, Plane,
-    Sphere, SpatialGrid, SpatialGridDebugInfo, Vec3, VelocityDebugInfo,
+    Sphere, SpatialGrid, SpatialGridDebugInfo, Vec2, Vec3, VelocityDebugInfo,
 };
 use compute::{ComputeBackend, ComputeError};
 use std::mem::size_of;
@@ -287,19 +287,20 @@ impl PhysicsSim {
         index
     }
 
-    /// Adds a new static, infinite plane to the simulation.
+    /// Adds a new plane to the simulation.
     ///
     /// # Arguments
     ///
     /// * `normal` - The normal vector of the plane.
-    /// * `d` - The distance of the plane from the origin along its normal.
+    /// * `d` - The distance of the plane from the origin.
+    /// * `extents` - The dimensions of the plane for rendering.
     ///
     /// # Returns
     ///
     /// The index of the newly added plane.
-    pub fn add_plane(&mut self, normal: Vec3, d: f32) -> usize {
+    pub fn add_plane(&mut self, normal: Vec3, d: f32, extents: Vec2) -> usize {
         let index = self.planes.len();
-        self.planes.push(Plane { normal, d });
+        self.planes.push(Plane { normal, d, extents, _pad: [0.0; 2] });
         index
     }
 
