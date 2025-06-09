@@ -87,7 +87,7 @@ construct creature bodies.
 
 The repository now contains a minimal physics setup for a classic control task:
 balancing a stick on a moving cart. The `StickBalanceEnv` in the `ml` crate
-exposes an `Env` implementation backed by the physics engine. A new test file
+exposes an `Env` implementation (`ml::env::Env`) backed by the physics engine. A new test file
 exercises this environment by stepping it with zero actions and verifying that
 the episode terminates once the pole falls over. No learning happens yet—this is
 purely a skeleton for future reinforcement learning experiments.

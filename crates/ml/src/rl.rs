@@ -1,14 +1,4 @@
-/// A trait for reinforcement learning environments.
-pub trait Env {
-    /// Steps the environment forward by one time-step.
-    fn step(&mut self, action: f32) -> (Vec<f32>, f32, bool);
-    /// Resets the environment to an initial state.
-    fn reset(&mut self) -> Vec<f32>;
-    /// Returns the size of the observation space.
-    fn obs_size(&self) -> usize;
-    /// Returns the size of the action space.
-    fn action_size(&self) -> usize;
-}
+use crate::env::Env;
 
 /// A simple environment where the agent must learn to roll a sphere to the right.
 pub struct RollingSphereEnv {
