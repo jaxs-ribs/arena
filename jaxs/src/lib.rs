@@ -13,22 +13,62 @@
 //!
 //! ## Core Philosophy
 //!
-//! The project is built on two key principles:
+//! The design of JAXS is guided by a few core principles:
 //!
-//! -   **WebGPU First:** JAXS leverages the modern graphics and compute API of
-//!     WebGPU to ensure portability and performance across a wide range of
-//!     platforms. The [`compute`] crate provides a generic interface over GPU
-//!     compute kernels, with a CPU fallback for testing purposes.
+//! -   **Portability First:** The entire project is built to be portable. By
+//!     targeting WebGPU, the physics and machine learning computations can run
+//!     on a wide range of hardware (Vulkan, Metal, DirectX) and platforms,
+//!     including native desktops and web browsers, all from a single codebase.
+//! -   **Differentiability is Key:** Every component in the simulation pipeline,
+//!     especially the physics engine, is designed to be differentiable. This
+//!     allows for gradient-based optimization of not just ML policies, but also
+//!     physical parameters, which is crucial for many advanced ML techniques.
 //! -   **End-to-End Rust:** By using Rust for the entire stack, from the
-//!     physics engine to the machine learning policies, JAXS ensures memory
-//!     safety, high performance, and a seamless development experience.
+//!     low-level physics to the high-level learning algorithms, JAXS ensures
+//!     memory safety, high performance, and a seamless, unified development
+//!     experience.
 //!
-//! ## Project Architecture
+//! ## The JAXS Architecture
 //!
 //! JAXS is organized into a series of interconnected crates, each with a
 //! distinct responsibility. This modular architecture allows for clear
 //! separation of concerns and makes the project easier to understand,
 //! maintain, and extend.
+//!
+//! ### The Compute Model: A Fixed Opset
+//!
+//! At the heart of JAXS is the [`compute`] crate, which provides an abstraction
+//! over CPU and GPU execution. Unlike general-purpose tensor libraries, JAXS
+//! uses a fixed set of operations, or an "opset," defined in the
+//! `compute::Kernel` enum.
+//!
+//! This design has several advantages:
+//!
+//! -   **Guaranteed Portability:** Every backend is only required to implement
+//!     this specific set of kernels. This makes it straightforward to add new
+//!     backends and guarantees that any computation will run on any supported
+//!     platform.
+//! -   **Performance:** Kernels can be hand-optimized for specific hardware,
+//!     ensuring maximum performance for the operations that are most critical
+//!     to the physics and ML workloads.
+//! -   **Simplicity:** It avoids the complexity of a full-blown computation
+//!     graph and kernel fusion system, keeping the core of the engine lean and
+//!     focused.
+//!
+//! ### CPU/GPU Branching
+//!
+//! The `compute::ComputeBackend` trait is the key to JAXS's platform
+//! flexibility. The project provides two primary implementations:
+//!
+//! -   **`CpuBackend`:** A reference implementation written in pure Rust. It is
+//!     used for testing, debugging, and as a fallback on systems without a
+//!     compatible GPU.
+//! -   **`WgpuBackend`:** A high-performance implementation that uses the `wgpu`
+//!     crate to execute compute shaders written in WGSL.
+//!
+//! The switch between these backends is handled at compile time via the `gpu`
+//! feature flag. When enabled, the `default_backend()` function will provide
+//! the `WgpuBackend`, seamlessly accelerating the simulation.
 //!
 //! ### The Crates
 //!
@@ -66,7 +106,7 @@
 //! ## Getting Started
 //!
 //! To get started with JAXS, it is recommended to explore the documentation for
-//! each crate, starting with the [`jaxs`] crate to understand how the
+//! each crate, starting with the `jaxs` crate to understand how the
 //! application is launched and managed. From there, you can dive into the
 //! [`physics`] and [`ml`] crates to understand the core mechanics of the
 //! simulation and learning processes.
@@ -75,4 +115,5 @@ pub use compute;
 pub use ml;
 pub use phenotype;
 pub use physics;
+#[cfg(feature = "render")]
 pub use render; 

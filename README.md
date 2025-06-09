@@ -63,8 +63,8 @@ cargo bench
 # Launch the renderer example
 cargo run -p jaxs --features render -- --draw
 
-# Build and open API documentation in a browser
-cargo doc-open
+# Build and view API documentation
+cargo doc --workspace --no-deps && open target/doc/jaxs/index.html
 ```
 
 ## Visualizing the simulation

@@ -51,63 +51,122 @@ pub enum ComputeError {
 pub enum Kernel {
     // ## Element-wise Operations
     // These kernels perform element-wise operations on one or more input buffers.
-    /// Element-wise addition of two buffers.
+    /// Performs element-wise addition: `C = A + B`.
+    /// - **Binding 0:** Input `A`
+    /// - **Binding 1:** Input `B`
+    /// - **Binding 2:** Output `C`
     Add,
-    /// Element-wise subtraction of two buffers.
+    /// Performs element-wise subtraction: `C = A - B`.
+    /// - **Binding 0:** Input `A`
+    /// - **Binding 1:** Input `B`
+    /// - **Binding 2:** Output `C`
     Sub,
-    /// Element-wise multiplication of two buffers.
+    /// Performs element-wise multiplication: `C = A * B`.
+    /// - **Binding 0:** Input `A`
+    /// - **Binding 1:** Input `B`
+    /// - **Binding 2:** Output `C`
     Mul,
-    /// Element-wise division of two buffers.
+    /// Performs element-wise division: `C = A / B`.
+    /// - **Binding 0:** Input `A`
+    /// - **Binding 1:** Input `B`
+    /// - **Binding 2:** Output `C`
     Div,
-    /// Negates each element of a buffer.
+    /// Computes the element-wise negation: `B = -A`.
+    /// - **Binding 0:** Input `A`
+    /// - **Binding 1:** Output `B`
     Neg,
-    /// Calculates the exponential of each element.
+    /// Computes the element-wise exponential: `B = e^A`.
+    /// - **Binding 0:** Input `A`
+    /// - **Binding 1:** Output `B`
     Exp,
-    /// Calculates the natural logarithm of each element.
+    /// Computes the element-wise natural logarithm: `B = ln(A)`.
+    /// - **Binding 0:** Input `A`
+    /// - **Binding 1:** Output `B`
     Log,
-    /// Calculates the square root of each element.
+    /// Computes the element-wise square root: `B = sqrt(A)`.
+    /// - **Binding 0:** Input `A`
+    /// - **Binding 1:** Output `B`
     Sqrt,
-    /// Calculates the inverse square root of each element.
+    /// Computes the element-wise inverse square root: `B = 1 / sqrt(A)`.
+    /// - **Binding 0:** Input `A`
+    /// - **Binding 1:** Output `B`
     Rsqrt,
-    /// Calculates the hyperbolic tangent of each element.
+    /// Computes the element-wise hyperbolic tangent: `B = tanh(A)`.
+    /// - **Binding 0:** Input `A`
+    /// - **Binding 1:** Output `B`
     Tanh,
-    /// Applies the Rectified Linear Unit (ReLU) activation function.
+    /// Applies the Rectified Linear Unit (ReLU) activation function: `B = max(0, A)`.
+    /// - **Binding 0:** Input `A`
+    /// - **Binding 1:** Output `B`
     Relu,
-    /// Applies the sigmoid activation function.
+    /// Applies the sigmoid activation function: `B = 1 / (1 + e^-A)`.
+    /// - **Binding 0:** Input `A`
+    /// - **Binding 1:** Output `B`
     Sigmoid,
-    /// Element-wise minimum of two buffers.
+    /// Computes the element-wise minimum of two buffers: `C = min(A, B)`.
+    /// - **Binding 0:** Input `A`
+    /// - **Binding 1:** Input `B`
+    /// - **Binding 2:** Output `C`
     Min,
-    /// Element-wise maximum of two buffers.
+    /// Computes the element-wise maximum of two buffers: `C = max(A, B)`.
+    /// - **Binding 0:** Input `A`
+    /// - **Binding 1:** Input `B`
+    /// - **Binding 2:** Output `C`
     Max,
-    /// Clamps each element of a buffer to a given range.
+    /// Clamps each element of a buffer within a given range: `C = clamp(A, min, max)`.
+    /// - **Binding 0:** Input `A`
+    /// - **Binding 1:** Input `min` (scalar)
+    /// - **Binding 2:** Input `max` (scalar)
+    /// - **Binding 3:** Output `C`
     Clamp,
-    /// Selects elements from two buffers based on a condition buffer.
+    /// Selects elements from two buffers based on a condition: `C = if_true ? A : B`.
+    /// - **Binding 0:** Input `if_true` (condition mask)
+    /// - **Binding 1:** Input `A`
+    /// - **Binding 2:** Input `B`
+    /// - **Binding 3:** Output `C`
     Where,
 
     // ## Reductions
-    // These kernels reduce a buffer to a single value.
+    // These kernels reduce a buffer to a single value or a smaller buffer.
     /// Reduces a buffer by summing all its elements.
+    /// - **Binding 0:** Input buffer
+    /// - **Binding 1:** Output buffer (scalar)
     ReduceSum,
     /// Calculates the mean of all elements in a buffer.
+    /// - **Binding 0:** Input buffer
+    /// - **Binding 1:** Output buffer (scalar)
     ReduceMean,
     /// Finds the maximum element in a buffer.
+    /// - **Binding 0:** Input buffer
+    /// - **Binding 1:** Output buffer (scalar)
     ReduceMax,
-    /// Performs a segmented sum reduction.
+    /// Performs a segmented sum, summing parts of a buffer based on a segment ID buffer.
+    /// - **Binding 0:** Input `data`
+    /// - **Binding 1:** Input `segment_ids`
+    /// - **Binding 2:** Output buffer
     SegmentedReduceSum,
-    /// Scatters values from one buffer into another at specified indices,
-    /// adding to the existing values.
+    /// Scatters and adds values from an input buffer to an output buffer at specified indices.
+    /// - **Binding 0:** Input `source`
+    /// - **Binding 1:** Input `indices`
+    /// - **Binding 2:** In/Out `destination`
     ScatterAdd,
     /// Gathers values from a buffer at specified indices.
+    /// - **Binding 0:** Input `source`
+    /// - **Binding 1:** Input `indices`
+    /// - **Binding 2:** Output `destination`
     Gather,
 
     // ## Linear Algebra
     // These kernels perform linear algebra operations.
-    /// Performs matrix multiplication.
+    /// Performs matrix multiplication: `C = A @ B`.
+    /// - **Binding 0:** Input `A`
+    /// - **Binding 1:** Input `B`
+    /// - **Binding 2:** Output `C`
     MatMul,
 
     // ## Physics Simulation
     // These kernels are specific to the physics simulation.
-    /// Integrates the positions and velocities of rigid bodies.
+    /// Integrates the positions and velocities of rigid bodies over a time step.
     IntegrateBodies,
     /// Detects collisions between spheres.
     DetectContactsSphere,
@@ -122,11 +181,15 @@ pub enum Kernel {
 
     // ## Miscellaneous
     // These kernels perform various utility operations.
-    /// Expands instances for rendering.
+    /// Expands instances for rendering. (Details TBD)
     ExpandInstances,
     /// Generates random numbers from a normal distribution.
+    /// - **Binding 0:** Output buffer
     RngNormal,
-    /// Adds a buffer to another with broadcasting.
+    /// Adds a buffer to another with broadcasting on the second buffer.
+    /// - **Binding 0:** Input `A`
+    /// - **Binding 1:** Input `B` (broadcasted)
+    /// - **Binding 2:** Output `C`
     AddBroadcast,
 }
 
