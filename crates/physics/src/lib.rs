@@ -47,6 +47,7 @@ pub mod simulation;
 
 pub use simulation::{PhysicsError, PhysicsSim, SphereState};
 pub use types::{
-    BoxBody, BoundingBox, Cylinder, Joint, JointParams, Material, PhysParams, Plane, 
-    Sphere, SpatialGrid, Vec3,
+    BoxBody, BoundingBox, ContactDebugInfo, Cylinder, ForceDebugInfo, Joint, JointParams, 
+    Material, PhysicsDebugInfo, PhysParams, Plane, Sphere, SpatialGrid, SpatialGridDebugInfo, 
+    Vec3, VelocityDebugInfo,
 };

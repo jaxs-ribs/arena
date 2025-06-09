@@ -3,6 +3,7 @@ use physics::{Material, PhysicsSim, Vec3};
 #[test]
 fn debug_simple_collision() {
     let mut sim = PhysicsSim::new();
+    sim.params.gravity = Vec3::new(0.0, 0.0, 0.0); // No gravity to isolate collision effects
     
     // Create two spheres moving toward each other
     let material = Material::new(0.0, 0.5); // No friction, moderate restitution

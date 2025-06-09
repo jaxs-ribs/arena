@@ -22,8 +22,9 @@
 //! mode is primarily used for testing and debugging purposes.
 
 use crate::types::{
-    BoundingBox, BoxBody, Cylinder, Joint, JointParams, Material, PhysParams, Plane, 
-    Sphere, SpatialGrid, Vec3,
+    BoundingBox, BoxBody, ContactDebugInfo, Cylinder, ForceDebugInfo, Joint, JointParams, 
+    Material, PhysicsDebugInfo, PhysParams, Plane, Sphere, SpatialGrid, SpatialGridDebugInfo, 
+    Vec3, VelocityDebugInfo,
 };
 use compute::{ComputeBackend, ComputeError};
 use std::mem::size_of;
@@ -348,6 +349,59 @@ impl PhysicsSim {
         let occupied_cells = self.spatial_grid.cells.iter().filter(|cell| !cell.is_empty()).count();
         let occupancy_ratio = if total_cells > 0 { occupied_cells as f32 / total_cells as f32 } else { 0.0 };
         (total_cells, occupied_cells, occupancy_ratio)
+    }
+
+    /// Generates debug information for visualization.
+    pub fn get_debug_info(&self) -> PhysicsDebugInfo {
+        let mut debug_info = PhysicsDebugInfo {
+            contacts: Vec::new(),
+            velocity_vectors: Vec::new(),
+            force_vectors: Vec::new(),
+            spatial_grid_info: SpatialGridDebugInfo {
+                cell_size: self.spatial_grid.cell_size,
+                bounds: self.spatial_grid.bounds,
+                dimensions: self.spatial_grid.dimensions,
+                occupied_cells: Vec::new(),
+            },
+        };
+
+        // Collect velocity vectors for all spheres
+        for (i, sphere) in self.spheres.iter().enumerate() {
+            let speed = (sphere.vel.x * sphere.vel.x + sphere.vel.y * sphere.vel.y + sphere.vel.z * sphere.vel.z).sqrt();
+            if speed > 0.01 { // Only show significant velocities
+                debug_info.velocity_vectors.push(VelocityDebugInfo {
+                    position: sphere.pos,
+                    velocity: sphere.vel,
+                    object_index: i,
+                });
+            }
+        }
+
+        // Collect force vectors (external forces applied to spheres)
+        for (i, force) in self.params.forces.iter().enumerate() {
+            if i < self.spheres.len() {
+                let force_magnitude = (force[0] * force[0] + force[1] * force[1]).sqrt();
+                if force_magnitude > 0.01 { // Only show significant forces
+                    debug_info.force_vectors.push(ForceDebugInfo {
+                        position: self.spheres[i].pos,
+                        force: Vec3::new(force[0], force[1], 0.0),
+                        object_index: i,
+                    });
+                }
+            }
+        }
+
+        // Collect spatial grid occupation data
+        for (cell_index, cell) in self.spatial_grid.cells.iter().enumerate() {
+            if !cell.is_empty() {
+                debug_info.spatial_grid_info.occupied_cells.push((cell_index, cell.len()));
+            }
+        }
+
+        // TODO: Collect contact information during collision detection
+        // This would require modifying the collision detection to store contact data
+
+        debug_info
     }
 
     /// Advances the simulation by one time step using the GPU.
@@ -688,20 +742,26 @@ impl PhysicsSim {
                     + sphere.pos.z * plane.normal.z
                     + plane.d;
                 let radius = sphere.radius;
-                if dist < radius {
-                    // Position correction
-                    let correction = radius - dist;
-                    sphere.pos.x += plane.normal.x * correction;
-                    sphere.pos.y += plane.normal.y * correction;
-                    sphere.pos.z += plane.normal.z * correction;
+                let contact_threshold = radius + 0.01; // Small tolerance for resting contact
+                
+                if dist < contact_threshold {
+                    let is_penetrating = dist < radius;
                     
-                    // Velocity-based collision response with material properties
+                    if is_penetrating {
+                        // Position correction for penetration
+                        let correction = radius - dist;
+                        sphere.pos.x += plane.normal.x * correction;
+                        sphere.pos.y += plane.normal.y * correction;
+                        sphere.pos.z += plane.normal.z * correction;
+                    }
+                    
+                    // Velocity-based collision and friction response
                     let vn = sphere.vel.x * plane.normal.x
                         + sphere.vel.y * plane.normal.y
                         + sphere.vel.z * plane.normal.z;
                     
-                    if vn < 0.0 {
-                        // Apply restitution to normal velocity
+                    // Apply restitution only for actual collisions (negative velocity into surface)
+                    if vn < 0.0 && is_penetrating {
                         let restitution = sphere.material.restitution;
                         let new_vn = -vn * restitution;
                         let velocity_change = new_vn - vn;
@@ -709,27 +769,67 @@ impl PhysicsSim {
                         sphere.vel.x += velocity_change * plane.normal.x;
                         sphere.vel.y += velocity_change * plane.normal.y;
                         sphere.vel.z += velocity_change * plane.normal.z;
+                    }
+                    
+                    // Apply friction for both colliding and resting objects
+                    let friction = sphere.material.friction;
+                    
+                    // Calculate current velocity normal component
+                    let vel_normal = sphere.vel.x * plane.normal.x + 
+                                   sphere.vel.y * plane.normal.y + 
+                                   sphere.vel.z * plane.normal.z;
+                    
+                    // Get tangential velocity (velocity minus normal component)
+                    let tangent_vel_x = sphere.vel.x - vel_normal * plane.normal.x;
+                    let tangent_vel_y = sphere.vel.y - vel_normal * plane.normal.y;
+                    let tangent_vel_z = sphere.vel.z - vel_normal * plane.normal.z;
+                    
+                    let tangent_speed = (tangent_vel_x * tangent_vel_x + 
+                                       tangent_vel_y * tangent_vel_y + 
+                                       tangent_vel_z * tangent_vel_z).sqrt();
+                    
+                    if tangent_speed > 1e-6 {
+                        // Calculate normal force magnitude (for friction calculation)
+                        let normal_force = sphere.mass * (-self.params.gravity.x * plane.normal.x 
+                                                        - self.params.gravity.y * plane.normal.y
+                                                        - self.params.gravity.z * plane.normal.z).max(0.0);
                         
-                        // Apply friction to tangential velocity
-                        let friction = sphere.material.friction;
+                        // Maximum friction force (Coulomb friction law: f_max = μ * N)
+                        let max_friction_force = friction * normal_force;
                         
-                        // Calculate current velocity normal component
-                        let vel_normal = sphere.vel.x * plane.normal.x + 
-                                       sphere.vel.y * plane.normal.y + 
-                                       sphere.vel.z * plane.normal.z;
+                        // Required force to stop tangential motion this timestep
+                        let required_force = tangent_speed * sphere.mass / dt;
                         
-                        // Get tangential velocity (velocity minus normal component)
-                        let tangent_vel_x = sphere.vel.x - vel_normal * plane.normal.x;
-                        let tangent_vel_y = sphere.vel.y - vel_normal * plane.normal.y;
-                        let tangent_vel_z = sphere.vel.z - vel_normal * plane.normal.z;
+                        // Apply the minimum of required force and maximum friction
+                        let applied_friction = max_friction_force.min(required_force);
+                        let friction_factor = if required_force > 1e-6 {
+                            1.0 - (applied_friction / required_force)
+                        } else {
+                            0.0
+                        };
                         
-                        // Apply friction damping to tangential velocity
-                        let friction_factor = (1.0 - friction * dt * 10.0).max(0.0);
-                        
-                        // Reconstruct velocity with damped tangential component
+                        // Apply friction damping
                         sphere.vel.x = vel_normal * plane.normal.x + tangent_vel_x * friction_factor;
                         sphere.vel.y = vel_normal * plane.normal.y + tangent_vel_y * friction_factor;
                         sphere.vel.z = vel_normal * plane.normal.z + tangent_vel_z * friction_factor;
+                    }
+                    
+                    // Apply rolling resistance for spheres
+                    let rolling_resistance = 0.01; // Small rolling resistance coefficient
+                    let total_speed = (sphere.vel.x * sphere.vel.x + 
+                                     sphere.vel.y * sphere.vel.y + 
+                                     sphere.vel.z * sphere.vel.z).sqrt();
+                    
+                    if total_speed > 1e-3 {
+                        let rolling_damping = (1.0 - rolling_resistance * dt * 60.0).max(0.0);
+                        sphere.vel.x *= rolling_damping;
+                        sphere.vel.y *= rolling_damping;
+                        sphere.vel.z *= rolling_damping;
+                    } else {
+                        // Bring to complete stop for very slow motion
+                        sphere.vel.x = 0.0;
+                        sphere.vel.y = 0.0;
+                        sphere.vel.z = 0.0;
                     }
                 }
             }

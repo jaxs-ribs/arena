@@ -320,6 +320,67 @@ pub struct BoundingBox {
     pub max: Vec3,
 }
 
+/// Debug information for visualizing physics state.
+#[derive(Clone, Debug)]
+pub struct PhysicsDebugInfo {
+    /// Contact points between objects.
+    pub contacts: Vec<ContactDebugInfo>,
+    /// Velocity vectors for all spheres.
+    pub velocity_vectors: Vec<VelocityDebugInfo>,
+    /// Force vectors applied to spheres.
+    pub force_vectors: Vec<ForceDebugInfo>,
+    /// Spatial grid visualization data.
+    pub spatial_grid_info: SpatialGridDebugInfo,
+}
+
+/// Debug information for a contact point.
+#[derive(Copy, Clone, Debug)]
+pub struct ContactDebugInfo {
+    /// Position of the contact point.
+    pub position: Vec3,
+    /// Normal vector at the contact point.
+    pub normal: Vec3,
+    /// Penetration depth.
+    pub depth: f32,
+    /// Indices of the objects in contact.
+    pub object_indices: (usize, usize),
+}
+
+/// Debug information for visualizing velocity.
+#[derive(Copy, Clone, Debug)]
+pub struct VelocityDebugInfo {
+    /// Starting position of the velocity vector.
+    pub position: Vec3,
+    /// Velocity vector.
+    pub velocity: Vec3,
+    /// Index of the object.
+    pub object_index: usize,
+}
+
+/// Debug information for visualizing forces.
+#[derive(Copy, Clone, Debug)]
+pub struct ForceDebugInfo {
+    /// Starting position of the force vector.
+    pub position: Vec3,
+    /// Force vector.
+    pub force: Vec3,
+    /// Index of the object.
+    pub object_index: usize,
+}
+
+/// Debug information for spatial grid visualization.
+#[derive(Clone, Debug)]
+pub struct SpatialGridDebugInfo {
+    /// Grid cell size.
+    pub cell_size: f32,
+    /// Grid bounds.
+    pub bounds: BoundingBox,
+    /// Grid dimensions.
+    pub dimensions: [usize; 3],
+    /// Occupied cells with their object counts.
+    pub occupied_cells: Vec<(usize, usize)>, // (cell_index, object_count)
+}
+
 impl SpatialGrid {
     /// Creates a new spatial grid with the specified parameters.
     ///
