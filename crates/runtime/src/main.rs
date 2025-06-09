@@ -2,7 +2,7 @@
 #![allow(clippy::unnecessary_wraps)]
 //! # JAXS Runtime
 //!
-//! Entry point for the runtime binary.
+//! Entry point for the runtime binary of JAXS (Just Another Exploration Substrate).
 //!
 //! This crate ties together the compute, physics and optional rendering
 //! layers. A lightweight file watcher allows WGSL shaders to be hot reloaded

@@ -2,7 +2,7 @@
 name = "jaxs"
 version = "0.1.0"
 edition = "2021"
-description = "Documentation entry point for the JAXS project."
+description = "Documentation entry point for JAXS (Just Another Exploration Substrate)."
 
 [dependencies]
 compute = { path = "../crates/compute" }

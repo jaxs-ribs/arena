@@ -1,6 +1,6 @@
-//! # JAXS Project
+//! # JAXS: Just Another Exploration Substrate
 //!
-//! Welcome to the documentation for the JAXS project.
+//! Welcome to the documentation for JAXS (Just Another Exploration Substrate).
 //!
 //! JAXS is a differentiable physics engine and reinforcement learning framework
 //! for creating and training simulated creatures.
