@@ -1,4 +1,5 @@
 use crate::env::Env;
+use crate::stick_balance::StickBalanceEnv;
 
 /// A simple environment where the agent must learn to roll a sphere to the right.
 pub struct RollingSphereEnv {
@@ -79,9 +80,9 @@ impl PolicyValueNet {
     }
 }
 
-/// A trainer for the Proximal Policy Optimization (PPO) algorithm.
-pub struct SpherePpoTrainer {
-    envs: Vec<RollingSphereEnv>,
+/// Generic trainer for the Proximal Policy Optimization (PPO) algorithm.
+pub struct PpoTrainer<E: Env> {
+    envs: Vec<E>,
     net: PolicyValueNet,
     optimizer: Adam,
     gamma: f32,
@@ -90,18 +91,24 @@ pub struct SpherePpoTrainer {
     t_max: usize,
     n_epochs: usize,
     obs: Vec<Vec<f32>>,
+    obs_dim: usize,
+    act_dim: usize,
 }
 
-impl SpherePpoTrainer {
-    /// Creates a new `SpherePpoTrainer`.
-    pub fn new(seed: u64) -> Self {
+impl<E: Env> PpoTrainer<E> {
+    /// Creates a new `PpoTrainer` with the provided environment constructor.
+    pub fn new_with(mut make_env: impl FnMut() -> E, seed: u64) -> Self {
         fastrand::seed(seed);
-        let mut net = PolicyValueNet::new(1, 32, 1);
+        let envs: Vec<_> = (0..8).map(|_| make_env()).collect();
+        let obs_dim = envs[0].obs_size();
+        let act_dim = envs[0].action_size();
+        assert_eq!(act_dim, 1, "only single-dimensional actions supported");
+
+        let mut net = PolicyValueNet::new(obs_dim, 32, act_dim);
         let params_tmp = net.params();
         let params: Vec<&Tensor> = params_tmp.iter().map(|p| &**p).collect();
         let optimizer = Adam::new(&params);
-        let envs: Vec<_> = (0..8).map(|_| RollingSphereEnv::new()).collect();
-        let obs = vec![vec![0.0]; envs.len()];
+        let obs = vec![vec![0.0; obs_dim]; envs.len()];
         Self {
             envs,
             net,
@@ -112,6 +119,8 @@ impl SpherePpoTrainer {
             t_max: 64,
             n_epochs: 4,
             obs,
+            obs_dim,
+            act_dim,
         }
     }
 
@@ -130,7 +139,7 @@ impl SpherePpoTrainer {
             all_obs.push(self.obs.clone());
 
             let obs_tensor = Tensor::from_vec(
-                vec![self.envs.len(), 1],
+                vec![self.envs.len(), self.obs_dim],
                 self.obs.iter().flatten().copied().collect(),
             );
             let mut tmp_tensors = HashMap::new();
@@ -170,7 +179,7 @@ impl SpherePpoTrainer {
 
         // compute value for last observation
         let obs_tensor = Tensor::from_vec(
-            vec![self.envs.len(), 1],
+            vec![self.envs.len(), self.obs_dim],
             self.obs.iter().flatten().copied().collect(),
         );
         let mut tmp = HashMap::new();
@@ -222,11 +231,17 @@ impl SpherePpoTrainer {
                 tensors.insert(p.id, (*p).clone());
             }
 
-            let obs_tensor = Tensor::from_vec(vec![obs_flat.len(), 1], obs_flat.clone());
+            let obs_tensor = Tensor::from_vec(
+                vec![obs_flat.len() / self.obs_dim, self.obs_dim],
+                obs_flat.clone(),
+            );
             tensors.insert(obs_tensor.id, obs_tensor.clone());
             let (action_tensor, value_tensor) = self.net.forward(&obs_tensor, &mut tape, &mut tensors);
 
-            let actions_tensor = Tensor::from_vec(vec![actions_flat.len(), 1], actions_flat.clone());
+            let actions_tensor = Tensor::from_vec(
+                vec![actions_flat.len() / self.act_dim, self.act_dim],
+                actions_flat.clone(),
+            );
             tensors.insert(actions_tensor.id, actions_tensor.clone());
             let log_probs = action_tensor
                 .sub(&actions_tensor, &mut tape, &mut tensors)
@@ -268,5 +283,34 @@ impl SpherePpoTrainer {
         }
 
         total_rewards.iter().sum::<f32>() / total_rewards.len() as f32
+    }
+
+    /// Returns an action for the provided observation using the current policy.
+    pub fn act(&self, obs: &[f32]) -> f32 {
+        assert_eq!(obs.len(), self.obs_dim);
+        let obs_tensor = Tensor::from_vec(vec![1, self.obs_dim], obs.to_vec());
+        let mut tensors = HashMap::new();
+        tensors.insert(obs_tensor.id, obs_tensor.clone());
+        let (action_tensor, _value_tensor) =
+            self.net
+                .forward(&obs_tensor, &mut nn::graph::Graph::new(), &mut tensors);
+        action_tensor.data()[0]
+    }
+}
+
+pub type SpherePpoTrainer = PpoTrainer<RollingSphereEnv>;
+pub type StickBalancePpoTrainer = PpoTrainer<StickBalanceEnv>;
+
+impl PpoTrainer<RollingSphereEnv> {
+    /// Convenience constructor for the rolling sphere task.
+    pub fn new(seed: u64) -> Self {
+        Self::new_with(|| RollingSphereEnv::new(), seed)
+    }
+}
+
+impl PpoTrainer<StickBalanceEnv> {
+    /// Convenience constructor for the stick balancing task.
+    pub fn new(seed: u64) -> Self {
+        Self::new_with(|| StickBalanceEnv::new(), seed)
     }
 }

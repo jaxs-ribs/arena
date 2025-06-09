@@ -1,5 +1,5 @@
 use ml::StickBalanceEnv;
-use ml::rl::Env;
+use ml::Env;
 
 /// Runs the cart-pole (stick balance) environment with zero control.
 /// Starting from a small angle offset, the pole should fall over
