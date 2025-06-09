@@ -1,22 +1,79 @@
-//! # JAXS Project
+//! # JAXS: A Differentiable Physics and Machine Learning Environment
 //!
-//! Welcome to the documentation for the JAXS project.
+//! Welcome to the JAXS project! This documentation serves as a comprehensive
+//! guide to the architecture, components, and long-term vision of JAXS.
 //!
-//! JAXS is a differentiable physics engine and reinforcement learning framework
-//! for creating and training simulated creatures.
+//! ## Overview
 //!
-//! ## Project Structure
+//! JAXS is a full-stack physics and machine learning environment inspired by
+//! [Brax](https://github.com/google/brax), but designed around **WebGPU** and
+//! implemented entirely in Rust. The goal is to provide fast, differentiable
+//! physics, a compute backend that works on both desktop and in the browser,
+//! and a minimal runtime for training machine learning policies directly
+//! against the simulator.
 //!
-//! The project is organized into several crates, each with a specific responsibility:
+//! ## Core Philosophy
 //!
-//! -   **runtime**: The main entry point of the application. It ties together all the other crates and runs the main simulation loop.
-//! - [`physics`]: A minimal, differentiable physics engine for rigid body simulation.
-//! - [`render`]: A simple `wgpu`-based rendering engine for visualizing physics simulations.
-//! - [`compute`]: A unified CPU and GPU compute abstraction layer.
-//! - [`ml`]: Contains the machine learning components, including neural networks and reinforcement learning algorithms.
-//! - [`phenotype`]: Defines the structure and behavior of the simulated creatures.
+//! The project is built on two key principles:
 //!
-//! Start by exploring the `runtime` crate's documentation to understand how the application is structured and run.
+//! -   **WebGPU First:** JAXS leverages the modern graphics and compute API of
+//!     WebGPU to ensure portability and performance across a wide range of
+//!     platforms. The [`compute`] crate provides a generic interface over GPU
+//!     compute kernels, with a CPU fallback for testing purposes.
+//! -   **End-to-End Rust:** By using Rust for the entire stack, from the
+//!     physics engine to the machine learning policies, JAXS ensures memory
+//!     safety, high performance, and a seamless development experience.
+//!
+//! ## Project Architecture
+//!
+//! JAXS is organized into a series of interconnected crates, each with a
+//! distinct responsibility. This modular architecture allows for clear
+//! separation of concerns and makes the project easier to understand,
+//! maintain, and extend.
+//!
+//! ### The Crates
+//!
+//! -   **`jaxs`:** The crate you are currently viewing. It serves as the main
+//!     entry point for the documentation and provides a high-level overview of
+//!     the entire project.
+//! -   **[`compute`]:** A thin abstraction layer over different compute
+//!     backends. It provides a mock CPU backend for testing and a `wgpu`-based
+//!     backend for production.
+//! -   **[`physics`]:** A differentiable rigid body physics engine. It is
+//!     designed to be extensible, with support for various constraints and
+//!     articulated structures.
+//! -   **[`ml`]:** Contains all the building blocks for machine learning,
+//!     including tensor operations, automatic differentiation, and reinforcement
+//!     learning utilities.
+//! -   **[`phenotype`]:** Defines the structure and behavior of the simulated
+//!     creatures, allowing for procedural generation and evolution.
+//! -   **`runtime`:** A small executable that glues everything together. It
+//!     includes features like shader hot-reloading and serves as the foundation
+//!     for training loops.
+//!
+//! ## Long-Term Vision
+//!
+//! The ultimate goal of JAXS is to explore rich artificial life through a
+//! combination of physics simulation, reinforcement learning, and evolutionary
+//! search. The long-term roadmap includes:
+//!
+//! -   **Character Creation:** A JSON-driven format for defining bodies,
+//!     joints, and actuators, allowing for the procedural generation and
+//!     evolution of agents.
+//! -   **Reinforcement Learning:** The implementation of advanced algorithms
+//!     like Dreamer V3, with a shared world model across all agents.
+//! -   **Novelty-Driven Search:** Inspired by Kenneth Stanley's work on
+//!     automated search, JAXS will use the latent vector of the world model to
+//!     measure behavioral novelty, guiding exploration towards truly unique
+//!     behaviors.
+//!
+//! ## Getting Started
+//!
+//! To get started with JAXS, it is recommended to explore the documentation for
+//! each crate, starting with the `runtime` crate to understand how the
+//! application is launched and managed. From there, you can dive into the
+//! [`physics`] and [`ml`] crates to understand the core mechanics of the
+//! simulation and learning processes.
 
 pub use compute;
 pub use ml;

@@ -5,8 +5,16 @@ edition = "2021"
 description = "Documentation entry point for the JAXS project."
 
 [dependencies]
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt"] }
+notify = "6.1"
+
 compute = { path = "../crates/compute" }
+physics = { path = "../crates/physics" }
 ml = { path = "../crates/ml" }
 phenotype = { path = "../crates/phenotype" }
-physics = { path = "../crates/physics" }
-render = { path = "../crates/render" } 
+render = { path = "../crates/render", optional = true }
+
+[features]
+render = ["dep:render"] 
