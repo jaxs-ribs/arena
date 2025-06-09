@@ -1,5 +1,5 @@
 use ml::StickBalanceEnv;
-use ml::env::Env;
+use ml::Env;
 
 /// Basic sanity test for the stick balancing environment.
 ///

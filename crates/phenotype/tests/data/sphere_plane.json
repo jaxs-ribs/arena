@@ -1,0 +1,7 @@
+{
+  "bodies": [
+    {"id": "ground", "shape": "plane", "normal": [0,1,0], "d": 0.0},
+    {"id": "ball", "shape": "sphere", "radius": 1.0, "pos": [0,2,0]}
+  ],
+  "joints": []
+}

@@ -1,0 +1,9 @@
+{
+  "bodies": [
+    {"id": "box", "shape": "box", "half_extents": [0.5,0.5,0.5], "pos": [0,3,0]},
+    {"id": "cyl", "shape": "cylinder", "radius": 0.25, "height": 1.0, "pos": [0,4,0]}
+  ],
+  "joints": [
+    {"body_a": "box", "body_b": "cyl", "rest_length": 1.0}
+  ]
+}
