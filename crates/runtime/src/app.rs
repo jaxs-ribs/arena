@@ -1,3 +1,10 @@
+//! Simulation loop tying physics, rendering and shader watching together.
+//!
+//! The [`run`] function is called from the binary's [`main`](crate::main) and
+//! drives a short physics example. When built with the `render` feature a
+//! real-time window visualises the scene while WGSL shader files are watched
+//! for changes so they can be reloaded on the fly.
+
 use anyhow::Result;
 use physics::PhysicsSim;
 
@@ -6,6 +13,20 @@ use render::Renderer;
 
 use crate::watcher;
 
+/// Run the main physics simulation loop.
+///
+/// When `enable_render` is `true` and the crate is compiled with the `render`
+/// feature, a `Renderer` window displays the positions of the
+/// simulated spheres. WGSL files in the `shaders/` directory are watched for
+/// changes so compute pipelines can be reloaded on the fly through
+/// [`crate::watcher`].
+///
+/// The loop steps a [`physics::PhysicsSim`] containing a single sphere and logs
+/// progress every few frames.
+///
+/// # Errors
+///
+/// Returns any error produced by the physics engine, renderer or file watcher.
 pub fn run(_enable_render: bool) -> Result<()> {
     tracing_subscriber::fmt::init();
 
