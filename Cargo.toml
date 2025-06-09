@@ -1,14 +1,16 @@
 [workspace]
+resolver = "2"
 members = [
     "jaxs",
     "crates/compute",
-    "crates/runtime",
-    "crates/physics",
     "crates/ml",
-    "crates/render",
     "crates/phenotype",
+    "crates/physics",
+    "crates/render",
 ]
-resolver = "2"
+exclude = [
+    "docs"
+]
 
 [workspace.dependencies]
 naga = { version = "0.19", features = ["wgsl-in"] }
