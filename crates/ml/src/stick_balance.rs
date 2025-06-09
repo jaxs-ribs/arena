@@ -29,6 +29,16 @@ impl StickBalanceEnv {
         Self { sim, base_idx: 0, tip_idx: 1 }
     }
 
+    /// Resets the environment with the tip offset by the given angle in radians.
+    /// A small angle will cause the pole to fall over when no control is applied.
+    pub fn reset_with_angle(&mut self, angle: f32) -> Vec<f32> {
+        self.sim.spheres[self.base_idx].pos = Vec3::new(0.0, 0.0, 0.0);
+        self.sim.spheres[self.base_idx].vel = Vec3::new(0.0, 0.0, 0.0);
+        self.sim.spheres[self.tip_idx].pos = Vec3::new(-angle.sin(), angle.cos(), 0.0);
+        self.sim.spheres[self.tip_idx].vel = Vec3::new(0.0, 0.0, 0.0);
+        vec![0.0, angle]
+    }
+
     /// Returns the angle of the stick relative to the vertical axis.
     fn stick_angle(&self) -> f32 {
         let base = &self.sim.spheres[self.base_idx];

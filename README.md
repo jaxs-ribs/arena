@@ -93,6 +93,8 @@ the episode terminates once the pole falls over. No learning happens yet—this 
 purely a skeleton for future reinforcement learning experiments.
 
 The command `cargo test -p ml --test 07_stick_balance_env` will run this test specifically.
+Another test, `cargo test -p ml --test 08_cart_pole`, starts the pole at a slight angle
+and confirms it falls over when no control is applied.
 
 ## Status
 
