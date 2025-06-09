@@ -178,6 +178,14 @@ pub enum Kernel {
     SolveContactsPBD,
     /// Solves joint constraints using Position-Based Dynamics (PBD).
     SolveJointsPBD,
+    /// Solves revolute joint constraints.
+    SolveRevoluteJoints,
+    /// Solves prismatic joint constraints.
+    SolvePrismaticJoints,
+    /// Solves ball joint constraints.
+    SolveBallJoints,
+    /// Solves fixed joint constraints.
+    SolveFixedJoints,
 
     // ## Miscellaneous
     // These kernels perform various utility operations.

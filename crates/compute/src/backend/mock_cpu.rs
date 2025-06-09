@@ -65,6 +65,10 @@ impl ComputeBackend for MockCpu {
                 kernels::solve_contacts_pbd_op::handle_solve_contacts_pbd(binds)
             }
             Kernel::SolveJointsPBD => kernels::solve_joints_pbd_op::handle_solve_joints_pbd(binds),
+            Kernel::SolveRevoluteJoints => kernels::solve_revolute_joints_op::handle_solve_revolute_joints(binds),
+            Kernel::SolvePrismaticJoints => kernels::solve_prismatic_joints_op::handle_solve_prismatic_joints(binds),
+            Kernel::SolveBallJoints => kernels::solve_ball_joints_op::handle_solve_ball_joints(binds),
+            Kernel::SolveFixedJoints => kernels::solve_fixed_joints_op::handle_solve_fixed_joints(binds),
             Kernel::RngNormal => kernels::rng_normal_op::handle_rng_normal(binds),
             Kernel::ExpandInstances => kernels::expand_instances_op::handle_expand_instances(binds),
         }
