@@ -82,11 +82,11 @@ pub fn run(enable_render: bool) -> Result<()> {
     sim.add_sphere(Vec3::new(-2.0, 8.0, 0.0), Vec3::ZERO); // High sphere to fall
     sim.add_sphere(Vec3::new(0.0, 6.0, 0.0), Vec3::ZERO);  // Medium sphere
     sim.add_sphere(Vec3::new(2.0, 4.0, 0.0), Vec3::ZERO);  // Lower sphere
-    sim.add_sphere(Vec3::new(1.0, 10.0, 0.0), Vec3::ZERO); // Very high sphere
     
-    // TODO: Add physics for boxes and cylinders - currently only spheres work
-    // sim.add_box(Vec3::new(-1.0, 5.0, 0.0), Vec3::new(0.5, 0.5, 0.5), Vec3::ZERO);
-    // sim.add_cylinder(Vec3::new(1.0, 3.0, 0.0), 0.5, 1.0, Vec3::ZERO);
+    // Physics works for all object types in step_cpu!
+    sim.add_box(Vec3::new(-1.0, 7.0, 0.0), Vec3::new(0.5, 0.5, 0.5), Vec3::ZERO);
+    sim.add_cylinder(Vec3::new(1.0, 5.0, 0.0), 0.5, 1.0, Vec3::ZERO);
+    sim.add_box(Vec3::new(3.0, 9.0, 0.0), Vec3::new(0.3, 0.3, 0.3), Vec3::ZERO);
 
     let dt = 0.016_f32;
 

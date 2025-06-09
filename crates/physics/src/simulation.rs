@@ -717,6 +717,57 @@ impl PhysicsSim {
                 }
             }
         }
+
+        // Sphere-sphere collision detection
+        for i in 0..self.spheres.len() {
+            for j in (i + 1)..self.spheres.len() {
+                let sphere1 = &self.spheres[i];
+                let sphere2 = &self.spheres[j];
+                
+                let dx = sphere2.pos.x - sphere1.pos.x;
+                let dy = sphere2.pos.y - sphere1.pos.y;
+                let dz = sphere2.pos.z - sphere1.pos.z;
+                let distance = (dx * dx + dy * dy + dz * dz).sqrt();
+                
+                let radius1 = 1.0; // sphere radius
+                let radius2 = 1.0; // sphere radius
+                let min_distance = radius1 + radius2;
+                
+                if distance < min_distance && distance > 0.0 {
+                    // Collision detected, resolve it
+                    let overlap = min_distance - distance;
+                    let nx = dx / distance;
+                    let ny = dy / distance;
+                    let nz = dz / distance;
+                    
+                    // Separate spheres
+                    let separation = overlap * 0.5;
+                    let sphere1 = &mut self.spheres[i];
+                    sphere1.pos.x -= nx * separation;
+                    sphere1.pos.y -= ny * separation;
+                    sphere1.pos.z -= nz * separation;
+                    
+                    let sphere2 = &mut self.spheres[j];
+                    sphere2.pos.x += nx * separation;
+                    sphere2.pos.y += ny * separation;
+                    sphere2.pos.z += nz * separation;
+                    
+                    // Velocity exchange (elastic collision)
+                    let v1_n = sphere1.vel.x * nx + sphere1.vel.y * ny + sphere1.vel.z * nz;
+                    let v2_n = sphere2.vel.x * nx + sphere2.vel.y * ny + sphere2.vel.z * nz;
+                    
+                    let sphere1 = &mut self.spheres[i];
+                    sphere1.vel.x += (v2_n - v1_n) * nx;
+                    sphere1.vel.y += (v2_n - v1_n) * ny;
+                    sphere1.vel.z += (v2_n - v1_n) * nz;
+                    
+                    let sphere2 = &mut self.spheres[j];
+                    sphere2.vel.x += (v1_n - v2_n) * nx;
+                    sphere2.vel.y += (v1_n - v2_n) * ny;
+                    sphere2.vel.z += (v1_n - v2_n) * nz;
+                }
+            }
+        }
     }
 
     /// Runs the simulation for a specified number of steps.
