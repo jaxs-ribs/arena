@@ -21,7 +21,7 @@ crates/
   render/    # WGPU-based renderer for visualization
   runtime/   # Executable with shader hot‑reload and training scaffolding
 shaders/     # WGSL compute kernels
-tests/       # Integration tests (e.g. free‑fall verification)
+tests/       # ML integration tests
 ```
 
 Each crate has its own `Cargo.toml` and unit tests. The workspace root defines common dependencies and ensures everything builds together.
@@ -51,8 +51,8 @@ cargo test -p compute
 # Run physics crate tests
 cargo test -p physics
 
-# Execute a specific integration test
-cargo test --test scene
+# Execute a specific integration test from the `ml` crate
+cargo test --test 01_ops
 
 # Run compute crate tests with the WGPU backend
 cargo test -p compute --features gpu
@@ -91,6 +91,8 @@ exposes an `Env` implementation backed by the physics engine. A new test file
 exercises this environment by stepping it with zero actions and verifying that
 the episode terminates once the pole falls over. No learning happens yet—this is
 purely a skeleton for future reinforcement learning experiments.
+
+The command `cargo test -p ml --test 07_stick_balance_env` will run this test specifically.
 
 ## Status
 
