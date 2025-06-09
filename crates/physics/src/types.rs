@@ -80,6 +80,46 @@ impl From<Vec3> for [f32; 3] {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+/// Material properties for physical interactions.
+///
+/// Defines surface properties that control how objects interact during collisions.
+pub struct Material {
+    /// Friction coefficient. 0.0 = frictionless, 1.0 = high friction.
+    pub friction: f32,
+    /// Restitution coefficient. 0.0 = perfectly inelastic, 1.0 = perfectly elastic.
+    pub restitution: f32,
+    /// Padding for alignment.
+    _pad: [f32; 2],
+}
+
+impl Material {
+    /// Creates a new material with the specified friction and restitution.
+    pub const fn new(friction: f32, restitution: f32) -> Self {
+        Self {
+            friction,
+            restitution,
+            _pad: [0.0; 2],
+        }
+    }
+
+    /// Default material with moderate friction and some bounce.
+    pub const fn default() -> Self {
+        Self::new(0.5, 0.3)
+    }
+
+    /// Bouncy ball material.
+    pub const fn bouncy() -> Self {
+        Self::new(0.3, 0.9)
+    }
+
+    /// Ice-like material with low friction and some bounce.
+    pub const fn slippery() -> Self {
+        Self::new(0.05, 0.6)
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 /// A dynamic spherical rigid body.
 ///
 /// A `Sphere` is one of the fundamental rigid body types in the JAXS physics
@@ -92,33 +132,68 @@ impl From<Vec3> for [f32; 3] {
 pub struct Sphere {
     /// The world-space position of the sphere's center of mass.
     pub pos: Vec3,
-    _pad1: f32,
+    /// The radius of the sphere.
+    pub radius: f32,
     /// The linear velocity of the sphere, measured in meters per second.
     pub vel: Vec3,
-    _pad2: f32,
+    /// The mass of the sphere in kilograms.
+    pub mass: f32,
     /// The orientation of the sphere, represented as a quaternion in `[x, y, z, w]`
     /// format.
     pub orientation: [f32; 4],
     /// The angular velocity of the sphere, measured in radians per second.
     pub angular_vel: Vec3,
-    _pad3: f32,
+    _pad2: f32,
+    /// Material properties for collision response.
+    pub material: Material,
 }
 
 impl Sphere {
-    /// Constructs a new [`Sphere`] at the given position and velocity.
+    /// Constructs a new [`Sphere`] at the given position and velocity with specified radius.
     ///
     /// The orientation is initialised to the identity quaternion and
-    /// angular velocity is zero.
+    /// angular velocity is zero. Uses default material properties and unit mass.
     #[must_use]
-    pub const fn new(pos: Vec3, vel: Vec3) -> Self {
+    pub const fn new(pos: Vec3, vel: Vec3, radius: f32) -> Self {
         Self {
             pos,
-            _pad1: 0.0,
+            radius,
             vel,
-            _pad2: 0.0,
+            mass: 1.0, // Default unit mass
             orientation: [0.0, 0.0, 0.0, 1.0],
             angular_vel: Vec3::new(0.0, 0.0, 0.0),
-            _pad3: 0.0,
+            _pad2: 0.0,
+            material: Material::default(),
+        }
+    }
+
+    /// Constructs a new [`Sphere`] with custom material properties.
+    #[must_use]
+    pub const fn with_material(pos: Vec3, vel: Vec3, radius: f32, material: Material) -> Self {
+        Self {
+            pos,
+            radius,
+            vel,
+            mass: 1.0, // Default unit mass
+            orientation: [0.0, 0.0, 0.0, 1.0],
+            angular_vel: Vec3::new(0.0, 0.0, 0.0),
+            _pad2: 0.0,
+            material,
+        }
+    }
+
+    /// Constructs a new [`Sphere`] with custom mass and material properties.
+    #[must_use]
+    pub const fn with_mass_and_material(pos: Vec3, vel: Vec3, radius: f32, mass: f32, material: Material) -> Self {
+        Self {
+            pos,
+            radius,
+            vel,
+            mass,
+            orientation: [0.0, 0.0, 0.0, 1.0],
+            angular_vel: Vec3::new(0.0, 0.0, 0.0),
+            _pad2: 0.0,
+            material,
         }
     }
 }
@@ -187,6 +262,8 @@ pub struct BoxBody {
     pub half_extents: Vec3,
     /// The linear velocity of the box, measured in meters per second.
     pub vel: Vec3,
+    /// Material properties for collision response.
+    pub material: Material,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -200,6 +277,8 @@ pub struct Cylinder {
     pub radius: f32,
     /// The height of the cylinder.
     pub height: f32,
+    /// Material properties for collision response.
+    pub material: Material,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -214,4 +293,138 @@ pub struct Plane {
     /// The distance of the plane from the origin, along its normal vector.
     /// The plane equation is `normal.dot(x) + d = 0`.
     pub d: f32,
+}
+
+/// A uniform spatial grid for broad-phase collision detection.
+///
+/// This grid subdivides 3D space into cubic cells and maintains lists of
+/// objects in each cell. This allows for efficient pruning of collision
+/// pairs by only checking objects in the same or neighboring cells.
+pub struct SpatialGrid {
+    /// Size of each grid cell (same in all dimensions).
+    pub cell_size: f32,
+    /// Grid bounds - objects outside these bounds are not tracked.
+    pub bounds: BoundingBox,
+    /// Dimensions of the grid (number of cells in each direction).
+    pub dimensions: [usize; 3],
+    /// Flattened array of cells, each containing a list of sphere indices.
+    pub cells: Vec<Vec<usize>>,
+}
+
+/// Axis-aligned bounding box used for spatial grid bounds.
+#[derive(Copy, Clone, Debug)]
+pub struct BoundingBox {
+    /// Minimum corner of the bounding box.
+    pub min: Vec3,
+    /// Maximum corner of the bounding box.
+    pub max: Vec3,
+}
+
+impl SpatialGrid {
+    /// Creates a new spatial grid with the specified parameters.
+    ///
+    /// # Arguments
+    /// * `cell_size` - Size of each grid cell (should be roughly 2x the average object radius)
+    /// * `bounds` - World-space bounds that the grid covers
+    pub fn new(cell_size: f32, bounds: BoundingBox) -> Self {
+        let dimensions = [
+            ((bounds.max.x - bounds.min.x) / cell_size).ceil() as usize,
+            ((bounds.max.y - bounds.min.y) / cell_size).ceil() as usize,
+            ((bounds.max.z - bounds.min.z) / cell_size).ceil() as usize,
+        ];
+        
+        let total_cells = dimensions[0] * dimensions[1] * dimensions[2];
+        let cells = vec![Vec::new(); total_cells];
+        
+        Self {
+            cell_size,
+            bounds,
+            dimensions,
+            cells,
+        }
+    }
+    
+    /// Converts a world position to grid coordinates.
+    fn world_to_grid(&self, pos: Vec3) -> [i32; 3] {
+        [
+            ((pos.x - self.bounds.min.x) / self.cell_size).floor() as i32,
+            ((pos.y - self.bounds.min.y) / self.cell_size).floor() as i32,
+            ((pos.z - self.bounds.min.z) / self.cell_size).floor() as i32,
+        ]
+    }
+    
+    /// Converts grid coordinates to a flat cell index.
+    fn grid_to_index(&self, grid_coords: [i32; 3]) -> Option<usize> {
+        if grid_coords[0] < 0 || grid_coords[1] < 0 || grid_coords[2] < 0 ||
+           grid_coords[0] >= self.dimensions[0] as i32 ||
+           grid_coords[1] >= self.dimensions[1] as i32 ||
+           grid_coords[2] >= self.dimensions[2] as i32 {
+            return None;
+        }
+        
+        let index = (grid_coords[2] as usize) * self.dimensions[0] * self.dimensions[1] +
+                   (grid_coords[1] as usize) * self.dimensions[0] +
+                   (grid_coords[0] as usize);
+        Some(index)
+    }
+    
+    /// Clears all cells and repopulates them with the given spheres.
+    pub fn update(&mut self, spheres: &[Sphere]) {
+        // Clear all cells
+        for cell in &mut self.cells {
+            cell.clear();
+        }
+        
+        // Insert each sphere into appropriate cells
+        for (i, sphere) in spheres.iter().enumerate() {
+            self.insert_sphere(i, sphere);
+        }
+    }
+    
+    /// Inserts a sphere into the appropriate grid cells.
+    /// A sphere may occupy multiple cells if it spans cell boundaries.
+    fn insert_sphere(&mut self, sphere_index: usize, sphere: &Sphere) {
+        let radius = sphere.radius;
+        let pos = sphere.pos;
+        
+        // Find the range of cells this sphere occupies
+        let min_grid = self.world_to_grid(Vec3::new(
+            pos.x - radius, pos.y - radius, pos.z - radius
+        ));
+        let max_grid = self.world_to_grid(Vec3::new(
+            pos.x + radius, pos.y + radius, pos.z + radius
+        ));
+        
+        // Insert into all overlapping cells
+        for z in min_grid[2]..=max_grid[2] {
+            for y in min_grid[1]..=max_grid[1] {
+                for x in min_grid[0]..=max_grid[0] {
+                    if let Some(cell_index) = self.grid_to_index([x, y, z]) {
+                        self.cells[cell_index].push(sphere_index);
+                    }
+                }
+            }
+        }
+    }
+    
+    /// Returns potential collision pairs by checking overlapping grid cells.
+    /// This dramatically reduces the number of collision checks needed.
+    pub fn get_potential_pairs(&self) -> Vec<(usize, usize)> {
+        let mut pairs = Vec::new();
+        
+        for cell in &self.cells {
+            // Check all pairs within this cell
+            for i in 0..cell.len() {
+                for j in (i + 1)..cell.len() {
+                    pairs.push((cell[i], cell[j]));
+                }
+            }
+        }
+        
+        // Remove duplicates (spheres can be in multiple cells)
+        pairs.sort_unstable();
+        pairs.dedup();
+        
+        pairs
+    }
 }

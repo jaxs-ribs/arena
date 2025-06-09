@@ -22,7 +22,8 @@
 //! mode is primarily used for testing and debugging purposes.
 
 use crate::types::{
-    BoxBody, Cylinder, Joint, JointParams, PhysParams, Plane, Sphere, Vec3,
+    BoundingBox, BoxBody, Cylinder, Joint, JointParams, Material, PhysParams, Plane, 
+    Sphere, SpatialGrid, Vec3,
 };
 use compute::{ComputeBackend, ComputeError};
 use std::mem::size_of;
@@ -88,6 +89,8 @@ pub struct PhysicsSim {
     pub joints: Vec<Joint>,
     /// The parameters for the joint solver.
     pub joint_params: JointParams,
+    /// Spatial grid for broad-phase collision detection.
+    pub spatial_grid: SpatialGrid,
     backend: Arc<dyn ComputeBackend>,
 }
 
@@ -106,6 +109,14 @@ impl PhysicsSim {
     /// A new `PhysicsSim` instance with default settings.
     #[must_use]
     pub fn new() -> Self {
+        // Create a reasonable default spatial grid
+        // Grid covers a 100x100x100 world with 4-unit cells (good for ~1 unit radius spheres)
+        let bounds = BoundingBox {
+            min: Vec3::new(-50.0, -10.0, -50.0),
+            max: Vec3::new(50.0, 90.0, 50.0),
+        };
+        let spatial_grid = SpatialGrid::new(4.0, bounds);
+        
         Self {
             spheres: Vec::new(),
             boxes: Vec::new(),
@@ -121,6 +132,7 @@ impl PhysicsSim {
                 compliance: 0.0,
                 _pad: [0.0; 3],
             },
+            spatial_grid,
             backend: compute::default_backend(),
         }
     }
@@ -143,6 +155,7 @@ impl PhysicsSim {
         let sphere = Sphere::new(
             Vec3::new(0.0, initial_height, 0.0),
             Vec3::new(0.0, 0.0, 0.0),
+            1.0, // Default radius of 1.0
         );
         let spheres = vec![sphere];
 
@@ -151,6 +164,12 @@ impl PhysicsSim {
             dt: 0.01,
             forces: vec![[0.0, 0.0]],
         };
+
+        let bounds = BoundingBox {
+            min: Vec3::new(-50.0, -10.0, -50.0),
+            max: Vec3::new(50.0, 90.0, 50.0),
+        };
+        let spatial_grid = SpatialGrid::new(4.0, bounds);
 
         let backend = compute::default_backend();
 
@@ -165,6 +184,7 @@ impl PhysicsSim {
                 compliance: 0.0,
                 _pad: [0.0; 3],
             },
+            spatial_grid,
             backend,
         }
     }
@@ -175,13 +195,30 @@ impl PhysicsSim {
     ///
     /// * `pos` - The initial position of the sphere.
     /// * `vel` - The initial velocity of the sphere.
+    /// * `radius` - The radius of the sphere.
     ///
     /// # Returns
     ///
     /// The index of the newly added sphere.
-    pub fn add_sphere(&mut self, pos: Vec3, vel: Vec3) -> usize {
+    pub fn add_sphere(&mut self, pos: Vec3, vel: Vec3, radius: f32) -> usize {
         let index = self.spheres.len();
-        self.spheres.push(Sphere::new(pos, vel));
+        self.spheres.push(Sphere::new(pos, vel, radius));
+        self.params.forces.push([0.0, 0.0]);
+        index
+    }
+
+    /// Adds a new sphere with custom material to the simulation.
+    pub fn add_sphere_with_material(&mut self, pos: Vec3, vel: Vec3, radius: f32, material: Material) -> usize {
+        let index = self.spheres.len();
+        self.spheres.push(Sphere::with_material(pos, vel, radius, material));
+        self.params.forces.push([0.0, 0.0]);
+        index
+    }
+
+    /// Adds a new sphere with custom mass and material to the simulation.
+    pub fn add_sphere_with_mass_and_material(&mut self, pos: Vec3, vel: Vec3, radius: f32, mass: f32, material: Material) -> usize {
+        let index = self.spheres.len();
+        self.spheres.push(Sphere::with_mass_and_material(pos, vel, radius, mass, material));
         self.params.forces.push([0.0, 0.0]);
         index
     }
@@ -199,7 +236,7 @@ impl PhysicsSim {
     /// The index of the newly added box.
     pub fn add_box(&mut self, pos: Vec3, half_extents: Vec3, vel: Vec3) -> usize {
         let index = self.boxes.len();
-        self.boxes.push(BoxBody { pos, half_extents, vel });
+        self.boxes.push(BoxBody { pos, half_extents, vel, material: Material::default() });
         index
     }
 
@@ -228,6 +265,7 @@ impl PhysicsSim {
             vel,
             radius,
             height,
+            material: Material::default(),
         });
         index
     }
@@ -292,6 +330,24 @@ impl PhysicsSim {
     /// * `backend` - The new compute backend to use.
     pub fn set_backend(&mut self, backend: Arc<dyn ComputeBackend>) {
         self.backend = backend;
+    }
+
+    /// Configures the spatial grid used for broad-phase collision detection.
+    ///
+    /// # Arguments
+    ///
+    /// * `cell_size` - Size of each grid cell (should be roughly 2x the average object radius)
+    /// * `bounds` - World-space bounds that the grid covers
+    pub fn configure_spatial_grid(&mut self, cell_size: f32, bounds: BoundingBox) {
+        self.spatial_grid = SpatialGrid::new(cell_size, bounds);
+    }
+
+    /// Returns statistics about the spatial grid performance.
+    pub fn spatial_grid_stats(&self) -> (usize, usize, f32) {
+        let total_cells = self.spatial_grid.cells.len();
+        let occupied_cells = self.spatial_grid.cells.iter().filter(|cell| !cell.is_empty()).count();
+        let occupancy_ratio = if total_cells > 0 { occupied_cells as f32 / total_cells as f32 } else { 0.0 };
+        (total_cells, occupied_cells, occupancy_ratio)
     }
 
     /// Advances the simulation by one time step using the GPU.
@@ -616,8 +672,10 @@ impl PhysicsSim {
         let dt = self.params.dt;
         // Spheres
         for (sphere, force) in self.spheres.iter_mut().zip(&self.params.forces) {
-            sphere.vel.x += (self.params.gravity.x + force[0]) * dt;
-            sphere.vel.y += (self.params.gravity.y + force[1]) * dt;
+            // F = ma, so a = F/m. For gravity, F = mg, so a = g (mass cancels out)
+            // External forces are assumed to be actual forces, so need to divide by mass
+            sphere.vel.x += (self.params.gravity.x + force[0] / sphere.mass) * dt;
+            sphere.vel.y += (self.params.gravity.y + force[1] / sphere.mass) * dt;
             sphere.vel.z += self.params.gravity.z * dt;
 
             sphere.pos.x += sphere.vel.x * dt;
@@ -629,19 +687,49 @@ impl PhysicsSim {
                     + sphere.pos.y * plane.normal.y
                     + sphere.pos.z * plane.normal.z
                     + plane.d;
-                let radius = 1.0_f32;
+                let radius = sphere.radius;
                 if dist < radius {
+                    // Position correction
                     let correction = radius - dist;
                     sphere.pos.x += plane.normal.x * correction;
                     sphere.pos.y += plane.normal.y * correction;
                     sphere.pos.z += plane.normal.z * correction;
+                    
+                    // Velocity-based collision response with material properties
                     let vn = sphere.vel.x * plane.normal.x
                         + sphere.vel.y * plane.normal.y
                         + sphere.vel.z * plane.normal.z;
+                    
                     if vn < 0.0 {
-                        sphere.vel.x -= vn * plane.normal.x;
-                        sphere.vel.y -= vn * plane.normal.y;
-                        sphere.vel.z -= vn * plane.normal.z;
+                        // Apply restitution to normal velocity
+                        let restitution = sphere.material.restitution;
+                        let new_vn = -vn * restitution;
+                        let velocity_change = new_vn - vn;
+                        
+                        sphere.vel.x += velocity_change * plane.normal.x;
+                        sphere.vel.y += velocity_change * plane.normal.y;
+                        sphere.vel.z += velocity_change * plane.normal.z;
+                        
+                        // Apply friction to tangential velocity
+                        let friction = sphere.material.friction;
+                        
+                        // Calculate current velocity normal component
+                        let vel_normal = sphere.vel.x * plane.normal.x + 
+                                       sphere.vel.y * plane.normal.y + 
+                                       sphere.vel.z * plane.normal.z;
+                        
+                        // Get tangential velocity (velocity minus normal component)
+                        let tangent_vel_x = sphere.vel.x - vel_normal * plane.normal.x;
+                        let tangent_vel_y = sphere.vel.y - vel_normal * plane.normal.y;
+                        let tangent_vel_z = sphere.vel.z - vel_normal * plane.normal.z;
+                        
+                        // Apply friction damping to tangential velocity
+                        let friction_factor = (1.0 - friction * dt * 10.0).max(0.0);
+                        
+                        // Reconstruct velocity with damped tangential component
+                        sphere.vel.x = vel_normal * plane.normal.x + tangent_vel_x * friction_factor;
+                        sphere.vel.y = vel_normal * plane.normal.y + tangent_vel_y * friction_factor;
+                        sphere.vel.z = vel_normal * plane.normal.z + tangent_vel_z * friction_factor;
                     }
                 }
             }
@@ -718,53 +806,131 @@ impl PhysicsSim {
             }
         }
 
-        // Sphere-sphere collision detection
-        for i in 0..self.spheres.len() {
-            for j in (i + 1)..self.spheres.len() {
-                let sphere1 = &self.spheres[i];
-                let sphere2 = &self.spheres[j];
+        // Update spatial grid with current sphere positions
+        self.spatial_grid.update(&self.spheres);
+        
+        // Get potential collision pairs from spatial grid (much faster than O(n²))
+        let potential_pairs = self.spatial_grid.get_potential_pairs();
+        
+        // Sphere-sphere collision detection using spatial grid
+        for (i, j) in potential_pairs {
+            if i >= self.spheres.len() || j >= self.spheres.len() {
+                continue; // Safety check
+            }
+            
+            let dx = self.spheres[j].pos.x - self.spheres[i].pos.x;
+            let dy = self.spheres[j].pos.y - self.spheres[i].pos.y;
+            let dz = self.spheres[j].pos.z - self.spheres[i].pos.z;
+            let distance = (dx * dx + dy * dy + dz * dz).sqrt();
+            
+            let radius1 = self.spheres[i].radius;
+            let radius2 = self.spheres[j].radius;
+            let min_distance = radius1 + radius2;
+            
+            if distance < min_distance && distance > 0.0 {
+                // Collision detected, resolve it
+                let overlap = min_distance - distance;
+                let nx = dx / distance;
+                let ny = dy / distance;
+                let nz = dz / distance;
                 
-                let dx = sphere2.pos.x - sphere1.pos.x;
-                let dy = sphere2.pos.y - sphere1.pos.y;
-                let dz = sphere2.pos.z - sphere1.pos.z;
-                let distance = (dx * dx + dy * dy + dz * dz).sqrt();
+                // Get masses for collision response
+                let mass1 = self.spheres[i].mass;
+                let mass2 = self.spheres[j].mass;
                 
-                let radius1 = 1.0; // sphere radius
-                let radius2 = 1.0; // sphere radius
-                let min_distance = radius1 + radius2;
+                // Separate spheres based on position (more stable separation)
+                // Use mass-weighted separation to avoid lighter objects moving too much
+                let total_mass = mass1 + mass2;
+                let sep_ratio_i = mass2 / total_mass; // Heavier objects move less
+                let sep_ratio_j = mass1 / total_mass;
                 
-                if distance < min_distance && distance > 0.0 {
-                    // Collision detected, resolve it
-                    let overlap = min_distance - distance;
-                    let nx = dx / distance;
-                    let ny = dy / distance;
-                    let nz = dz / distance;
+                self.spheres[i].pos.x -= nx * overlap * sep_ratio_i;
+                self.spheres[i].pos.y -= ny * overlap * sep_ratio_i;
+                self.spheres[i].pos.z -= nz * overlap * sep_ratio_i;
+                
+                self.spheres[j].pos.x += nx * overlap * sep_ratio_j;
+                self.spheres[j].pos.y += ny * overlap * sep_ratio_j;
+                self.spheres[j].pos.z += nz * overlap * sep_ratio_j;
+                
+                // Get material properties for collision response
+                let mat1 = self.spheres[i].material;
+                let mat2 = self.spheres[j].material;
+                
+                // Combined restitution (geometric mean for stability)
+                let restitution = (mat1.restitution * mat2.restitution).sqrt();
+                
+                // Get relative velocity at contact point
+                let rel_vel_x = self.spheres[j].vel.x - self.spheres[i].vel.x;
+                let rel_vel_y = self.spheres[j].vel.y - self.spheres[i].vel.y;
+                let rel_vel_z = self.spheres[j].vel.z - self.spheres[i].vel.z;
+                
+                // Relative velocity along collision normal
+                let rel_vel_normal = rel_vel_x * nx + rel_vel_y * ny + rel_vel_z * nz;
+                
+                // Don't resolve if objects are separating
+                if rel_vel_normal > 0.0 {
+                    continue;
+                }
+                
+                // Calculate inverse mass sum for impulse calculation
+                let inv_mass_sum = 1.0 / mass1 + 1.0 / mass2;
+                
+                // Calculate impulse magnitude using proper physics formula
+                // J = -(1 + e) * v_rel_n / (1/m1 + 1/m2)
+                let impulse_magnitude = -(1.0 + restitution) * rel_vel_normal / inv_mass_sum;
+                
+                // Apply impulse to both spheres (impulse = change in momentum)
+                let impulse_x = impulse_magnitude * nx;
+                let impulse_y = impulse_magnitude * ny;
+                let impulse_z = impulse_magnitude * nz;
+                
+                // Δv = J / m
+                self.spheres[i].vel.x -= impulse_x / mass1;
+                self.spheres[i].vel.y -= impulse_y / mass1;
+                self.spheres[i].vel.z -= impulse_z / mass1;
+                
+                self.spheres[j].vel.x += impulse_x / mass2;
+                self.spheres[j].vel.y += impulse_y / mass2;
+                self.spheres[j].vel.z += impulse_z / mass2;
+                
+                // Apply friction (simplified Coulomb friction)
+                let friction = (mat1.friction * mat2.friction).sqrt();
+                
+                // Tangential velocity (remove normal component)
+                let tangent_vel_x = rel_vel_x - rel_vel_normal * nx;
+                let tangent_vel_y = rel_vel_y - rel_vel_normal * ny;
+                let tangent_vel_z = rel_vel_z - rel_vel_normal * nz;
+                
+                let tangent_speed = (tangent_vel_x * tangent_vel_x + 
+                                   tangent_vel_y * tangent_vel_y + 
+                                   tangent_vel_z * tangent_vel_z).sqrt();
+                
+                if tangent_speed > 1e-6 {
+                    // Normalize tangent direction
+                    let tangent_x = tangent_vel_x / tangent_speed;
+                    let tangent_y = tangent_vel_y / tangent_speed;
+                    let tangent_z = tangent_vel_z / tangent_speed;
                     
-                    // Separate spheres
-                    let separation = overlap * 0.5;
-                    let sphere1 = &mut self.spheres[i];
-                    sphere1.pos.x -= nx * separation;
-                    sphere1.pos.y -= ny * separation;
-                    sphere1.pos.z -= nz * separation;
+                    // Friction impulse (limited by Coulomb friction law)
+                    let friction_impulse = friction * impulse_magnitude.abs();
                     
-                    let sphere2 = &mut self.spheres[j];
-                    sphere2.pos.x += nx * separation;
-                    sphere2.pos.y += ny * separation;
-                    sphere2.pos.z += nz * separation;
+                    // Calculate maximum possible friction based on reduced mass
+                    let reduced_mass = (mass1 * mass2) / (mass1 + mass2);
+                    let max_friction = tangent_speed * reduced_mass;
+                    let friction_magnitude = friction_impulse.min(max_friction);
                     
-                    // Velocity exchange (elastic collision)
-                    let v1_n = sphere1.vel.x * nx + sphere1.vel.y * ny + sphere1.vel.z * nz;
-                    let v2_n = sphere2.vel.x * nx + sphere2.vel.y * ny + sphere2.vel.z * nz;
+                    // Apply friction impulse
+                    let friction_x = friction_magnitude * tangent_x;
+                    let friction_y = friction_magnitude * tangent_y;
+                    let friction_z = friction_magnitude * tangent_z;
                     
-                    let sphere1 = &mut self.spheres[i];
-                    sphere1.vel.x += (v2_n - v1_n) * nx;
-                    sphere1.vel.y += (v2_n - v1_n) * ny;
-                    sphere1.vel.z += (v2_n - v1_n) * nz;
+                    self.spheres[i].vel.x += friction_x / mass1;
+                    self.spheres[i].vel.y += friction_y / mass1;
+                    self.spheres[i].vel.z += friction_z / mass1;
                     
-                    let sphere2 = &mut self.spheres[j];
-                    sphere2.vel.x += (v1_n - v2_n) * nx;
-                    sphere2.vel.y += (v1_n - v2_n) * ny;
-                    sphere2.vel.z += (v1_n - v2_n) * nz;
+                    self.spheres[j].vel.x -= friction_x / mass2;
+                    self.spheres[j].vel.y -= friction_y / mass2;
+                    self.spheres[j].vel.z -= friction_z / mass2;
                 }
             }
         }

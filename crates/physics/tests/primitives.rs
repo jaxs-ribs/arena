@@ -3,7 +3,7 @@ use physics::{PhysicsSim, Vec3};
 #[test]
 fn create_primitives() {
     let mut sim = PhysicsSim::new();
-    let s_idx = sim.add_sphere(Vec3::new(0.0, 1.0, 0.0), Vec3::new(0.0, 0.0, 0.0));
+    let s_idx = sim.add_sphere(Vec3::new(0.0, 1.0, 0.0), Vec3::new(0.0, 0.0, 0.0), 1.0);
     let b_idx = sim.add_box(Vec3::new(0.0, 2.0, 0.0), Vec3::new(0.5, 0.5, 0.5), Vec3::new(0.0, 0.0, 0.0));
     let c_idx = sim.add_cylinder(Vec3::new(0.0, 3.0, 0.0), 0.5, 1.0, Vec3::new(0.0, 0.0, 0.0));
     let p_idx = sim.add_plane(Vec3::new(0.0, 1.0, 0.0), 0.0);
@@ -21,7 +21,7 @@ fn create_primitives() {
 fn primitives_rest_on_plane() {
     let mut sim = PhysicsSim::new();
     sim.add_plane(Vec3::new(0.0, 1.0, 0.0), 0.0); // ground plane y=0
-    sim.add_sphere(Vec3::new(0.0, 1.0, 0.0), Vec3::new(0.0, 0.0, 0.0));
+    sim.add_sphere(Vec3::new(0.0, 1.0, 0.0), Vec3::new(0.0, 0.0, 0.0), 1.0);
     sim.add_box(Vec3::new(0.0, 2.0, 0.0), Vec3::new(0.5, 0.5, 0.5), Vec3::new(0.0, 0.0, 0.0));
     sim.add_cylinder(Vec3::new(0.0, 3.0, 0.0), 0.5, 1.0, Vec3::new(0.0, 0.0, 0.0));
     sim.params.gravity = Vec3::new(0.0, -9.81, 0.0);

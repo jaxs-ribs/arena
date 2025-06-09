@@ -139,8 +139,8 @@ impl Phenotype {
         let mut map: HashMap<String, usize> = HashMap::new();
         for body in self.bodies {
             match body {
-                Body::Sphere { id, radius: _, pos, vel } => {
-                    let idx = sim.add_sphere(Vec3::new(pos[0], pos[1], pos[2]), Vec3::new(vel[0], vel[1], vel[2]));
+                Body::Sphere { id, radius, pos, vel } => {
+                    let idx = sim.add_sphere(Vec3::new(pos[0], pos[1], pos[2]), Vec3::new(vel[0], vel[1], vel[2]), radius);
                     map.insert(id, idx);
                 }
                 Body::Box { id, half_extents, pos, vel } => {

@@ -21,6 +21,7 @@ impl StickBalanceEnv {
         sim.spheres.push(Sphere::new(
             Vec3::new(0.0, 1.0, 0.0),
             Vec3::new(0.0, 0.0, 0.0),
+            1.0, // Default radius of 1.0
         ));
         // Each sphere needs a force slot.
         sim.params.forces.push([0.0, 0.0]);

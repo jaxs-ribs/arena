@@ -78,15 +78,18 @@ pub fn run(enable_render: bool) -> Result<()> {
     let ramp_normal = Vec3::new(0.3, 1.0, 0.0).normalize();
     sim.add_plane(ramp_normal, -2.0);
     
-    // Multiple spheres at different heights for dynamic scene
-    sim.add_sphere(Vec3::new(-2.0, 8.0, 0.0), Vec3::ZERO); // High sphere to fall
-    sim.add_sphere(Vec3::new(0.0, 6.0, 0.0), Vec3::ZERO);  // Medium sphere
-    sim.add_sphere(Vec3::new(2.0, 4.0, 0.0), Vec3::ZERO);  // Lower sphere
+    // Test sphere-sphere collisions with stacked spheres
+    sim.add_sphere(Vec3::new(0.0, 3.0, 0.0), Vec3::ZERO, 1.0);  // Bottom sphere on ground
+    sim.add_sphere(Vec3::new(0.0, 5.5, 0.0), Vec3::ZERO, 1.0);  // Middle sphere (should rest on bottom)
+    sim.add_sphere(Vec3::new(0.0, 8.0, 0.0), Vec3::ZERO, 1.0);  // Top sphere (should fall and bounce)
     
-    // Physics works for all object types in step_cpu!
-    sim.add_box(Vec3::new(-1.0, 7.0, 0.0), Vec3::new(0.5, 0.5, 0.5), Vec3::ZERO);
-    sim.add_cylinder(Vec3::new(1.0, 5.0, 0.0), 0.5, 1.0, Vec3::ZERO);
-    sim.add_box(Vec3::new(3.0, 9.0, 0.0), Vec3::new(0.3, 0.3, 0.3), Vec3::ZERO);
+    // Side spheres to test lateral collisions
+    sim.add_sphere(Vec3::new(-3.0, 8.0, 0.0), Vec3::new(2.0, 0.0, 0.0), 1.0); // Moving sphere
+    sim.add_sphere(Vec3::new(3.0, 4.0, 0.0), Vec3::ZERO, 1.0);   // Stationary target
+    
+    // Add some other objects for variety (no collisions yet)
+    sim.add_box(Vec3::new(-5.0, 5.0, 0.0), Vec3::new(0.5, 0.5, 0.5), Vec3::ZERO);
+    sim.add_cylinder(Vec3::new(5.0, 3.0, 0.0), 0.5, 1.0, Vec3::ZERO);
 
     let dt = 0.016_f32;
 
