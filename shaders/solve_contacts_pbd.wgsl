@@ -6,18 +6,16 @@ struct Vec3 {
 
 struct Sphere {
     pos : Vec3,
-    _pad1: f32,
     vel : Vec3,
-    _pad2: f32,
     orientation : vec4<f32>,
     angular_vel : Vec3,
-    _pad3: f32,
 };
 
 struct Contact {
     body_index : u32,
     normal : Vec3,
     depth : f32,
+    pad : Vec3,
 };
 
 @group(0) @binding(0) var<storage, read_write> bodies : array<Sphere>;

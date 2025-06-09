@@ -6,12 +6,6 @@ struct Vec3 {
 
 struct Body {
     pos : Vec3,
-    _pad1: f32,
-    vel: Vec3,
-    _pad2: f32,
-    orientation: vec4<f32>,
-    angular_vel: Vec3,
-    _pad3: f32,
 };
 
 struct Contact {

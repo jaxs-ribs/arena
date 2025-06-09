@@ -57,21 +57,13 @@ pub struct PhysParams {
     pub forces: Vec<[f32; 2]>,
 }
 
-pub const JOINT_TYPE_DISTANCE: u32 = 0;
-pub const JOINT_TYPE_HINGE: u32 = 1;
-pub const JOINT_TYPE_SLIDER: u32 = 2;
-
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Joint {
     pub body_a: u32,
     pub body_b: u32,
-    pub joint_type: u32,
     pub rest_length: f32,
-    pub local_anchor_a: Vec3,
-    pub local_anchor_b: Vec3,
-    pub local_axis_a: Vec3,
-    pub local_axis_b: Vec3,
+    pub _padding: u32,
 }
 
 #[repr(C)]

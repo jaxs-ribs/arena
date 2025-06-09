@@ -6,7 +6,7 @@ fn sphere_free_fall_matches_analytic() {
     let mut sim = PhysicsSim::new_single_sphere(10.0);
     let dt = 0.01_f32;          // 10 ms
     let steps = 100_usize;      // simulate 1 s so the sphere stays above ground
-    let final_state = sim.run(dt * steps as f32, steps).unwrap();
+    let final_state = sim.run(dt, steps).unwrap();
 
     // analytic: h = h0 − ½ g t²  (g = 9.81)
     let expected = 10.0 - 0.5 * 9.81 * (dt * steps as f32).powi(2);
