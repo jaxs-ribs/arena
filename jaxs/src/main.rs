@@ -27,6 +27,8 @@ use anyhow::Result;
 /// exits successfully. Any errors encountered during the setup or execution of the simulation
 /// will be returned as an `Err`.
 fn main() -> Result<()> {
-    let enable_render = std::env::args().any(|a| a == "--draw");
+    // When the `render` feature is enabled, this will be true, and the
+    // simulation will be visualized. Otherwise, it will run in headless mode.
+    let enable_render = cfg!(feature = "render");
     app::run(enable_render)
 } 

@@ -2,13 +2,10 @@ use anyhow::{Context, Result};
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Vec3};
 use physics::{BoxBody, Cylinder, Plane, Sphere};
-use std::collections::HashSet;
-use std::time::Duration;
 use wgpu::util::DeviceExt;
-use winit::event::{DeviceEvent, ElementState, Event, MouseButton, WindowEvent};
+use winit::event::{DeviceEvent, ElementState, Event, WindowEvent};
 use winit::event_loop::EventLoop;
 use winit::keyboard::{KeyCode, PhysicalKey};
-use winit::platform::pump_events::EventLoopExtPumpEvents;
 use winit::window::{Window, WindowBuilder};
 
 #[repr(C)]
@@ -30,8 +27,6 @@ struct CameraUniform {
 struct Camera {
     /// Camera position.
     eye: Vec3,
-    /// Look at target.
-    target: Vec3,
     /// Up vector.
     up: Vec3,
     /// Render target aspect ratio.
@@ -46,14 +41,101 @@ struct Camera {
     yaw: f32,
     /// Vertical rotation of the camera.
     pitch: f32,
+    /// Camera movement speed.
+    speed: f32,
+    /// Mouse sensitivity for look.
+    sensitivity: f32,
 }
 
 impl Camera {
     /// Computes a view projection matrix from the camera parameters.
     fn build_view_projection_matrix(&self) -> Mat4 {
-        let view = Mat4::look_at_rh(self.eye, self.target, self.up);
+        let yaw_quat = glam::Quat::from_axis_angle(Vec3::Y, self.yaw);
+        let pitch_quat = glam::Quat::from_axis_angle(Vec3::X, self.pitch);
+        let orientation = yaw_quat * pitch_quat;
+        let forward = orientation * Vec3::NEG_Z;
+
+        let target = self.eye + forward;
+
+        let view = Mat4::look_at_rh(self.eye, target, self.up);
         let proj = Mat4::perspective_rh(self.fovy, self.aspect, self.znear, self.zfar);
         proj * view
+    }
+}
+
+/// First person camera controller.
+struct Controller {
+    speed: f32,
+    sensitivity: f32,
+    forwards: bool,
+    backwards: bool,
+    left: bool,
+    right: bool,
+    up: bool,
+    down: bool,
+}
+
+impl Controller {
+    fn new(speed: f32, sensitivity: f32) -> Self {
+        Self {
+            speed,
+            sensitivity,
+            forwards: false,
+            backwards: false,
+            left: false,
+            right: false,
+            up: false,
+            down: false,
+        }
+    }
+
+    fn process_events(&mut self, keycode: KeyCode, state: ElementState) {
+        let pressed = state == ElementState::Pressed;
+        match keycode {
+            KeyCode::KeyW => self.forwards = pressed,
+            KeyCode::KeyA => self.left = pressed,
+            KeyCode::KeyS => self.backwards = pressed,
+            KeyCode::KeyD => self.right = pressed,
+            KeyCode::Space => self.up = pressed,
+            KeyCode::ShiftLeft => self.down = pressed,
+            _ => (),
+        }
+    }
+
+    fn update_camera(&self, camera: &mut Camera, dt: f32) {
+        let yaw_quat = glam::Quat::from_axis_angle(Vec3::Y, camera.yaw);
+        let pitch_quat = glam::Quat::from_axis_angle(Vec3::X, camera.pitch);
+        let orientation = yaw_quat * pitch_quat;
+
+        let forward_dir = orientation * Vec3::NEG_Z;
+        let right_dir = orientation * Vec3::X;
+
+        let mut velocity = Vec3::ZERO;
+        if self.forwards {
+            velocity += forward_dir;
+        }
+        if self.backwards {
+            velocity -= forward_dir;
+        }
+        if self.right {
+            velocity += right_dir;
+        }
+        if self.left {
+            velocity -= right_dir;
+        }
+
+        // Normalize to prevent faster diagonal movement
+        if velocity.length_squared() > 0.0 {
+            camera.eye += velocity.normalize() * self.speed * dt;
+        }
+
+        // Vertical movement (global axis)
+        if self.up {
+            camera.eye.y += self.speed * dt;
+        }
+        if self.down {
+            camera.eye.y -= self.speed * dt;
+        }
     }
 }
 
@@ -119,8 +201,8 @@ struct SceneCounts {
 
 /// A simple ray-marched renderer used for visualising signed distance fields.
 pub struct Renderer {
-    event_loop: EventLoop<()>,
     surface: wgpu::Surface<'static>,
+    adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
     pipeline: wgpu::RenderPipeline,
@@ -128,6 +210,7 @@ pub struct Renderer {
     camera: Camera,
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
+    controller: Controller,
     counts_buffer: wgpu::Buffer,
     spheres_buffer: wgpu::Buffer,
     boxes_buffer: wgpu::Buffer,
@@ -135,7 +218,6 @@ pub struct Renderer {
     planes_buffer: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     window: Window,
-    pressed_keys: HashSet<KeyCode>,
 }
 
 impl Renderer {
@@ -144,7 +226,7 @@ impl Renderer {
     /// This sets up all GPU resources necessary for rendering the SDF scene and
     /// returns an instance ready to be updated each frame.
     #[allow(clippy::too_many_lines)]
-    pub fn new() -> Result<Self> {
+    pub fn new() -> Result<(Self, EventLoop<()>)> {
         let event_loop = EventLoop::new().context("create event loop")?;
         let window = WindowBuilder::new()
             .with_title("JAXS SDF Renderer")
@@ -162,7 +244,6 @@ impl Renderer {
 
         let instance = wgpu::Instance::default();
         let surface = instance.create_surface(&window)?;
-        // Safety: surface lives as long as window
         let surface = unsafe { std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(surface) };
 
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
@@ -197,16 +278,23 @@ impl Renderer {
         };
         surface.configure(&device, &config);
 
+        let eye = Vec3::new(-5.0, 6.0, 12.0);
+        let target = Vec3::new(0.0, 3.0, 0.0);
+        let forward = (target - eye).normalize();
+        let yaw = forward.x.atan2(forward.z);
+        let pitch = forward.y.asin();
+
         let camera = Camera {
-            eye: Vec3::new(-5.0, 6.0, 12.0),
-            target: Vec3::new(0.0, 3.0, 0.0),
+            eye,
             up: Vec3::Y,
             aspect: config.width as f32 / config.height as f32,
             fovy: 45.0f32.to_radians(),
             znear: 0.1,
             zfar: 100.0,
-            yaw: 0.3,
-            pitch: -0.3,
+            yaw,
+            pitch,
+            speed: 10.0,
+            sensitivity: 1.0,
         };
 
         let view_proj = camera.build_view_projection_matrix();
@@ -216,6 +304,8 @@ impl Renderer {
             view_proj_inv: view_proj_inv.to_cols_array_2d(),
             eye: [camera.eye.x, camera.eye.y, camera.eye.z, 0.0],
         };
+
+        let controller = Controller::new(camera.speed, camera.sensitivity);
 
         let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Camera Buffer"),
@@ -256,11 +346,11 @@ impl Renderer {
         });
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("bind layout"),
+            label: Some("SDF Bind Group Layout"),
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -322,7 +412,7 @@ impl Renderer {
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("bind group"),
+            label: Some("SDF Bind Group"),
             layout: &bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
@@ -352,75 +442,78 @@ impl Renderer {
             ],
         });
 
+        let shader_src = include_str!("renderer.wgsl");
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("SDF Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("renderer.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(shader_src.into()),
         });
 
-        let render_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("SDF Pipeline Layout"),
-                bind_group_layouts: &[&bind_group_layout],
-                push_constant_ranges: &[],
-            });
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("SDF Pipeline Layout"),
+            bind_group_layouts: &[&bind_group_layout],
+            push_constant_ranges: &[],
+        });
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("SDF Pipeline"),
-            layout: Some(&render_pipeline_layout),
+            layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[],
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: (3 * std::mem::size_of::<f32>()) as wgpu::BufferAddress,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x3],
+                }],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: config.format,
+                    format: surface_format,
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleStrip,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                unclipped_depth: false,
-                conservative: false,
+                ..Default::default()
             },
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
         });
 
-        let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
-            size: 4 * std::mem::size_of::<f32>() as u64,
+            contents: bytemuck::cast_slice(&[
+                -1.0_f32, -1.0, 0.0, 1.0, -1.0, 0.0, 1.0, 1.0, 0.0, -1.0, 1.0, 0.0,
+            ]),
             usage: wgpu::BufferUsages::VERTEX,
-            mapped_at_creation: false,
         });
 
-        Ok(Self {
+        Ok((
+            Self {
+                surface,
+                adapter,
+                device,
+                queue,
+                pipeline,
+                vertex_buffer,
+                camera,
+                camera_uniform,
+                camera_buffer,
+                controller,
+                counts_buffer,
+                spheres_buffer,
+                boxes_buffer,
+                cylinders_buffer,
+                planes_buffer,
+                bind_group,
+                window,
+            },
             event_loop,
-            surface,
-            device,
-            queue,
-            pipeline,
-            vertex_buffer,
-            camera,
-            camera_uniform,
-            camera_buffer,
-            counts_buffer,
-            spheres_buffer,
-            boxes_buffer,
-            cylinders_buffer,
-            planes_buffer,
-            bind_group,
-            window,
-            pressed_keys: HashSet::new(),
-        })
+        ))
     }
 
     /// Updates the GPU buffers with the latest positions of all scene objects.
@@ -486,104 +579,71 @@ impl Renderer {
             .write_buffer(&self.counts_buffer, 0, bytemuck::bytes_of(&counts));
     }
 
-    /// Update the camera based on keyboard input.
+    pub fn handle_event(&mut self, event: &Event<()>) {
+        match event {
+            Event::WindowEvent { event, .. } => {
+                self.handle_window_event(event);
+            }
+            Event::DeviceEvent { event, .. } => {
+                self.handle_device_event(event);
+            }
+            _ => (),
+        }
+    }
+
     fn update_camera(&mut self, dt: f32) {
-        let speed = 10.0 * dt;
-        let forward = self.get_forward_dir();
-        let right = forward.cross(self.camera.up).normalize();
-        
-        for key in &self.pressed_keys {
-            match key {
-                KeyCode::KeyW => self.camera.eye += forward * speed,
-                KeyCode::KeyS => self.camera.eye -= forward * speed,
-                KeyCode::KeyA => self.camera.eye -= right * speed,
-                KeyCode::KeyD => self.camera.eye += right * speed,
-                KeyCode::KeyQ => self.camera.eye.y -= speed,
-                KeyCode::KeyE => self.camera.eye.y += speed,
-                _ => {}
-            }
-        }
-
-        self.camera.target = self.camera.eye + forward;
+        self.controller.update_camera(&mut self.camera, dt);
     }
 
-    fn get_forward_dir(&self) -> Vec3 {
-        let forward = Vec3::new(
-            self.camera.yaw.cos() * self.camera.pitch.cos(),
-            self.camera.pitch.sin(),
-            self.camera.yaw.sin() * self.camera.pitch.cos(),
-        )
-        .normalize();
-        forward
-    }
-
-    /// Render the scene and handle window events.
+    /// Update the camera and render a single frame.
     ///
-    /// The method returns `Ok(false)` if the window was closed and `Ok(true)`
-    /// otherwise.
-    pub fn render(&mut self) -> Result<bool> {
-        self.update_camera(0.016);
+    /// The simulation state is passed in `world` which the renderer uses to
+    /// update its buffers and render the scene. The `dt` parameter is used to
+    /// update the camera based on user input.
+    ///
+    /// # Errors
+    ///
+    /// Propogates any error from rendering the frame.
+    pub fn render(&mut self) -> Result<()> {
+        let dt = 0.016;
 
-        let mut exit_requested = false;
-        let mut events_to_handle = Vec::new();
-
-        self.event_loop.pump_events(Some(Duration::from_millis(1)), |event, elwt| {
-            if let Event::WindowEvent { event: WindowEvent::CloseRequested, .. } = &event {
-                exit_requested = true;
-                elwt.exit();
-            }
-            events_to_handle.push(event);
-        });
-
-        for event in events_to_handle {
-            match event {
-                Event::WindowEvent { window_id, event } if window_id == self.window.id() => {
-                    self.handle_window_event(event);
-                }
-                Event::DeviceEvent { event, .. } => self.handle_device_event(event),
-                _ => {}
-            }
-        }
-
-
-        if exit_requested || self.pressed_keys.contains(&KeyCode::Escape) {
-            return Ok(false);
-        }
-
-        let output = self.surface.get_current_texture()?;
-        let view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
+        self.update_camera(dt);
 
         let view_proj = self.camera.build_view_projection_matrix();
         let view_proj_inv = view_proj.inverse();
         self.camera_uniform.view_proj = view_proj.to_cols_array_2d();
         self.camera_uniform.view_proj_inv = view_proj_inv.to_cols_array_2d();
-        self.camera_uniform.eye = [self.camera.eye.x, self.camera.eye.y, self.camera.eye.z, 0.0];
+        self.camera_uniform.eye = [
+            self.camera.eye.x,
+            self.camera.eye.y,
+            self.camera.eye.z,
+            0.0,
+        ];
         self.queue.write_buffer(
             &self.camera_buffer,
             0,
             bytemuck::bytes_of(&self.camera_uniform),
         );
 
+        let frame = self.surface.get_current_texture()?;
+        let view = frame.texture.create_view(&wgpu::TextureViewDescriptor {
+            format: Some(self.surface.get_capabilities(&self.adapter).formats[0]),
+            ..Default::default()
+        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
+
         {
-            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("SDF Render Pass"),
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -591,92 +651,59 @@ impl Renderer {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            rpass.set_pipeline(&self.pipeline);
-            rpass.set_bind_group(0, &self.bind_group, &[]);
-            rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            rpass.draw(0..4, 0..1);
+
+            render_pass.set_pipeline(&self.pipeline);
+            render_pass.set_bind_group(0, &self.bind_group, &[]);
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.draw(0..4, 0..1);
         }
+
         self.queue.submit(Some(encoder.finish()));
-        output.present();
-        
-        self.window.request_redraw();
 
-        Ok(true)
+        frame.present();
+
+        Ok(())
     }
 
-    fn handle_device_event(&mut self, event: DeviceEvent) {
+    fn handle_device_event(&mut self, event: &DeviceEvent) {
         if let DeviceEvent::MouseMotion { delta } = event {
-            let sensitivity = 0.003;
-            self.camera.yaw += (delta.0 as f32) * sensitivity;
-            self.camera.pitch -= (delta.1 as f32) * sensitivity;  // Invert Y for natural mouse look
-            self.camera.pitch = self.camera.pitch.clamp(-1.57, 1.57); // ±90 degrees
+            self.camera.yaw -= delta.0 as f32 * self.controller.sensitivity * 0.001;
+            self.camera.pitch -= delta.1 as f32 * self.controller.sensitivity * 0.001;
+            self.camera.pitch = self.camera.pitch.clamp(-1.5, 1.5);
         }
     }
 
-    fn handle_window_event(&mut self, event: WindowEvent) {
-        if let WindowEvent::KeyboardInput { event, .. } = &event {
-            if event.state == ElementState::Pressed {
-                match event.physical_key {
-                    PhysicalKey::Code(KeyCode::KeyW) => {
-                        self.pressed_keys.insert(KeyCode::KeyW);
-                    }
-                    PhysicalKey::Code(KeyCode::KeyS) => {
-                        self.pressed_keys.insert(KeyCode::KeyS);
-                    }
-                    PhysicalKey::Code(KeyCode::KeyA) => {
-                        self.pressed_keys.insert(KeyCode::KeyA);
-                    }
-                    PhysicalKey::Code(KeyCode::KeyD) => {
-                        self.pressed_keys.insert(KeyCode::KeyD);
-                    }
-                    PhysicalKey::Code(KeyCode::KeyQ) => {
-                        self.pressed_keys.insert(KeyCode::KeyQ);
-                    }
-                    PhysicalKey::Code(KeyCode::KeyE) => {
-                        self.pressed_keys.insert(KeyCode::KeyE);
-                    }
-                    PhysicalKey::Code(KeyCode::Escape) => {
-                        self.pressed_keys.insert(KeyCode::Escape);
-                    }
-                    _ => {}
-                }
-            } else if event.state == ElementState::Released {
-                match event.physical_key {
-                    PhysicalKey::Code(KeyCode::KeyW) => {
-                        self.pressed_keys.remove(&KeyCode::KeyW);
-                    }
-                    PhysicalKey::Code(KeyCode::KeyS) => {
-                        self.pressed_keys.remove(&KeyCode::KeyS);
-                    }
-                    PhysicalKey::Code(KeyCode::KeyA) => {
-                        self.pressed_keys.remove(&KeyCode::KeyA);
-                    }
-                    PhysicalKey::Code(KeyCode::KeyD) => {
-                        self.pressed_keys.remove(&KeyCode::KeyD);
-                    }
-                    PhysicalKey::Code(KeyCode::KeyQ) => {
-                        self.pressed_keys.remove(&KeyCode::KeyQ);
-                    }
-                    PhysicalKey::Code(KeyCode::KeyE) => {
-                        self.pressed_keys.remove(&KeyCode::KeyE);
-                    }
-                    _ => {}
-                }
-            }
+    fn handle_window_event(&mut self, event: &WindowEvent) {
+        if let WindowEvent::Resized(physical_size) = event {
+            let config = wgpu::SurfaceConfiguration {
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                format: self.surface.get_capabilities(&self.adapter).formats[0],
+                width: physical_size.width,
+                height: physical_size.height,
+                present_mode: wgpu::PresentMode::Fifo,
+                alpha_mode: wgpu::CompositeAlphaMode::Auto,
+                view_formats: vec![],
+                desired_maximum_frame_latency: 2,
+            };
+            self.surface.configure(&self.device, &config);
+            self.camera.aspect = physical_size.width as f32 / physical_size.height as f32;
         }
-        if let WindowEvent::MouseInput { state, button, .. } = &event {
-            if *button == MouseButton::Left && *state == ElementState::Pressed {
-                let _ = self.window.set_cursor_grab(winit::window::CursorGrabMode::Locked);
-                let _ = self.window.set_cursor_visible(false);
-            }
-        }
-        if let WindowEvent::Focused(focused) = &event {
-            if *focused {
-                let _ = self.window.set_cursor_grab(winit::window::CursorGrabMode::Locked);
-                let _ = self.window.set_cursor_visible(false);
-            } else {
-                let _ = self.window.set_cursor_grab(winit::window::CursorGrabMode::None);
-                let _ = self.window.set_cursor_visible(true);
+
+        if let WindowEvent::KeyboardInput { event, .. } = event {
+            if let PhysicalKey::Code(keycode) = event.physical_key {
+                self.controller.process_events(keycode, event.state);
+                match keycode {
+                    KeyCode::Escape => {
+                        let _ = self.window.set_cursor_grab(winit::window::CursorGrabMode::None);
+                        let _ = self.window.set_cursor_visible(true);
+                    }
+                    KeyCode::KeyF => {
+                        if event.state == ElementState::Pressed {
+                            self.window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+                        }
+                    }
+                    _ => (),
+                }
             }
         }
     }

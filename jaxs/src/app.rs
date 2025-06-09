@@ -24,6 +24,8 @@
 use anyhow::Result;
 use physics::{PhysicsSim, Vec3};
 use std::time::{Duration, Instant};
+use winit::event::{Event, WindowEvent};
+use winit::event_loop::ControlFlow;
 
 #[cfg(feature = "render")]
 use render::Renderer;
@@ -58,85 +60,93 @@ pub fn run(enable_render: bool) -> Result<()> {
         }
     };
 
-    #[cfg(feature = "render")]
-    let mut renderer = if enable_render {
-        Some(Renderer::new()?)
-    } else {
-        None
-    };
-
     tracing::info!("Initializing physics simulation...");
     let mut sim = PhysicsSim::new();
-    
+
     // Enable gravity for dynamic motion
     sim.params.gravity = Vec3::new(0.0, -9.81, 0.0);
-    
+
     // Ground plane at y=0
     sim.add_plane(Vec3::new(0.0, 1.0, 0.0), 0.0);
-    
-    // Tilted ramp plane  
+
+    // Tilted ramp plane
     let ramp_normal = Vec3::new(0.3, 1.0, 0.0).normalize();
     sim.add_plane(ramp_normal, -2.0);
-    
+
     // Test sphere-sphere collisions with stacked spheres
-    sim.add_sphere(Vec3::new(0.0, 3.0, 0.0), Vec3::ZERO, 1.0);  // Bottom sphere on ground
-    sim.add_sphere(Vec3::new(0.0, 5.5, 0.0), Vec3::ZERO, 1.0);  // Middle sphere (should rest on bottom)
-    sim.add_sphere(Vec3::new(0.0, 8.0, 0.0), Vec3::ZERO, 1.0);  // Top sphere (should fall and bounce)
-    
+    sim.add_sphere(Vec3::new(0.0, 3.0, 0.0), Vec3::ZERO, 1.0); // Bottom sphere on ground
+    sim.add_sphere(Vec3::new(0.0, 5.5, 0.0), Vec3::ZERO, 1.0); // Middle sphere (should rest on bottom)
+    sim.add_sphere(Vec3::new(0.0, 8.0, 0.0), Vec3::ZERO, 1.0); // Top sphere (should fall and bounce)
+
     // Side spheres to test lateral collisions
     sim.add_sphere(Vec3::new(-3.0, 8.0, 0.0), Vec3::new(2.0, 0.0, 0.0), 1.0); // Moving sphere
-    sim.add_sphere(Vec3::new(3.0, 4.0, 0.0), Vec3::ZERO, 1.0);   // Stationary target
-    
+    sim.add_sphere(Vec3::new(3.0, 4.0, 0.0), Vec3::ZERO, 1.0); // Stationary target
+
     // Add some other objects for variety (no collisions yet)
     sim.add_box(Vec3::new(-5.0, 5.0, 0.0), Vec3::new(0.5, 0.5, 0.5), Vec3::ZERO);
     sim.add_cylinder(Vec3::new(5.0, 3.0, 0.0), 0.5, 1.0, Vec3::ZERO);
 
     let dt = 0.016_f32;
 
+    #[cfg(feature = "render")]
     if enable_render {
+        let (mut renderer, event_loop) = Renderer::new()?;
+
         tracing::info!("Starting simulation loop with dt = {}...", dt);
         let mut i = 0;
         let target_fps = 60.0;
         let frame_duration = Duration::from_secs_f32(1.0 / target_fps);
-        
-        loop {
-            let frame_start = Instant::now();
-            
-            // Use CPU physics for now since GPU version may not handle all object types
-            sim.params.dt = dt;
-            sim.step_cpu();
 
-            #[cfg(feature = "render")]
-            if let Some(r) = renderer.as_mut() {
-                r.update_scene(&sim.spheres, &sim.boxes, &sim.cylinders, &sim.planes);
-                if !r.render()? {
-                    break;
-                }
-            }
+        event_loop.run(move |event, elwt| {
+            elwt.set_control_flow(ControlFlow::Poll);
 
-            if (i + 1) % 50 == 0 {
-                if !sim.spheres.is_empty() {
-                    tracing::info!(
-                        "Simulation step {} complete. Sphere_y: {}",
-                        i + 1,
-                        sim.spheres[0].pos.y
-                    );
-                } else {
-                    tracing::info!(
-                        "Simulation step {} complete. No spheres to report position.",
-                        i + 1
-                    );
+            renderer.handle_event(&event);
+
+            match event {
+                Event::WindowEvent {
+                    event: WindowEvent::CloseRequested,
+                    ..
+                } => {
+                    elwt.exit();
                 }
+                Event::AboutToWait => {
+                    let frame_start = Instant::now();
+
+                    // Use CPU physics for now since GPU version may not handle all object types
+                    sim.params.dt = dt;
+                    sim.step_cpu();
+
+                    renderer.update_scene(&sim.spheres, &sim.boxes, &sim.cylinders, &sim.planes);
+                    if renderer.render().is_err() {
+                        elwt.exit();
+                    }
+
+                    if (i + 1) % 50 == 0 {
+                        if !sim.spheres.is_empty() {
+                            tracing::info!(
+                                "Simulation step {} complete. Sphere_y: {}",
+                                i + 1,
+                                sim.spheres[0].pos.y
+                            );
+                        } else {
+                            tracing::info!(
+                                "Simulation step {} complete. No spheres to report position.",
+                                i + 1
+                            );
+                        }
+                    }
+
+                    // Frame rate limiting
+                    let frame_time = frame_start.elapsed();
+                    if frame_time < frame_duration {
+                        std::thread::sleep(frame_duration - frame_time);
+                    }
+
+                    i += 1;
+                }
+                _ => (),
             }
-            
-            // Frame rate limiting
-            let frame_time = frame_start.elapsed();
-            if frame_time < frame_duration {
-                std::thread::sleep(frame_duration - frame_time);
-            }
-            
-            i += 1;
-        }
+        })?;
     } else {
         // Headless mode
         let num_steps = 1000;
@@ -165,10 +175,6 @@ pub fn run(enable_render: bool) -> Result<()> {
                 }
             }
         }
-    }
-
-    if !sim.spheres.is_empty() {
-        tracing::info!("Final sphere position: {:?}", sim.spheres[0].pos);
     }
 
     Ok(())
