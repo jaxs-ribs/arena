@@ -9,7 +9,7 @@ JAXS aims to build a full stack physics and machine learning environment inspire
 * **WebGPU First** – leverage the modern graphics and compute API available across platforms. The `compute` crate provides a generic interface over GPU compute kernels with a CPU fallback used during testing. The initial GPU implementation targets the `wgpu` crate so it can run on Vulkan, Metal and eventually WebGPU in the browser.
 * **Physics Engine** – the `physics` crate contains a simple rigid body simulator implemented with GPU kernels. At the moment it includes a basic sphere integrator but it is structured so more complex bodies and constraints can be added. The API is designed to be differentiable so gradients can flow through simulation steps.
 * **ML Policy Stack** – future work will extend the runtime with reinforcement learning utilities and policy networks so the simulator can be used end‑to‑end for control tasks. Everything stays in Rust for portability and performance.
-* **Runtime & Tooling** – the `runtime` crate is a small executable that wires everything together. It includes a shader watcher for hot‑reloading WGSL compute shaders and serves as the basis for training loops and visual debugging.
+* **Runtime & Tooling** – the `jaxs` crate is a small executable that wires everything together. It includes a shader watcher for hot‑reloading WGSL compute shaders and serves as the basis for training loops and visual debugging.
 
 ## Repository Layout
 
@@ -19,7 +19,7 @@ crates/
   ml/        # ML building blocks (tensor, tape, optim)
   physics/   # Differentiable physics simulation code
   render/    # WGPU-based renderer for visualization
-  runtime/   # Executable with shader hot‑reload and training scaffolding
+jaxs/        # Executable and documentation hub
 shaders/     # WGSL compute kernels
 tests/       # ML integration tests
 ```
@@ -61,7 +61,7 @@ cargo test -p compute --features gpu
 cargo bench
 
 # Launch the renderer example
-cargo run -p runtime --features render -- --draw
+cargo run -p jaxs --features render -- --draw
 
 # Build and open API documentation in a browser
 cargo doc-open
@@ -70,11 +70,11 @@ cargo doc-open
 ## Visualizing the simulation
 
 The project includes a minimal renderer based on `wgpu`. To see a live sphere
-falling under gravity, build the runtime with the `render` feature and pass the
-`--draw` flag to the binary:
+falling under gravity, build the `jaxs` crate with the `render` feature and
+pass the `--draw` flag to the binary:
 
 ```bash
-cargo run -p runtime --features render -- --draw
+cargo run -p jaxs --features render -- --draw
 ```
 
 This will open a window and draw the sphere positions after each simulation

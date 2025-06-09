@@ -33,8 +33,8 @@
 //! ### The Crates
 //!
 //! -   **`jaxs`:** The crate you are currently viewing. It serves as the main
-//!     entry point for the documentation and provides a high-level overview of
-//!     the entire project.
+//!     entry point for both the documentation and the executable application. It
+//!     ties together all the other crates and runs the main simulation loop.
 //! -   **[`compute`]:** A thin abstraction layer over different compute
 //!     backends. It provides a mock CPU backend for testing and a `wgpu`-based
 //!     backend for production.
@@ -46,9 +46,6 @@
 //!     learning utilities.
 //! -   **[`phenotype`]:** Defines the structure and behavior of the simulated
 //!     creatures, allowing for procedural generation and evolution.
-//! -   **`runtime`:** A small executable that glues everything together. It
-//!     includes features like shader hot-reloading and serves as the foundation
-//!     for training loops.
 //!
 //! ## Long-Term Vision
 //!
@@ -69,7 +66,7 @@
 //! ## Getting Started
 //!
 //! To get started with JAXS, it is recommended to explore the documentation for
-//! each crate, starting with the `runtime` crate to understand how the
+//! each crate, starting with the [`jaxs`] crate to understand how the
 //! application is launched and managed. From there, you can dive into the
 //! [`physics`] and [`ml`] crates to understand the core mechanics of the
 //! simulation and learning processes.
