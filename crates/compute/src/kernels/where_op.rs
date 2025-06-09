@@ -1,5 +1,10 @@
 use crate::{BufferView, ComputeError};
 
+/// Selects values from `true_val` or `false_val` based on a condition mask.
+///
+/// Bindings must be `[cond, true_val, false_val, output_placeholder]`. The
+/// condition buffer uses `u32` where zero represents `false`. The output buffer
+/// containing the chosen values is returned as a single entry.
 pub fn handle_where(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 4 {
         // cond, true_val, false_val, out_placeholder per layout.rs

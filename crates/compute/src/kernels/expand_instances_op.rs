@@ -1,5 +1,10 @@
 use crate::{BufferView, ComputeError};
 
+/// Copies a template buffer multiple times into the output buffer.
+///
+/// The bindings `[template, output_placeholder, config]` are expected. The
+/// config buffer holds a single `u32` count describing how many times the
+/// template should be repeated.
 pub fn handle_expand_instances(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 3 {
         return Err(ComputeError::ShapeMismatch(

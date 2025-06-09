@@ -1,5 +1,9 @@
 use crate::{BufferView, ComputeError};
 
+/// Reduces a buffer by summing all of its `f32` elements.
+///
+/// Expects `[input, output_placeholder, config]` as bindings. The returned
+/// vector contains a single buffer with the scalar sum value.
 pub fn handle_reduce_sum(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 3 {
         return Err(ComputeError::ShapeMismatch(

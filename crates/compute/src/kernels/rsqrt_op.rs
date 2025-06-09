@@ -1,5 +1,9 @@
 use crate::{BufferView, ComputeError};
 
+/// Computes `1 / sqrt(x)` for each element of the input buffer.
+///
+/// Requires bindings `[input, output_placeholder, config]` and operates on
+/// `f32` data. The single returned buffer contains the reciprocal square roots.
 pub fn handle_rsqrt(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 3 {
         return Err(ComputeError::ShapeMismatch(

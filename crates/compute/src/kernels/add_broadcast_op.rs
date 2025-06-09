@@ -1,5 +1,9 @@
 use crate::{BufferView, ComputeError};
 
+/// Adds a vector to each row of a matrix.
+///
+/// Bindings `[a, b, output_placeholder]` expect `a` shaped `[batch, dim]` and
+/// `b` shaped `[dim]`. The broadcasted sum is returned in a single buffer.
 pub fn handle_add_broadcast(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 3 {
         return Err(ComputeError::ShapeMismatch(

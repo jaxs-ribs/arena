@@ -1,5 +1,10 @@
 use crate::{BufferView, ComputeError};
 
+/// Applies the rectified linear unit function element-wise.
+///
+/// The input, output placeholder and config buffers are supplied in that order
+/// and must contain `f32` data. The output buffer in the returned vector holds
+/// `max(input, 0)` for each element.
 pub fn handle_relu(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 3 {
         return Err(ComputeError::ShapeMismatch("Relu kernel expects 3 buffers"));

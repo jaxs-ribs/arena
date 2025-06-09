@@ -1,5 +1,9 @@
 use crate::{BufferView, ComputeError};
 
+/// Computes the square root of each element in the input buffer.
+///
+/// Bindings are `[input, output_placeholder, config]` using `f32` data. The
+/// results are returned in a single buffer.
 pub fn handle_sqrt(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 3 {
         return Err(ComputeError::ShapeMismatch("Sqrt kernel expects 3 buffers"));

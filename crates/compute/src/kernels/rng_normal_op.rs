@@ -1,5 +1,10 @@
 use crate::{BufferView, ComputeError};
 
+/// Generates a deterministic normal distribution for testing purposes.
+///
+/// Bindings `[output_placeholder, config]` specify where the generated `f32`
+/// values are written. The sequence is deterministic and does not use any real
+/// random number generator.
 pub fn handle_rng_normal(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 2 {
         return Err(ComputeError::ShapeMismatch(

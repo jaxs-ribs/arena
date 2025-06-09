@@ -1,5 +1,10 @@
 use crate::{BufferView, ComputeError};
 
+/// Negates each element of the input buffer.
+///
+/// The bindings are `[input, output_placeholder, config]` where the input
+/// buffer contains `f32` values. The negated results are returned as a single
+/// buffer inside the returned vector.
 pub fn handle_neg(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 3 {
         // IN1, OUT, CONFIG per layout.rs

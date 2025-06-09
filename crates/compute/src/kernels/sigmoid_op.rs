@@ -1,5 +1,9 @@
 use crate::{BufferView, ComputeError};
 
+/// Applies the sigmoid activation `1/(1+exp(-x))` element-wise.
+///
+/// The function expects bindings `[input, output_placeholder, config]` with
+/// `f32` data. A single buffer containing the results is returned.
 pub fn handle_sigmoid(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 3 {
         return Err(ComputeError::ShapeMismatch(

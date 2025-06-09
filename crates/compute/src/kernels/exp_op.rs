@@ -1,5 +1,9 @@
 use crate::{BufferView, ComputeError};
 
+/// Applies the exponential function to each element of the input buffer.
+///
+/// Bindings must be `[input, output_placeholder, config]` containing `f32`
+/// values. The computed exponentials are returned in a single output buffer.
 pub fn handle_exp(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 3 {
         // IN, OUT_placeholder, CONFIG per layout.rs

@@ -1,5 +1,9 @@
 use crate::{BufferView, ComputeError};
 
+/// Calculates the mean of all elements in the input buffer.
+///
+/// Bindings `[input, output_placeholder, config]` must use `f32` values. The
+/// resulting mean is written to a single buffer which is returned.
 pub fn handle_reduce_mean(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 3 {
         return Err(ComputeError::ShapeMismatch(

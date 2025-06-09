@@ -1,5 +1,9 @@
 use crate::{BufferView, ComputeError};
 
+/// Computes the natural logarithm of each input element.
+///
+/// Expects bindings `[input, output_placeholder, config]` using `f32` values.
+/// Returns one buffer containing the logarithms of the input.
 pub fn handle_log(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 3 {
         // IN, OUT_placeholder, CONFIG per layout.rs

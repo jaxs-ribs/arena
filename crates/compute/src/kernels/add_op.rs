@@ -1,7 +1,11 @@
 use crate::{BufferView, ComputeError};
-// std::sync::Arc is not directly used by handle_add, BufferView handles its own Arc.
 
-// Add operation handler
+/// Element-wise addition of two buffers.
+///
+/// The function expects three bindings: the first two are input buffers `a` and
+/// `b` containing `f32` values, while the third is a placeholder for the output
+/// buffer. All inputs must have the same shape and element size. The returned
+/// vector contains a single buffer with the computed sums.
 pub fn handle_add(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 3 {
         return Err(ComputeError::ShapeMismatch("Add kernel expects 3 buffers"));

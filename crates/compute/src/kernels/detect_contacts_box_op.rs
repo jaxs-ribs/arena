@@ -2,6 +2,7 @@ use crate::{BufferView, ComputeError};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+/// Simple 3D vector used by the contact detection tests.
 pub struct TestVec3 {
     pub x: f32,
     pub y: f32,
@@ -10,12 +11,14 @@ pub struct TestVec3 {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+/// Body with a single position used in tests.
 pub struct TestBody {
     pub pos: TestVec3,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+/// Box primitive defined by a center and half extents.
 pub struct TestBox {
     pub center: TestVec3,
     pub half_extents: TestVec3,
@@ -23,6 +26,7 @@ pub struct TestBox {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+/// Contact record emitted for each intersecting body.
 pub struct TestContact {
     pub body_index: u32,
     pub normal: TestVec3,
@@ -30,7 +34,12 @@ pub struct TestContact {
     pub _pad: [f32; 3],
 }
 
-/// CPU implementation of sphere-box contact detection for unit spheres.
+/// Detects intersections between unit spheres and a single box.
+///
+/// The bindings are expected to contain a slice of [`TestBody`] instances,
+/// a [`TestBox`] describing the box, and an output buffer to receive
+/// [`TestContact`] records. The resulting vector contains one buffer holding the
+/// contacts for all intersecting bodies.
 pub fn handle_detect_contacts_box(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 3 {
         return Err(ComputeError::ShapeMismatch(

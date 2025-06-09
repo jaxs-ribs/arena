@@ -1,5 +1,10 @@
 use crate::{BufferView, ComputeError};
 
+/// Adds values into an accumulator buffer at specified indices.
+///
+/// Bindings are `[values, indices, accumulator, config]`. The function adds
+/// each value in `values` to the position indicated by the corresponding index.
+/// The updated accumulator is returned.
 pub fn handle_scatter_add(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 4 {
         return Err(ComputeError::ShapeMismatch(

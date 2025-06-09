@@ -8,7 +8,10 @@
 use crate::{kernels, BufferView, ComputeBackend, ComputeError, Kernel};
 
 #[derive(Default, Debug, Clone)]
-/// Simple compute backend that runs kernels on the host CPU.
+/// Reference implementation of [`ComputeBackend`] that executes kernels on the CPU.
+///
+/// While not optimized for performance, this backend is useful for testing and
+/// environments without GPU support.
 pub struct CpuBackend;
 
 impl CpuBackend {

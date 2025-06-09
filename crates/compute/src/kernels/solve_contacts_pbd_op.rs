@@ -1,5 +1,9 @@
 use crate::{BufferView, ComputeError};
 
+/// Resolves penetration contacts using a simple position based dynamics step.
+///
+/// The expected bindings are `[bodies_inout, contacts, params]`. Updated body
+/// data is returned in a single buffer.
 pub fn handle_solve_contacts_pbd(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 3 {
         return Err(ComputeError::ShapeMismatch(
