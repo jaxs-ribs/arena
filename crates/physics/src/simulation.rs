@@ -63,15 +63,16 @@ impl From<ComputeError> for PhysicsError {
 /// including rigid bodies, constraints, and global parameters. It provides a
 /// high-level API for setting up and running the simulation.
 ///
-/// The simulation can be advanced step-by-step using the [`step_gpu`] or
-/// [`step_cpu`] methods, or it can be run for a specified number of steps
-/// using the [`run`] or [`run_cpu`] methods.
+/// The simulation can be advanced step-by-step using the
+/// [`step_gpu()`](Self::step_gpu) or [`step_cpu()`](Self::step_cpu) methods,
+/// or it can be run for a specified number of steps using the
+/// [`run()`](Self::run) or [`run_cpu()`](Self::run_cpu) methods.
 ///
 /// ## Backend
 ///
 /// The `PhysicsSim` uses a `ComputeBackend` to perform the physics
 /// calculations. By default, it uses the `wgpu` backend, but this can be
-/// customized by calling the [`set_backend`] method.
+/// customized by calling the [`set_backend()`](Self::set_backend) method.
 pub struct PhysicsSim {
     /// The list of dynamic spheres in the simulation.
     pub spheres: Vec<Sphere>,
@@ -596,9 +597,10 @@ impl PhysicsSim {
 
     /// Advances the simulation by one time step using the CPU.
     ///
-    /// This method performs the same calculations as [`step_gpu`], but it does
-    /// so on the CPU. It is primarily used for testing and debugging, as it is
-    /// significantly slower than the GPU implementation.
+    /// This method performs the same calculations as
+    /// [`step_gpu()`](Self::step_gpu), but it does so on the CPU. It is
+    /// primarily used for testing and debugging, as it is significantly slower
+    /// than the GPU implementation.
     ///
     /// The CPU step involves the following stages:
     ///
@@ -719,7 +721,8 @@ impl PhysicsSim {
 
     /// Runs the simulation for a specified number of steps.
     ///
-    /// This method advances the simulation by calling [`step_gpu`] repeatedly.
+    /// This method advances the simulation by calling
+    /// [`step_gpu()`](Self::step_gpu) repeatedly.
     ///
     /// # Arguments
     ///
@@ -747,8 +750,9 @@ impl PhysicsSim {
 
     /// Runs the simulation for a specified number of steps on the CPU.
     ///
-    /// This method is similar to [`run`], but it uses the CPU for the
-    /// simulation. It repeatedly calls [`step_cpu`] to advance the simulation.
+    /// This method is similar to [`run()`](Self::run), but it uses the CPU for
+    /// the simulation. It repeatedly calls [`step_cpu()`](Self::step_cpu) to
+    /// advance the simulation.
     ///
     /// # Arguments
     ///

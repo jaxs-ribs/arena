@@ -1,0 +1,12 @@
+[package]
+name = "jaxs"
+version = "0.1.0"
+edition = "2021"
+description = "Documentation entry point for the JAXS project."
+
+[dependencies]
+compute = { path = "../crates/compute" }
+ml = { path = "../crates/ml" }
+phenotype = { path = "../crates/phenotype" }
+physics = { path = "../crates/physics" }
+render = { path = "../crates/render" } 

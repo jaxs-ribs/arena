@@ -1,16 +1,39 @@
-//! Simple `wgpu` renderer used for visualizing physics simulations.
+//! # JAXS Rendering Engine
 //!
-//! This crate exposes two small rendering utilities used throughout the project:
-//! [`Renderer`], which draws a few basic debug primitives such as cubes and
-//! planes, and [`SdfRenderer`], an SDF based renderer capable of displaying more
-//! complex shapes.  Both implementations focus on simplicity and are not meant
-//! to be full engines.  They merely provide a convenient way to inspect the
-//! state of simulations while algorithms are being developed.
+//! A simple `wgpu`-based rendering engine for visualizing physics simulations.
 //!
-//! The modules are intentionally minimal and avoid abstraction in favour of
-//! clarity.  They can be spun up quickly in tests or small binary examples with
-//! `Renderer::new()` or `SdfRenderer::new()` and then updated every frame using
-//! the provided APIs.
+//! This crate provides two lightweight rendering utilities for the JAXS
+//! project: [`Renderer`] and [`SdfRenderer`]. These renderers are designed to
+//! be simple and efficient, providing a convenient way to visualize the state
+//! of physics simulations during development and testing.
+//!
+//! ## Renderers
+//!
+//! -   **[`Renderer`]:** A basic debug renderer that can draw simple
+//!     primitives like spheres, boxes, and planes. It is optimized for speed
+//!     and is ideal for visualizing the basic structure of a simulation.
+//! -   **[`SdfRenderer`]:** A more advanced renderer based on Signed Distance
+//!     Functions (SDFs). This renderer is capable of displaying more complex
+//!     shapes and scenes, but it may be more computationally intensive than
+//!     the basic `Renderer`.
+//!
+//! ## Usage
+//!
+//! Both renderers can be easily integrated into tests or small binary
+//! examples. To use a renderer, you first create a new instance using
+//! `Renderer::new()` or `SdfRenderer::new()`. Then, in each frame of your
+//! application, you can update the renderer with the latest simulation state
+//! and call the `render` method to draw the scene.
+//!
+//! ```rust,ignore
+//! use jaxs_render::Renderer;
+//!
+//! let mut renderer = Renderer::new()?;
+//!
+//! // In your game loop:
+//! renderer.update_spheres(&spheres);
+//! renderer.render()?;
+//! ```
 
 mod renderer;
 mod sdf_renderer;
