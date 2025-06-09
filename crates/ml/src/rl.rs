@@ -3,6 +3,7 @@ use crate::stick_balance::StickBalanceEnv;
 
 /// A simple environment where the agent must learn to roll a sphere to the right.
 pub struct RollingSphereEnv {
+    /// Current x position of the sphere.
     pos_x: f32,
 }
 
@@ -14,6 +15,7 @@ impl RollingSphereEnv {
 }
 
 impl Env for RollingSphereEnv {
+    /// Advance the simulation by applying a horizontal force.
     fn step(&mut self, action: f32) -> (Vec<f32>, f32, bool) {
         let force = action.max(-10.0).min(10.0);
         let old_pos_x = self.pos_x;
@@ -23,14 +25,17 @@ impl Env for RollingSphereEnv {
         (vec![self.pos_x], reward, done)
     }
 
+    /// Reset the environment back to the origin.
     fn reset(&mut self) -> Vec<f32> {
         self.pos_x = 0.0;
         vec![self.pos_x]
     }
 
+    /// Dimension of the observation vector.
     fn obs_size(&self) -> usize {
         1
     }
+    /// Dimension of the action space.
     fn action_size(&self) -> usize {
         1
     }
@@ -41,12 +46,16 @@ use std::collections::HashMap;
 
 /// Simple policy/value network used by [`SpherePpoTrainer`].
 struct PolicyValueNet {
+    /// First fully-connected layer.
     l1: Dense,
+    /// Outputs the action distribution parameters.
     policy_head: Dense,
+    /// Outputs the state-value estimate.
     value_head: Dense,
 }
 
 impl PolicyValueNet {
+    /// Construct a small feed-forward network for policy and value prediction.
     fn new(in_dim: usize, hidden_dim: usize, out_dim: usize) -> Self {
         Self {
             l1: Dense::random(in_dim, hidden_dim, 0),
@@ -55,6 +64,7 @@ impl PolicyValueNet {
         }
     }
 
+    /// Forward pass returning policy logits and state value.
     fn forward(
         &self,
         x: &Tensor,
@@ -68,6 +78,7 @@ impl PolicyValueNet {
         (policy, value)
     }
 
+    /// Collects mutable references to all learnable parameters.
     fn params(&mut self) -> Vec<&mut Tensor> {
         vec![
             &mut self.l1.w,
@@ -82,16 +93,27 @@ impl PolicyValueNet {
 
 /// Generic trainer for the Proximal Policy Optimization (PPO) algorithm.
 pub struct PpoTrainer<E: Env> {
+    /// Parallel environments used for data collection.
     envs: Vec<E>,
+    /// The policy/value neural network being optimized.
     net: PolicyValueNet,
+    /// Optimizer responsible for updating network parameters.
     optimizer: Adam,
+    /// Discount factor for future rewards.
     gamma: f32,
+    /// GAE parameter controlling bias vs variance.
     lambda: f32,
+    /// Clipping range for the policy ratio.
     clip: f32,
+    /// Number of environment steps per update.
     t_max: usize,
+    /// Number of optimization epochs per batch of data.
     n_epochs: usize,
+    /// Last observation from each environment.
     obs: Vec<Vec<f32>>,
+    /// Dimension of the observation space.
     obs_dim: usize,
+    /// Dimension of the action space.
     act_dim: usize,
 }
 

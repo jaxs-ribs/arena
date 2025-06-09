@@ -36,10 +36,12 @@ impl Tensor {
         }
     }
 
+    /// Returns the number of elements contained in the tensor.
     pub fn len(&self) -> usize {
         self.data.len()
     }
 
+    /// Returns a read-only view of the underlying data buffer.
     pub fn data(&self) -> &[f32] {
         &self.data
     }
