@@ -22,7 +22,7 @@
 //! on servers or in environments where a GUI is not available.
 
 use anyhow::Result;
-use physics::{PhysicsSim, Plane, Vec3};
+use physics::{PhysicsSim, Vec3};
 use std::time::{Duration, Instant};
 
 #[cfg(feature = "render")]
@@ -67,14 +67,26 @@ pub fn run(enable_render: bool) -> Result<()> {
 
     tracing::info!("Initializing physics simulation...");
     let mut sim = PhysicsSim::new();
-    let p = Plane {
-        normal: Vec3::new(0.1, 1.0, 0.0).normalize(),
-        d: 0.0,
-    };
-    sim.add_plane(p.normal, p.d);
-    sim.add_sphere(Vec3::new(0.0, 5.0, 0.0), Vec3::ZERO);
-    sim.add_cylinder(Vec3::new(1.0, 2.0, 1.0), 1.0, 1.0, Vec3::ZERO);
-    sim.add_joint(0, 0, 5.0);
+    
+    // Enable gravity for dynamic motion
+    sim.params.gravity = Vec3::new(0.0, -9.81, 0.0);
+    
+    // Ground plane at y=0
+    sim.add_plane(Vec3::new(0.0, 1.0, 0.0), 0.0);
+    
+    // Tilted ramp plane  
+    let ramp_normal = Vec3::new(0.3, 1.0, 0.0).normalize();
+    sim.add_plane(ramp_normal, -2.0);
+    
+    // Multiple spheres at different heights for dynamic scene
+    sim.add_sphere(Vec3::new(-2.0, 8.0, 0.0), Vec3::ZERO); // High sphere to fall
+    sim.add_sphere(Vec3::new(0.0, 6.0, 0.0), Vec3::ZERO);  // Medium sphere
+    sim.add_sphere(Vec3::new(2.0, 4.0, 0.0), Vec3::ZERO);  // Lower sphere
+    sim.add_sphere(Vec3::new(1.0, 10.0, 0.0), Vec3::ZERO); // Very high sphere
+    
+    // TODO: Add physics for boxes and cylinders - currently only spheres work
+    // sim.add_box(Vec3::new(-1.0, 5.0, 0.0), Vec3::new(0.5, 0.5, 0.5), Vec3::ZERO);
+    // sim.add_cylinder(Vec3::new(1.0, 3.0, 0.0), 0.5, 1.0, Vec3::ZERO);
 
     let dt = 0.016_f32;
 
@@ -87,10 +99,9 @@ pub fn run(enable_render: bool) -> Result<()> {
         loop {
             let frame_start = Instant::now();
             
-            if let Err(e) = sim.run(dt, 1) {
-                tracing::error!("Error during simulation step {}: {:?}", i, e);
-                break;
-            }
+            // Use CPU physics for now since GPU version may not handle all object types
+            sim.params.dt = dt;
+            sim.step_cpu();
 
             #[cfg(feature = "render")]
             if let Some(r) = renderer.as_mut() {

@@ -192,15 +192,15 @@ impl Renderer {
         surface.configure(&device, &config);
 
         let camera = Camera {
-            eye: Vec3::new(0.0, 2.0, 8.0),
-            target: Vec3::new(0.0, 1.0, 0.0),
+            eye: Vec3::new(-5.0, 6.0, 12.0),
+            target: Vec3::new(0.0, 3.0, 0.0),
             up: Vec3::Y,
             aspect: config.width as f32 / config.height as f32,
             fovy: 45.0f32.to_radians(),
             znear: 0.1,
             zfar: 100.0,
-            yaw: 0.0,
-            pitch: -0.1,
+            yaw: 0.3,
+            pitch: -0.3,
         };
 
         let view_proj = camera.build_view_projection_matrix();

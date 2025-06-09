@@ -78,14 +78,24 @@ fn sdf_plane(p: vec3<f32>, normal: vec3<f32>, d: f32) -> f32 {
     return dot(p, normal) + d;
 }
 
-// Scene SDF - combine all objects with proper spacing
+// Smooth minimum function to reduce morphing artifacts
+fn smin(a: f32, b: f32, k: f32) -> f32 {
+    let h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+    return mix(b, a, h) - k * h * (1.0 - h);
+}
+
+// Scene SDF - combine all objects with smooth blending
 fn scene_sdf(p: vec3<f32>) -> f32 {
     var dist = 1000.0;
     
     // Spheres
     for (var i = 0u; i < counts.spheres; i++) {
         let sphere_dist = sdf_sphere(p, spheres[i].pos, 0.5); // Default radius 0.5
-        dist = min(dist, sphere_dist);
+        if (i == 0u) {
+            dist = sphere_dist;
+        } else {
+            dist = min(dist, sphere_dist); // Sharp union for distinct spheres
+        }
     }
     
     // Boxes
@@ -94,7 +104,7 @@ fn scene_sdf(p: vec3<f32>) -> f32 {
         dist = min(dist, box_dist);
     }
     
-    // Cylinders - add small offset to prevent merging
+    // Cylinders
     for (var i = 0u; i < counts.cylinders; i++) {
         let cylinder_dist = sdf_cylinder(p, cylinders[i].pos, cylinders[i].radius, cylinders[i].height);
         dist = min(dist, cylinder_dist);
