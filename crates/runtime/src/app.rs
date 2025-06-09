@@ -1,9 +1,25 @@
-//! Simulation loop tying physics, rendering and shader watching together.
+//! # JAXS Application Logic
 //!
-//! The [`run`] function is called from the binary's [`main`](crate::main) and
-//! drives a short physics example. When built with the `render` feature a
-//! real-time window visualises the scene while WGSL shader files are watched
-//! for changes so they can be reloaded on the fly.
+//! This module orchestrates the main simulation loop, integrating the physics engine,
+//! rendering, and live shader reloading capabilities.
+//!
+//! The primary function, [`run`], is the entry point for the application's core
+//! logic, called from the `main` function in `jaxs_runtime`. It is responsible for
+//! driving a physics simulation and, when enabled, visualizing the simulation in
+//! real-time.
+//!
+//! ## Features
+//!
+//! This crate can be compiled with the `render` feature, which enables a graphical
+//! front-end for the simulation. When this feature is enabled, the application
+//! will open a window to display the state of the physics simulation. The `run`
+//! function will also initialize a file watcher for the `shaders/` directory,
+//! allowing for hot-reloading of WGSL shader files. This is particularly useful
+//! for development, as it allows for immediate feedback on shader code changes.
+//!
+//! If the `render` feature is not enabled, the simulation runs in a headless
+//! mode, without any graphical output. This is useful for running simulations
+//! on servers or in environments where a GUI is not available.
 
 use anyhow::Result;
 use physics::PhysicsSim;
@@ -27,7 +43,7 @@ use crate::watcher;
 /// # Errors
 ///
 /// Returns any error produced by the physics engine, renderer or file watcher.
-pub fn run(_enable_render: bool) -> Result<()> {
+pub fn run(enable_render: bool) -> Result<()> {
     tracing_subscriber::fmt::init();
 
     let _shader_watcher = match watcher::start() {
@@ -42,7 +58,7 @@ pub fn run(_enable_render: bool) -> Result<()> {
     };
 
     #[cfg(feature = "render")]
-    let mut renderer = if _enable_render {
+    let mut renderer = if enable_render {
         Some(Renderer::new()?)
     } else {
         None
@@ -59,8 +75,7 @@ pub fn run(_enable_render: bool) -> Result<()> {
         dt
     );
 
-    #[allow(unused_mut)]
-    let mut _should_continue = true;
+    let mut should_continue = true;
     for i in 0..num_steps {
         if let Err(e) = sim.run(dt, 1) {
             tracing::error!("Error during simulation step {}: {:?}", i, e);
@@ -69,7 +84,7 @@ pub fn run(_enable_render: bool) -> Result<()> {
         #[cfg(feature = "render")]
         if let Some(r) = renderer.as_mut() {
             r.update_spheres(&sim.spheres);
-            _should_continue = r.render()?;
+            should_continue = r.render()?;
         }
         if (i + 1) % 50 == 0 {
             if !sim.spheres.is_empty() {
@@ -95,8 +110,8 @@ pub fn run(_enable_render: bool) -> Result<()> {
     #[cfg(feature = "render")]
     if let Some(mut renderer) = renderer {
         // Create a new simulation loop that just renders the final state.
-        while _should_continue {
-            _should_continue = renderer.render()?;
+        while should_continue {
+            should_continue = renderer.render()?;
             // The renderer does not have its own physics loop, so we manually update positions.
             // For this example, we'll just keep rendering the final state.
             std::thread::sleep(std::time::Duration::from_millis(16));

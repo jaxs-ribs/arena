@@ -1,3 +1,26 @@
+//! # Physics Simulation
+//!
+//! This module contains the core logic for the JAXS physics engine. It defines
+//! the [`PhysicsSim`] struct, which is the main container for all physics
+//! objects and simulation parameters. The module provides methods to advance
+//! the simulation in time, with support for both CPU and GPU execution.
+//!
+//! ## Simulation Loop
+//!
+//! The main simulation loop is driven by the [`run`](PhysicsSim::run) method,
+//! which repeatedly calls a stepping function (`step_gpu` or `step_cpu`) to
+//! update the state of the rigid bodies. The simulation is designed to be
+//! deterministic, meaning that for a given initial state and time step, the
+//! simulation will always produce the same result.
+//!
+//! ## CPU vs. GPU Execution
+//!
+//! The physics engine can be run in two modes: CPU and GPU. The GPU mode,
+//! which is the default, uses the `compute` crate to dispatch compute shaders
+//! that perform the physics calculations. This allows for significant
+//! performance gains, especially for large numbers of rigid bodies. The CPU
+//! mode is primarily used for testing and debugging purposes.
+
 use crate::types::{
     BoxBody, Cylinder, Joint, JointParams, PhysParams, Plane, Sphere, Vec3,
 };
@@ -5,19 +28,26 @@ use compute::{ComputeBackend, ComputeError};
 use std::mem::size_of;
 use std::sync::Arc;
 
-/// Final state returned by [`PhysicsSim::run`].
+/// Represents the final state of a sphere after a simulation run.
+///
+/// This struct is returned by [`PhysicsSim::run`] and contains the final
+/// position of the first sphere in the simulation. It is primarily used for
+/// testing and validation purposes.
 #[derive(Clone, Copy, Debug)]
 pub struct SphereState {
-    /// Position of the first sphere in the simulation.
+    /// The final position of the first sphere.
     pub pos: Vec3,
 }
 
-/// Errors that may occur when running a simulation.
+/// Defines the possible errors that can occur during a physics simulation.
 #[derive(Debug)]
 pub enum PhysicsError {
-    /// Failure in the underlying compute backend.
+    /// An error occurred in the underlying compute backend. This typically
+    /// happens during GPU execution and can be caused by issues with the
+    /// compute shaders or the GPU device.
     BackendError(ComputeError),
-    /// Attempted to run a simulation with no spheres present.
+    /// An attempt was made to run a simulation with no spheres. The simulation
+    /// requires at least one sphere to be present.
     NoSpheres,
 }
 
@@ -27,25 +57,35 @@ impl From<ComputeError> for PhysicsError {
     }
 }
 
-/// Container for all physics objects and simulation parameters.
+/// The main container for all physics objects and simulation parameters.
 ///
-/// [`PhysicsSim`] owns the rigid bodies and provides methods to advance the
-/// simulation either on the GPU or CPU. Fields are public for convenience in
-/// tests but most users will interact with it via the provided methods.
+/// `PhysicsSim` holds all the state required for a physics simulation,
+/// including rigid bodies, constraints, and global parameters. It provides a
+/// high-level API for setting up and running the simulation.
+///
+/// The simulation can be advanced step-by-step using the [`step_gpu`] or
+/// [`step_cpu`] methods, or it can be run for a specified number of steps
+/// using the [`run`] or [`run_cpu`] methods.
+///
+/// ## Backend
+///
+/// The `PhysicsSim` uses a `ComputeBackend` to perform the physics
+/// calculations. By default, it uses the `wgpu` backend, but this can be
+/// customized by calling the [`set_backend`] method.
 pub struct PhysicsSim {
-    /// Dynamic spheres present in the simulation.
+    /// The list of dynamic spheres in the simulation.
     pub spheres: Vec<Sphere>,
-    /// Dynamic axis aligned boxes.
+    /// The list of dynamic, axis-aligned boxes.
     pub boxes: Vec<BoxBody>,
-    /// Dynamic cylinders.
+    /// The list of dynamic cylinders.
     pub cylinders: Vec<Cylinder>,
-    /// Static planes used for collision.
+    /// The list of static planes used for collision detection.
     pub planes: Vec<Plane>,
-    /// Global physics parameters.
+    /// The global parameters for the physics simulation.
     pub params: PhysParams,
-    /// Distance constraints between spheres.
+    /// The list of distance constraints between spheres.
     pub joints: Vec<Joint>,
-    /// Parameters for the joint solver.
+    /// The parameters for the joint solver.
     pub joint_params: JointParams,
     backend: Arc<dyn ComputeBackend>,
 }
@@ -54,10 +94,15 @@ pub struct PhysicsSim {
 const WORKGROUP_SIZE: u32 = 256;
 
 impl PhysicsSim {
-    /// Creates an empty simulation with default parameters.
+    /// Creates a new, empty simulation with default parameters.
     ///
-    /// All internal collections are initialised but contain no bodies. The
-    /// compute backend defaults to [`compute::default_backend`].
+    /// This initializes all internal collections for rigid bodies and
+    /// constraints, but they will be empty. The compute backend is set to the
+    /// default, which is typically `wgpu`.
+    ///
+    /// # Returns
+    ///
+    /// A new `PhysicsSim` instance with default settings.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -78,10 +123,20 @@ impl PhysicsSim {
             backend: compute::default_backend(),
         }
     }
-    /// Convenience constructor for a simulation containing a single sphere.
+    /// Creates a new simulation with a single sphere for testing purposes.
     ///
-    /// The sphere is placed at `initial_height` on the Y axis and has zero
-    /// initial velocity. This is primarily used in tests and examples.
+    /// This is a convenience function that sets up a simple scene with one
+    /// sphere at a specified initial height on the Y-axis. The sphere starts
+    /// with zero initial velocity. This is primarily used in examples and
+    /// integration tests.
+    ///
+    /// # Arguments
+    ///
+    /// * `initial_height` - The initial Y-coordinate of the sphere.
+    ///
+    /// # Returns
+    ///
+    /// A new `PhysicsSim` instance containing a single sphere.
     #[must_use]
     pub fn new_single_sphere(initial_height: f32) -> Self {
         let sphere = Sphere::new(
@@ -113,7 +168,16 @@ impl PhysicsSim {
         }
     }
 
-    /// Adds a sphere to the simulation and returns its index.
+    /// Adds a new sphere to the simulation.
+    ///
+    /// # Arguments
+    ///
+    /// * `pos` - The initial position of the sphere.
+    /// * `vel` - The initial velocity of the sphere.
+    ///
+    /// # Returns
+    ///
+    /// The index of the newly added sphere.
     pub fn add_sphere(&mut self, pos: Vec3, vel: Vec3) -> usize {
         let index = self.spheres.len();
         self.spheres.push(Sphere::new(pos, vel));
@@ -121,14 +185,35 @@ impl PhysicsSim {
         index
     }
 
-    /// Adds a box to the simulation and returns its index.
+    /// Adds a new box to the simulation.
+    ///
+    /// # Arguments
+    ///
+    /// * `pos` - The initial position of the box's center.
+    /// * `half_extents` - The half-extents of the box, defining its dimensions.
+    /// * `vel` - The initial velocity of the box.
+    ///
+    /// # Returns
+    ///
+    /// The index of the newly added box.
     pub fn add_box(&mut self, pos: Vec3, half_extents: Vec3, vel: Vec3) -> usize {
         let index = self.boxes.len();
         self.boxes.push(BoxBody { pos, half_extents, vel });
         index
     }
 
-    /// Adds a cylinder to the simulation and returns its index.
+    /// Adds a new cylinder to the simulation.
+    ///
+    /// # Arguments
+    ///
+    /// * `pos` - The initial position of the cylinder's center.
+    /// * `radius` - The radius of the cylinder's base.
+    /// * `height` - The height of the cylinder.
+    /// * `vel` - The initial velocity of the cylinder.
+    ///
+    /// # Returns
+    ///
+    /// The index of the newly added cylinder.
     pub fn add_cylinder(
         &mut self,
         pos: Vec3,
@@ -146,14 +231,32 @@ impl PhysicsSim {
         index
     }
 
-    /// Adds an infinite plane and returns its index.
+    /// Adds a new static, infinite plane to the simulation.
+    ///
+    /// # Arguments
+    ///
+    /// * `normal` - The normal vector of the plane.
+    /// * `d` - The distance of the plane from the origin along its normal.
+    ///
+    /// # Returns
+    ///
+    /// The index of the newly added plane.
     pub fn add_plane(&mut self, normal: Vec3, d: f32) -> usize {
         let index = self.planes.len();
         self.planes.push(Plane { normal, d });
         index
     }
 
-    /// Adds a distance joint between two spheres.
+    /// Adds a new distance joint between two spheres.
+    ///
+    /// A distance joint constrains two spheres to maintain a fixed distance
+    /// from each other.
+    ///
+    /// # Arguments
+    ///
+    /// * `body_a` - The index of the first sphere.
+    /// * `body_b` - The index of the second sphere.
+    /// * `rest_length` - The target distance between the two spheres.
     pub fn add_joint(&mut self, body_a: u32, body_b: u32, rest_length: f32) {
         self.joints.push(Joint {
             body_a,
@@ -163,22 +266,50 @@ impl PhysicsSim {
         });
     }
 
-    /// Sets an external force for a given sphere.
+    /// Sets an external force to be applied to a specific sphere.
     ///
-    /// The provided force is stored in [`crate::types::PhysParams::forces`] and will be
-    /// applied on the next integration step.
+    /// The provided force will be applied to the sphere on the next
+    /// integration step. The force is stored in [`PhysParams::forces`].
+    ///
+    /// # Arguments
+    ///
+    /// * `body_index` - The index of the sphere to apply the force to.
+    /// * `force` - The force to apply, as a `[f32; 2]` array `[fx, fy]`.
     pub fn set_force(&mut self, body_index: usize, force: [f32; 2]) {
         if let Some(f) = self.params.forces.get_mut(body_index) {
             *f = force;
         }
     }
 
-    /// Overrides the compute backend used for dispatching kernels.
+    /// Overrides the compute backend used for the simulation.
+    ///
+    /// This allows for switching between different compute backends, such as
+    /// `wgpu` or a custom CPU backend.
+    ///
+    /// # Arguments
+    ///
+    /// * `backend` - The new compute backend to use.
     pub fn set_backend(&mut self, backend: Arc<dyn ComputeBackend>) {
         self.backend = backend;
     }
 
-    /// Advances the simulation by one step using GPU compute kernels.
+    /// Advances the simulation by one time step using the GPU.
+    ///
+    /// This method dispatches a series of compute shaders to perform the
+    /// physics calculations on the GPU. The steps are as follows:
+    ///
+    /// 1.  **Integration:** The positions and velocities of all spheres are
+    ///     updated based on the current forces and the time step.
+    /// 2.  **Collision Detection:** The GPU checks for collisions between
+    ///     spheres and with static planes.
+    /// 3.  **Collision Resolution:** The positions and velocities of colliding
+    ///     spheres are adjusted to resolve the collisions.
+    /// 4.  **Joint Solving:** The constraints imposed by joints are enforced.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating whether the step was successful. An error will be
+    /// returned if there is an issue with the compute backend.
     pub fn step_gpu(&mut self) -> Result<(), PhysicsError> {
         if self.spheres.is_empty() {
             return Ok(());
@@ -463,8 +594,22 @@ impl PhysicsSim {
         Ok(())
     }
 
-    /// Advances the simulation by one step on the CPU without using the
-    /// compute backend.
+    /// Advances the simulation by one time step using the CPU.
+    ///
+    /// This method performs the same calculations as [`step_gpu`], but it does
+    /// so on the CPU. It is primarily used for testing and debugging, as it is
+    /// significantly slower than the GPU implementation.
+    ///
+    /// The CPU step involves the following stages:
+    ///
+    /// 1.  **Integration:** The position and velocity of each sphere are
+    ///     updated based on gravity and external forces.
+    /// 2.  **Collision Detection:** The code checks for collisions between each
+    ///     pair of spheres and between each sphere and the static planes.
+    /// 3.  **Collision Resolution:** Collisions are resolved by adjusting the
+    ///     positions and velocities of the colliding spheres.
+    /// 4.  **Joint Solving:** The distance constraints for all joints are
+    ///     enforced.
     pub fn step_cpu(&mut self) {
         let dt = self.params.dt;
         // Spheres
@@ -572,10 +717,19 @@ impl PhysicsSim {
         }
     }
 
-    /// Runs the simulation for `steps` iterations using the GPU backend.
+    /// Runs the simulation for a specified number of steps.
     ///
-    /// The time step `dt` is applied before stepping begins. On success the
-    /// position of the first sphere is returned for convenience.
+    /// This method advances the simulation by calling [`step_gpu`] repeatedly.
+    ///
+    /// # Arguments
+    ///
+    /// * `dt` - The time step for each simulation step.
+    /// * `steps` - The number of steps to simulate.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the final state of the first sphere, or a
+    /// `PhysicsError` if an error occurred during the simulation.
     pub fn run(&mut self, dt: f32, steps: usize) -> Result<SphereState, PhysicsError> {
         if self.spheres.is_empty() {
             return Err(PhysicsError::NoSpheres);
@@ -591,8 +745,19 @@ impl PhysicsSim {
         })
     }
 
-    /// Runs the simulation for a number of steps on the CPU.
+    /// Runs the simulation for a specified number of steps on the CPU.
+    ///
+    /// This method is similar to [`run`], but it uses the CPU for the
+    /// simulation. It repeatedly calls [`step_cpu`] to advance the simulation.
+    ///
+    /// # Arguments
+    ///
+    /// * `dt` - The time step for each simulation step.
+    /// * `steps` - The number of steps to simulate.
     pub fn run_cpu(&mut self, dt: f32, steps: usize) {
+        if self.spheres.is_empty() {
+            return;
+        }
         self.params.dt = dt;
         for _ in 0..steps {
             self.step_cpu();
