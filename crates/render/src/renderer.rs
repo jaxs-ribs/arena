@@ -63,7 +63,13 @@ impl Camera {
 struct SphereGpu {
     /// Sphere position.
     pos: [f32; 3],
-    _pad: f32,
+    /// Sphere radius.
+    radius: f32,
+    /// Material friction coefficient.
+    friction: f32,
+    /// Material restitution coefficient.
+    restitution: f32,
+    _pad: [f32; 2],
 }
 
 #[repr(C)]
@@ -427,7 +433,13 @@ impl Renderer {
     ) {
         let sphere_data: Vec<_> = spheres
             .iter()
-            .map(|s| SphereGpu { pos: s.pos.into(), _pad: 0.0 })
+            .map(|s| SphereGpu {
+                pos: s.pos.into(),
+                radius: s.radius,
+                friction: s.material.friction,
+                restitution: s.material.restitution,
+                _pad: [0.0; 2],
+            })
             .collect();
         self.queue.write_buffer(
             &self.spheres_buffer,
