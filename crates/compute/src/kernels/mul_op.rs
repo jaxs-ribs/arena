@@ -1,5 +1,10 @@
 use crate::{BufferView, ComputeError};
 
+/// Element-wise multiplication of two buffers.
+///
+/// Expects bindings `[a, b, output_placeholder, config]`. All buffers use the
+/// `f32` element type and must share the same shape. The returned vector
+/// contains one buffer with the multiplied values.
 pub fn handle_mul(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 4 {
         // IN1, IN2, OUT, CONFIG per layout.rs

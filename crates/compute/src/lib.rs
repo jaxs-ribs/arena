@@ -26,6 +26,7 @@ pub use cpu_backend::CpuBackend;
 pub use wgpu_backend::WgpuBackend;
 
 #[derive(Error, Debug)]
+/// Errors that may occur when dispatching compute kernels.
 pub enum ComputeError {
     #[error("buffer shape mismatch: {0}")]
     ShapeMismatch(&'static str),
@@ -34,6 +35,7 @@ pub enum ComputeError {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// Enumeration of all compute kernels available in the crate.
 pub enum Kernel {
     // Element-wise
     Add,
@@ -80,6 +82,7 @@ pub enum Kernel {
 
 impl Kernel {
     #[must_use]
+    /// Returns the number of expected buffer bindings for this kernel.
     pub const fn binding_count(&self) -> u32 {
         layout::binding_count(self)
     }
@@ -104,6 +107,10 @@ pub struct BufferView {
 
 impl BufferView {
     #[must_use]
+    /// Creates a new buffer view over raw bytes.
+    ///
+    /// `shape` describes the logical tensor dimensions and `element_size_in_bytes`
+    /// specifies the size of each innermost element.
     pub fn new(data: Arc<[u8]>, shape: Vec<usize>, element_size_in_bytes: usize) -> Self {
         Self {
             data,

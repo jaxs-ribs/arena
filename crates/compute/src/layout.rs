@@ -1,13 +1,20 @@
+/// Binding slot for the first input storage buffer.
 pub const STORAGE_IN: u32 = 0;
+/// Binding slot for the second input buffer used by binary operations.
 pub const STORAGE_IN2: u32 = 1; // binary ops
+/// Binding slot for the third input buffer used by ternary operations.
 pub const STORAGE_IN3: u32 = 2; // ternary ops (e.g. clamp input)
+/// Binding slot for the output storage buffer.
 pub const STORAGE_OUT: u32 = 3;
+/// Binding slot for uniform configuration data.
 pub const UNIFORM_SC: u32 = 4; // config, params, masks etc.
 
 const _: () = assert!(STORAGE_OUT == 3);
 
-/// Return expected number of bindings for each kernel.
-/// These are provisional and will be refined during TDD implementation of each op.
+/// Returns the expected number of buffer bindings for a given kernel.
+///
+/// The layout is stable across backends and used when creating bind groups.
+/// Values may evolve as kernels mature.
 pub const fn binding_count(kernel: &crate::Kernel) -> u32 {
     match kernel {
         // Element-wise

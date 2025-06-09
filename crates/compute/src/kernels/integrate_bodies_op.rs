@@ -1,5 +1,10 @@
 use crate::{BufferView, ComputeError};
 
+/// Integrates simple rigid bodies forward in time.
+///
+/// Bindings should be `[bodies_inout, params, forces]`. Each body is updated in
+/// place according to the provided forces and physics parameters. The updated
+/// bodies are returned as a single buffer.
 pub fn handle_integrate_bodies(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 3 {
         return Err(ComputeError::ShapeMismatch(

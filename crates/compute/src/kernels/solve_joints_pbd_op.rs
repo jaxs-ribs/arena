@@ -1,5 +1,9 @@
 use crate::{BufferView, ComputeError};
 
+/// Applies joint constraints to bodies using a PBD approach.
+///
+/// Bindings `[bodies_inout, joints_inout, params]` are expected and the updated
+/// bodies are returned in a single buffer.
 pub fn handle_solve_joints_pbd(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 3 {
         return Err(ComputeError::ShapeMismatch(

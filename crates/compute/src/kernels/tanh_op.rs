@@ -1,5 +1,9 @@
 use crate::{BufferView, ComputeError};
 
+/// Applies `tanh` to each element of the input buffer.
+///
+/// Bindings `[input, output_placeholder, config]` are expected with `f32` data.
+/// Returns one buffer containing the hyperbolic tangent of each input element.
 pub fn handle_tanh(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 3 {
         return Err(ComputeError::ShapeMismatch("Tanh kernel expects 3 buffers"));

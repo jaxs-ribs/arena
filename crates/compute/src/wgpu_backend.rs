@@ -10,12 +10,17 @@ use anyhow::Result;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
+/// GPU-backed implementation of [`ComputeBackend`] built on `wgpu`.
+///
+/// The backend compiles WGSL shaders at runtime and dispatches them on the
+/// selected device.
 pub struct WgpuBackend {
     device: Arc<wgpu::Device>,
     queue: Arc<wgpu::Queue>,
 }
 
 impl WgpuBackend {
+    /// Creates a new backend using the system's default high-performance GPU.
     pub fn new() -> Result<Self> {
         let instance = wgpu::Instance::default();
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
@@ -41,6 +46,7 @@ impl WgpuBackend {
     }
 }
 
+/// Returns the WGSL entry point name for a given [`Kernel`].
 fn kernel_name(kernel: &Kernel) -> &'static str {
     match kernel {
         Kernel::Add => "add",
@@ -78,6 +84,7 @@ fn kernel_name(kernel: &Kernel) -> &'static str {
     }
 }
 
+/// Indicates whether a particular binding for the kernel is read-only.
 fn is_read_only(kernel: &Kernel, binding: u32) -> bool {
     let binding_count = crate::layout::binding_count(kernel);
     match kernel {
@@ -95,6 +102,7 @@ fn is_read_only(kernel: &Kernel, binding: u32) -> bool {
     }
 }
 
+/// Returns `true` if the binding should be treated as a uniform buffer.
 fn is_uniform(kernel: &Kernel, binding: u32) -> bool {
     match kernel {
         Kernel::ExpandInstances => binding == 2,
@@ -104,6 +112,7 @@ fn is_uniform(kernel: &Kernel, binding: u32) -> bool {
     }
 }
 
+/// Provides the WGSL shader source associated with the kernel.
 fn to_shader_source(kernel: &Kernel) -> &'static str {
     match kernel {
         Kernel::Add => include_str!("../../../shaders/add.wgsl"),

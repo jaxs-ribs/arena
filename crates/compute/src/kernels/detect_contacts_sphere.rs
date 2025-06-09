@@ -2,6 +2,7 @@ use crate::{BufferView, ComputeError};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+/// Minimal 3D vector used by the sphere contact tests.
 pub struct TestVec3 {
     pub x: f32,
     pub y: f32,
@@ -10,12 +11,14 @@ pub struct TestVec3 {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+/// Position-only body for unit spheres.
 pub struct TestBody {
     pub pos: TestVec3,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+/// Contact information emitted when two spheres overlap.
 pub struct TestContact {
     pub body_index: u32,
     pub normal: TestVec3,
@@ -25,8 +28,10 @@ pub struct TestContact {
 
 /// CPU implementation of simple sphere-sphere contact detection.
 ///
-/// Each sphere is assumed to have unit radius. Contacts are emitted in the
-/// format expected by the `SolveContactsPBD` kernel.
+/// Each body in the first binding is treated as a unit sphere. All pairwise
+/// intersections are detected and written as [`TestContact`] structures into the
+/// output buffer provided as the second binding. The format matches what the
+/// position based dynamics solver expects.
 pub fn handle_detect_contacts_sphere(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 2 {
         return Err(ComputeError::ShapeMismatch(

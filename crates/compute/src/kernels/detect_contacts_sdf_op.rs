@@ -2,6 +2,7 @@ use crate::{BufferView, ComputeError};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+/// Basic 3D vector used by the SDF contact tests.
 pub struct TestVec3 {
     pub x: f32,
     pub y: f32,
@@ -10,18 +11,21 @@ pub struct TestVec3 {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+/// Body with a position used for plane contacts.
 pub struct TestBody {
     pub pos: TestVec3,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+/// Height field plane representing an infinite ground surface.
 pub struct TestPlane {
     pub height: f32,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+/// Contact produced when a body penetrates the plane.
 pub struct TestContact {
     pub index: u32,
     pub penetration: f32,

@@ -1,5 +1,10 @@
 use crate::{BufferView, ComputeError};
 
+/// Computes sums over segments of the input buffer.
+///
+/// Bindings are `[data, segment_indices, output_placeholder, config]`. Each
+/// segment is defined by consecutive indices in the `segment_indices` buffer.
+/// Returns one buffer where each element contains the sum for a segment.
 pub fn handle_segmented_reduce_sum(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 4 {
         return Err(ComputeError::ShapeMismatch(

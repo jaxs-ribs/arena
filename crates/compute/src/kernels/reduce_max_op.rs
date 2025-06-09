@@ -1,5 +1,9 @@
 use crate::{BufferView, ComputeError};
 
+/// Finds the maximum element of the input buffer.
+///
+/// Expects bindings `[input, output_placeholder, config]` with `f32` values. A
+/// single buffer containing the maximum is returned.
 pub fn handle_reduce_max(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 3 {
         return Err(ComputeError::ShapeMismatch(

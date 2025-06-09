@@ -1,5 +1,10 @@
 use crate::{BufferView, ComputeError};
 
+/// Restricts each element of `value` to the inclusive range `[min, max]`.
+///
+/// Bindings are `[value, min, max, output_placeholder, config]` with matching
+/// shapes. All buffers use `f32` elements. A single buffer with the clamped
+/// values is returned.
 pub fn handle_clamp(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 5 {
         // value, min_val, max_val, out_placeholder, config per layout.rs

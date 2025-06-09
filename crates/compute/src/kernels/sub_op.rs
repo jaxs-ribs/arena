@@ -1,5 +1,10 @@
 use crate::{BufferView, ComputeError};
 
+/// Element-wise subtraction of two buffers.
+///
+/// The function expects bindings `[a, b, output_placeholder, config]` where all
+/// buffers contain `f32` values of identical shape. The result buffer is
+/// returned as the sole entry in the returned vector.
 pub fn handle_sub(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 4 {
         // IN1, IN2, OUT, CONFIG per layout.rs

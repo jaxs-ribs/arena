@@ -1,5 +1,10 @@
 use crate::{BufferView, ComputeError};
 
+/// Collects elements from `source` at the provided indices.
+///
+/// Bindings: `[source, indices, output_placeholder, config]`. The indices are
+/// `u32` offsets into the source buffer. The gathered values are returned in the
+/// output buffer.
 pub fn handle_gather(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 4 {
         return Err(ComputeError::ShapeMismatch(

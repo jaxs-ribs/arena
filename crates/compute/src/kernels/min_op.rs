@@ -1,5 +1,9 @@
 use crate::{BufferView, ComputeError};
 
+/// Computes the pairwise minimum of two buffers.
+///
+/// Bindings `[a, b, output_placeholder, config]` must all be `f32` arrays of the
+/// same shape. The minimum of each pair is returned in a single output buffer.
 pub fn handle_min(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 4 {
         // IN1, IN2, OUT, CONFIG per layout.rs

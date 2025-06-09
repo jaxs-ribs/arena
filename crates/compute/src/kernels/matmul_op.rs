@@ -1,5 +1,9 @@
 use crate::{BufferView, ComputeError};
 
+/// Performs a basic matrix multiplication `C = A * B` on `f32` matrices.
+///
+/// The bindings are `[A, B, output_placeholder, config]` where `config` holds
+/// the matrix dimensions `(m, k, n)` as `u32` values.
 pub fn handle_matmul(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 4 {
         return Err(ComputeError::ShapeMismatch(

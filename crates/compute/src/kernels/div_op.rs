@@ -1,5 +1,10 @@
 use crate::{BufferView, ComputeError};
 
+/// Element-wise division of two buffers.
+///
+/// Bindings must contain `[a, b, output_placeholder, config]` with matching
+/// shapes. Division is performed on `f32` values and the result is returned in a
+/// single output buffer.
 pub fn handle_div(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 4 {
         // IN1, IN2, OUT, CONFIG per layout.rs

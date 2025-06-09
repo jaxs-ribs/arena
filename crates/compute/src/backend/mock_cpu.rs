@@ -1,6 +1,7 @@
 
 #[cfg(feature = "mock")]
 #[derive(Default)]
+/// Simplified CPU backend used for mocking during tests.
 pub struct MockCpu;
 
 #[cfg(feature = "mock")]

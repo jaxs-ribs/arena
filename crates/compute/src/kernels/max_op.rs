@@ -1,5 +1,9 @@
 use crate::{BufferView, ComputeError};
 
+/// Computes the pairwise maximum of two buffers.
+///
+/// Bindings are `[a, b, output_placeholder, config]` with identical shapes.
+/// Returns a single buffer containing the maxima of each pair of elements.
 pub fn handle_max(binds: &[BufferView]) -> Result<Vec<Vec<u8>>, ComputeError> {
     if binds.len() < 4 {
         // IN1, IN2, OUT, CONFIG per layout.rs
