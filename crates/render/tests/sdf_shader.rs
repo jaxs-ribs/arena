@@ -13,6 +13,6 @@ fn validate_shader(path: &Path) {
 
 #[test]
 fn compile_sdf_shader() {
-    let shader = Path::new("../../crates/render/src/sdf.wgsl");
+    let shader = Path::new("src/renderer.wgsl");
     validate_shader(shader);
 }

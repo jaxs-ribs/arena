@@ -87,12 +87,13 @@ fn test_friction_slippery_vs_rough() {
 #[test] 
 fn test_sphere_sphere_material_interaction() {
     let mut sim = PhysicsSim::new();
+    sim.params.gravity = Vec3::new(0.0, 0.0, 0.0); // Disable gravity to isolate collision effects
     
     // Create two spheres with different materials
     let bouncy_material = Material::bouncy();
     let damped_material = Material::new(0.2, 0.1);
     
-    // Position them to collide
+    // Position them to collide - closer together to ensure collision
     sim.add_sphere_with_material(
         Vec3::new(0.0, 5.0, 0.0), 
         Vec3::new(1.0, 0.0, 0.0), 
@@ -101,7 +102,7 @@ fn test_sphere_sphere_material_interaction() {
     );
     
     sim.add_sphere_with_material(
-        Vec3::new(3.0, 5.0, 0.0), 
+        Vec3::new(2.2, 5.0, 0.0), // Closer to guarantee collision
         Vec3::new(-1.0, 0.0, 0.0), 
         1.0, 
         damped_material
@@ -110,9 +111,24 @@ fn test_sphere_sphere_material_interaction() {
     // Record initial kinetic energy
     let initial_ke = 0.5 * (sim.spheres[0].vel.x.powi(2) + sim.spheres[1].vel.x.powi(2));
     
+    println!("Initial positions: sphere0=({:.2}, {:.2}, {:.2}), sphere1=({:.2}, {:.2}, {:.2})", 
+             sim.spheres[0].pos.x, sim.spheres[0].pos.y, sim.spheres[0].pos.z,
+             sim.spheres[1].pos.x, sim.spheres[1].pos.y, sim.spheres[1].pos.z);
+    println!("Initial velocities: sphere0=({:.2}, {:.2}, {:.2}), sphere1=({:.2}, {:.2}, {:.2})", 
+             sim.spheres[0].vel.x, sim.spheres[0].vel.y, sim.spheres[0].vel.z,
+             sim.spheres[1].vel.x, sim.spheres[1].vel.y, sim.spheres[1].vel.z);
+    
     // Run simulation until collision occurs
-    for _ in 0..50 {
+    for i in 0..50 {
         sim.step_cpu();
+        if i % 10 == 0 {
+            println!("Step {}: sphere0=({:.2}, {:.2}, {:.2}) vel=({:.2}, {:.2}, {:.2})", 
+                     i, sim.spheres[0].pos.x, sim.spheres[0].pos.y, sim.spheres[0].pos.z,
+                     sim.spheres[0].vel.x, sim.spheres[0].vel.y, sim.spheres[0].vel.z);
+            println!("Step {}: sphere1=({:.2}, {:.2}, {:.2}) vel=({:.2}, {:.2}, {:.2})", 
+                     i, sim.spheres[1].pos.x, sim.spheres[1].pos.y, sim.spheres[1].pos.z,
+                     sim.spheres[1].vel.x, sim.spheres[1].vel.y, sim.spheres[1].vel.z);
+        }
     }
     
     // Check final kinetic energy - should be reduced due to inelastic collision

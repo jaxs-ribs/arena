@@ -22,7 +22,7 @@
 //! mode is primarily used for testing and debugging purposes.
 
 use crate::types::{
-    BoundingBox, BoxBody, ContactDebugInfo, Cylinder, ForceDebugInfo, Joint, JointParams, 
+    BoundingBox, BoxBody, Cylinder, ForceDebugInfo, Joint, JointParams, 
     Material, PhysicsDebugInfo, PhysParams, Plane, Sphere, SpatialGrid, SpatialGridDebugInfo, 
     Vec3, VelocityDebugInfo,
 };
@@ -425,11 +425,42 @@ impl PhysicsSim {
         if self.spheres.is_empty() {
             return Ok(());
         }
-        let sphere_bytes: Arc<[u8]> = bytemuck::cast_slice(&self.spheres).to_vec().into();
+        
+        // Convert physics::Sphere to compute backend's expected TestSphere format
+        #[repr(C)]
+        #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+        struct TestVec3 {
+            x: f32,
+            y: f32,
+            z: f32,
+        }
+        #[repr(C)]
+        #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+        struct TestSphere {
+            pos: TestVec3,
+            _pad1: f32,
+            vel: TestVec3,
+            _pad2: f32,
+            orientation: [f32; 4],
+            angular_vel: TestVec3,
+            _pad3: f32,
+        }
+        
+        let test_spheres: Vec<TestSphere> = self.spheres.iter().map(|s| TestSphere {
+            pos: TestVec3 { x: s.pos.x, y: s.pos.y, z: s.pos.z },
+            _pad1: 0.0,
+            vel: TestVec3 { x: s.vel.x, y: s.vel.y, z: s.vel.z },
+            _pad2: 0.0,
+            orientation: s.orientation,
+            angular_vel: TestVec3 { x: s.angular_vel.x, y: s.angular_vel.y, z: s.angular_vel.z },
+            _pad3: 0.0,
+        }).collect();
+        
+        let sphere_bytes: Arc<[u8]> = bytemuck::cast_slice(&test_spheres).to_vec().into();
         let sphere_buffer_view = compute::BufferView::new(
             sphere_bytes.clone(),
-            vec![self.spheres.len()],
-            size_of::<Sphere>(),
+            vec![test_spheres.len()],
+            size_of::<TestSphere>(),
         );
 
         #[repr(C)]
@@ -466,12 +497,28 @@ impl PhysicsSim {
         )?;
 
         if let Some(updated) = result_buffers.get(0) {
-            if updated.len() == self.spheres.len() * size_of::<Sphere>() {
-                let new_spheres: Vec<Sphere> = updated
-                    .chunks_exact(size_of::<Sphere>())
+            if updated.len() == self.spheres.len() * size_of::<TestSphere>() {
+                let updated_test_spheres: Vec<TestSphere> = updated
+                    .chunks_exact(size_of::<TestSphere>())
                     .map(bytemuck::pod_read_unaligned)
                     .collect();
-                self.spheres.clone_from_slice(&new_spheres);
+                
+                // Convert back from TestSphere to physics::Sphere, preserving additional fields
+                for (i, test_sphere) in updated_test_spheres.iter().enumerate() {
+                    if let Some(sphere) = self.spheres.get_mut(i) {
+                        sphere.pos.x = test_sphere.pos.x;
+                        sphere.pos.y = test_sphere.pos.y;
+                        sphere.pos.z = test_sphere.pos.z;
+                        sphere.vel.x = test_sphere.vel.x;
+                        sphere.vel.y = test_sphere.vel.y;
+                        sphere.vel.z = test_sphere.vel.z;
+                        sphere.orientation = test_sphere.orientation;
+                        sphere.angular_vel.x = test_sphere.angular_vel.x;
+                        sphere.angular_vel.y = test_sphere.angular_vel.y;
+                        sphere.angular_vel.z = test_sphere.angular_vel.z;
+                        // radius, mass, and material remain unchanged
+                    }
+                }
             }
         }
 
@@ -623,11 +670,22 @@ impl PhysicsSim {
             size_of::<PbdContact>(),
         );
 
-        let sphere_bytes: Arc<[u8]> = bytemuck::cast_slice(&self.spheres).to_vec().into();
+        // Convert physics::Sphere to TestSphere for SolveContactsPBD
+        let test_spheres_for_contacts: Vec<TestSphere> = self.spheres.iter().map(|s| TestSphere {
+            pos: TestVec3 { x: s.pos.x, y: s.pos.y, z: s.pos.z },
+            _pad1: 0.0,
+            vel: TestVec3 { x: s.vel.x, y: s.vel.y, z: s.vel.z },
+            _pad2: 0.0,
+            orientation: s.orientation,
+            angular_vel: TestVec3 { x: s.angular_vel.x, y: s.angular_vel.y, z: s.angular_vel.z },
+            _pad3: 0.0,
+        }).collect();
+        
+        let sphere_bytes: Arc<[u8]> = bytemuck::cast_slice(&test_spheres_for_contacts).to_vec().into();
         let spheres_view = compute::BufferView::new(
             sphere_bytes.clone(),
-            vec![self.spheres.len()],
-            size_of::<Sphere>(),
+            vec![test_spheres_for_contacts.len()],
+            size_of::<TestSphere>(),
         );
         let params_placeholder: Arc<[u8]> = vec![0u8; 4].into();
         let params_view = compute::BufferView::new(params_placeholder, vec![1], 4);
@@ -639,12 +697,28 @@ impl PhysicsSim {
         )?;
 
         if let Some(bytes) = solved.get(0) {
-            if bytes.len() == self.spheres.len() * size_of::<Sphere>() {
-                let updated: Vec<Sphere> = bytes
-                    .chunks_exact(size_of::<Sphere>())
+            if bytes.len() == self.spheres.len() * size_of::<TestSphere>() {
+                let updated_test_spheres: Vec<TestSphere> = bytes
+                    .chunks_exact(size_of::<TestSphere>())
                     .map(bytemuck::pod_read_unaligned)
                     .collect();
-                self.spheres.clone_from_slice(&updated);
+                
+                // Convert back from TestSphere to physics::Sphere, preserving additional fields
+                for (i, test_sphere) in updated_test_spheres.iter().enumerate() {
+                    if let Some(sphere) = self.spheres.get_mut(i) {
+                        sphere.pos.x = test_sphere.pos.x;
+                        sphere.pos.y = test_sphere.pos.y;
+                        sphere.pos.z = test_sphere.pos.z;
+                        sphere.vel.x = test_sphere.vel.x;
+                        sphere.vel.y = test_sphere.vel.y;
+                        sphere.vel.z = test_sphere.vel.z;
+                        sphere.orientation = test_sphere.orientation;
+                        sphere.angular_vel.x = test_sphere.angular_vel.x;
+                        sphere.angular_vel.y = test_sphere.angular_vel.y;
+                        sphere.angular_vel.z = test_sphere.angular_vel.z;
+                        // radius, mass, and material remain unchanged
+                    }
+                }
             }
         }
 
