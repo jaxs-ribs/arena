@@ -95,6 +95,11 @@ purely a skeleton for future reinforcement learning experiments.
 The command `cargo test -p ml --test 07_stick_balance_env` will run this test specifically.
 Another test, `cargo test -p ml --test 08_cart_pole`, starts the pole at a slight angle
 and confirms it falls over when no control is applied.
+`cargo test -p ml --test 09_cart_pole_control` verifies that applying a horizontal
+force moves the cart. Finally the ignored test
+`cargo test -p ml --test 10_cart_pole_train -- --ignored` runs a small PPO
+training loop that learns a policy. The test also verifies the trained policy
+can keep the pole upright for an entire episode.
 
 ## Status
 
