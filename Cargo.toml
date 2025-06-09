@@ -5,6 +5,7 @@ members = [
     "crates/physics",
     "crates/ml",
     "crates/render",
+    "crates/phenotype",
 ]
 resolver = "2"
 

@@ -1,0 +1,11 @@
+{
+  "bodies": [
+    {"id": "a", "shape": "sphere", "radius": 1.0, "pos": [0, 1, 0]},
+    {"id": "b", "shape": "sphere", "radius": 1.0, "pos": [1, 1, 0]},
+    {"id": "c", "shape": "sphere", "radius": 1.0, "pos": [2, 1, 0]}
+  ],
+  "joints": [
+    {"body_a": "a", "body_b": "b", "rest_length": 1.0},
+    {"body_a": "b", "body_b": "c", "rest_length": 1.0}
+  ]
+}
