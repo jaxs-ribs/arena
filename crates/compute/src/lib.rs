@@ -172,6 +172,12 @@ pub enum Kernel {
     DetectContactsSphere,
     /// Detects collisions between boxes.
     DetectContactsBox,
+    /// Detects collisions between spheres and cylinders.
+    DetectContactsSphereCylinder,
+    /// Detects collisions between pairs of cylinders.
+    DetectContactsCylinderCylinder,
+    /// Detects collisions between boxes and cylinders.
+    DetectContactsBoxCylinder,
     /// Detects collisions using Signed Distance Functions (SDFs).
     DetectContactsSDF,
     /// Solves contact constraints using Position-Based Dynamics (PBD).

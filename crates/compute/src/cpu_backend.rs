@@ -72,6 +72,15 @@ impl ComputeBackend for CpuBackend {
             Kernel::DetectContactsBox => {
                 kernels::detect_contacts_box_op::handle_detect_contacts_box(binds)
             }
+            Kernel::DetectContactsSphereCylinder => {
+                kernels::detect_contacts_sphere_cylinder::handle_detect_contacts_sphere_cylinder(binds)
+            }
+            Kernel::DetectContactsCylinderCylinder => {
+                kernels::detect_contacts_cylinder_cylinder::handle_detect_contacts_cylinder_cylinder(binds)
+            }
+            Kernel::DetectContactsBoxCylinder => {
+                kernels::detect_contacts_box_cylinder::handle_detect_contacts_box_cylinder(binds)
+            }
             Kernel::DetectContactsSDF => {
                 kernels::detect_contacts_sdf_op::handle_detect_contacts_sdf(binds)
             }
