@@ -926,6 +926,106 @@ impl PhysicsSim {
             )?;
         }
 
+        // Sphere-cylinder collisions --------------------------------------------------
+        let dt = self.params.dt;
+        for (_si, sphere) in self.spheres.iter_mut().enumerate() {
+            for (_ci, cyl) in self.cylinders.iter_mut().enumerate() {
+                // Vector from cylinder axis to sphere centre (XZ plane)
+                let dx = sphere.pos.x - cyl.pos.x;
+                let dz = sphere.pos.z - cyl.pos.z;
+                let dist_xz = (dx * dx + dz * dz).sqrt();
+                let min_dist_xz = cyl.radius + sphere.radius;
+
+                // Vertical overlap check (approx: treat cylinder as finite along Y)
+                let dy = sphere.pos.y - cyl.pos.y;
+                let half_height = cyl.height * 0.5;
+                let vertical_overlap = half_height + sphere.radius - dy.abs();
+
+                if dist_xz < min_dist_xz && vertical_overlap > 0.0 {
+                    // Collision detected
+                    // Determine contact normal – horizontal or vertical whichever is smaller penetration
+                    let pen_horizontal = min_dist_xz - dist_xz;
+                    let pen_vertical   = vertical_overlap;
+
+                    let nx: f32;
+                    let ny: f32;
+                    let nz: f32;
+
+                    if pen_horizontal < pen_vertical {
+                        // Side hit – normal in XZ plane
+                        if dist_xz > 0.0 {
+                            nx = dx / dist_xz;
+                            nz = dz / dist_xz;
+                        } else {
+                            // Perfectly centred – choose arbitrary normal
+                            nx = 1.0;
+                            nz = 0.0;
+                        }
+                        ny = 0.0;
+                        // Position correction for sphere only (treat cylinder massive relative to sphere for now)
+                        sphere.pos.x += nx * pen_horizontal;
+                        sphere.pos.z += nz * pen_horizontal;
+                    } else {
+                        // Cap hit – normal is vertical
+                        nx = 0.0;
+                        nz = 0.0;
+                        ny = if dy > 0.0 { 1.0 } else { -1.0 };
+                        sphere.pos.y += ny * pen_vertical;
+                    }
+
+                    // --- Impulse response -----------------------------------
+                    let sphere_mass = sphere.mass;
+                    let cyl_mass    = 1.0; // TODO add mass to Cylinder
+                    let _total_mass  = sphere_mass + cyl_mass;
+
+                    // Relative velocity
+                    let rel_vel_x = sphere.vel.x - cyl.vel.x;
+                    let rel_vel_y = sphere.vel.y - cyl.vel.y;
+                    let rel_vel_z = sphere.vel.z - cyl.vel.z;
+                    let rel_vel_n = rel_vel_x * nx + rel_vel_y * ny + rel_vel_z * nz;
+
+                    if rel_vel_n < 0.0 {
+                        // Restitution
+                        let restitution = (sphere.material.restitution * cyl.material.restitution).sqrt();
+
+                        // Impulse magnitude
+                        let impulse_mag = -(1.0 + restitution) * rel_vel_n / (1.0 / sphere_mass + 1.0 / cyl_mass);
+
+                        let ix = impulse_mag * nx;
+                        let iy = impulse_mag * ny;
+                        let iz = impulse_mag * nz;
+
+                        // Apply impulse (sphere and cylinder)
+                        sphere.vel.x += ix / sphere_mass;
+                        sphere.vel.y += iy / sphere_mass;
+                        sphere.vel.z += iz / sphere_mass;
+
+                        cyl.vel.x -= ix / cyl_mass;
+                        cyl.vel.y -= iy / cyl_mass;
+                        cyl.vel.z -= iz / cyl_mass;
+                    }
+
+                    // --- Basic friction (optional) ---------------------------
+                    let friction = (sphere.material.friction * cyl.material.friction).sqrt();
+                    let vel_normal = sphere.vel.x * nx + sphere.vel.y * ny + sphere.vel.z * nz;
+                    let tangent_vel_x = sphere.vel.x - vel_normal * nx;
+                    let tangent_vel_y = sphere.vel.y - vel_normal * ny;
+                    let tangent_vel_z = sphere.vel.z - vel_normal * nz;
+                    let tangent_speed = (tangent_vel_x * tangent_vel_x + tangent_vel_y * tangent_vel_y + tangent_vel_z * tangent_vel_z).sqrt();
+                    if tangent_speed > 1e-6 {
+                        let normal_force = sphere_mass * (-self.params.gravity.y).max(0.0); // approximate
+                        let max_friction = friction * normal_force;
+                        let required_force = tangent_speed * sphere_mass / dt;
+                        let applied = max_friction.min(required_force);
+                        let friction_factor = 1.0 - applied / required_force;
+                        sphere.vel.x = vel_normal * nx + tangent_vel_x * friction_factor;
+                        sphere.vel.y = vel_normal * ny + tangent_vel_y * friction_factor;
+                        sphere.vel.z = vel_normal * nz + tangent_vel_z * friction_factor;
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -966,7 +1066,23 @@ impl PhysicsSim {
                     + sphere.pos.z * plane.normal.z
                     + plane.d;
                 let radius = sphere.radius;
-                let contact_threshold = radius + 0.01; // Small tolerance for resting contact
+                let contact_slop      = 0.05 * radius; // 5 % of the radius
+                let contact_threshold = radius + contact_slop; // Begin contact response just above true impact distance
+                
+                // Respect finite plane extents (if any). Skip collision if outside bounds
+                let mut outside_extents = false;
+                if plane.extents.x > 0.0 || plane.extents.y > 0.0 {
+                    // Project sphere center onto plane to test XY bounds (approx)
+                    let proj_x = sphere.pos.x - plane.normal.x * dist;
+                    let proj_z = sphere.pos.z - plane.normal.z * dist;
+                    if proj_x.abs() > plane.extents.x || proj_z.abs() > plane.extents.y {
+                        outside_extents = true;
+                    }
+                }
+
+                if outside_extents {
+                    continue;
+                }
                 
                 if dist < contact_threshold {
                     let is_penetrating = dist < radius;
@@ -984,15 +1100,13 @@ impl PhysicsSim {
                         + sphere.vel.y * plane.normal.y
                         + sphere.vel.z * plane.normal.z;
                     
-                    // Apply restitution only for actual collisions (negative velocity into surface)
+                    // Restitution: only when impacting the surface (moving into it)
                     if vn < 0.0 && is_penetrating {
-                        let restitution = sphere.material.restitution;
-                        let new_vn = -vn * restitution;
-                        let velocity_change = new_vn - vn;
-                        
-                        sphere.vel.x += velocity_change * plane.normal.x;
-                        sphere.vel.y += velocity_change * plane.normal.y;
-                        sphere.vel.z += velocity_change * plane.normal.z;
+                        let new_vn        = -vn * sphere.material.restitution;
+                        let velocity_diff = new_vn - vn;
+                        sphere.vel.x += velocity_diff * plane.normal.x;
+                        sphere.vel.y += velocity_diff * plane.normal.y;
+                        sphere.vel.z += velocity_diff * plane.normal.z;
                     }
                     
                     // Apply friction for both colliding and resting objects
@@ -1039,7 +1153,7 @@ impl PhysicsSim {
                     }
                     
                     // Apply rolling resistance for spheres
-                    let rolling_resistance = 0.01; // Small rolling resistance coefficient
+                    let rolling_resistance = 0.01;
                     let total_speed = (sphere.vel.x * sphere.vel.x + 
                                      sphere.vel.y * sphere.vel.y + 
                                      sphere.vel.z * sphere.vel.z).sqrt();
@@ -1078,19 +1192,76 @@ impl PhysicsSim {
                     + bx.pos.z * plane.normal.z
                     + plane.d
                     - support;
+
+                // Finite extents check for box contact
+                let mut outside_extents = false;
+                if plane.extents.x > 0.0 || plane.extents.y > 0.0 {
+                    let proj_x = bx.pos.x - plane.normal.x * dist;
+                    let proj_z = bx.pos.z - plane.normal.z * dist;
+                    if proj_x.abs() > plane.extents.x || proj_z.abs() > plane.extents.y {
+                        outside_extents = true;
+                    }
+                }
+                if outside_extents {
+                    continue;
+                }
+
                 if dist < 0.0 {
                     let correction = -dist;
                     bx.pos.x += plane.normal.x * correction;
                     bx.pos.y += plane.normal.y * correction;
                     bx.pos.z += plane.normal.z * correction;
+                    // Velocity decomposition
                     let vn = bx.vel.x * plane.normal.x
                         + bx.vel.y * plane.normal.y
                         + bx.vel.z * plane.normal.z;
-                    if vn < 0.0 {
-                        bx.vel.x -= vn * plane.normal.x;
-                        bx.vel.y -= vn * plane.normal.y;
-                        bx.vel.z -= vn * plane.normal.z;
+
+                    // Restitution: only when impacting the surface (moving into it)
+                    if vn < 0.0 && dist < 0.0 {
+                        let new_vn        = -vn * bx.material.restitution;
+                        let velocity_diff = new_vn - vn;
+                        bx.vel.x += velocity_diff * plane.normal.x;
+                        bx.vel.y += velocity_diff * plane.normal.y;
+                        bx.vel.z += velocity_diff * plane.normal.z;
                     }
+
+                    // --- Friction (static + dynamic) ----------------------
+                    let friction     = bx.material.friction;
+                    let vel_normal   = bx.vel.x * plane.normal.x + bx.vel.y * plane.normal.y + bx.vel.z * plane.normal.z;
+                    let tangent_vel_x = bx.vel.x - vel_normal * plane.normal.x;
+                    let tangent_vel_y = bx.vel.y - vel_normal * plane.normal.y;
+                    let tangent_vel_z = bx.vel.z - vel_normal * plane.normal.z;
+                    let tangent_speed = (tangent_vel_x * tangent_vel_x + tangent_vel_y * tangent_vel_y + tangent_vel_z * tangent_vel_z).sqrt();
+
+                    // Treat very small drifts as static – snap to rest
+                    let static_threshold = 0.05; // m/s
+                    if tangent_speed < static_threshold {
+                        // Zero out tangential velocity
+                        bx.vel.x = vel_normal * plane.normal.x;
+                        bx.vel.y = vel_normal * plane.normal.y;
+                        bx.vel.z = vel_normal * plane.normal.z;
+                    } else if tangent_speed > 1e-6 {
+                        // Dynamic Coulomb friction
+                        let box_mass          = 1.0; // TODO: add mass to BoxBody
+                        let normal_force      = box_mass * (-self.params.gravity.x * plane.normal.x - self.params.gravity.y * plane.normal.y - self.params.gravity.z * plane.normal.z).max(0.0);
+                        let max_friction_force = friction * normal_force;
+                        let required_force     = tangent_speed * box_mass / dt;
+                        let applied_friction   = max_friction_force.min(required_force);
+                        let friction_factor    = if required_force > 1e-6 {
+                            1.0 - (applied_friction / required_force)
+                        } else {
+                            0.0
+                        };
+                        bx.vel.x = vel_normal * plane.normal.x + tangent_vel_x * friction_factor;
+                        bx.vel.y = vel_normal * plane.normal.y + tangent_vel_y * friction_factor;
+                        bx.vel.z = vel_normal * plane.normal.z + tangent_vel_z * friction_factor;
+                    }
+
+                    // Small rolling-resistance damping so boxes eventually settle
+                    let rolling_resistance = 0.01;
+                    bx.vel.x *= (1.0 - rolling_resistance * dt * 60.0).max(0.0);
+                    bx.vel.y *= (1.0 - rolling_resistance * dt * 60.0).max(0.0);
+                    bx.vel.z *= (1.0 - rolling_resistance * dt * 60.0).max(0.0);
                 }
             }
         }
@@ -1113,6 +1284,20 @@ impl PhysicsSim {
                     + cyl.pos.z * plane.normal.z
                     + plane.d
                     - support;
+
+                // Finite plane extents check for cylinder
+                let mut outside_extents = false;
+                if plane.extents.x > 0.0 || plane.extents.y > 0.0 {
+                    let proj_x = cyl.pos.x - plane.normal.x * dist;
+                    let proj_z = cyl.pos.z - plane.normal.z * dist;
+                    if proj_x.abs() > plane.extents.x || proj_z.abs() > plane.extents.y {
+                        outside_extents = true;
+                    }
+                }
+                if outside_extents {
+                    continue;
+                }
+
                 if dist < 0.0 {
                     let correction = -dist;
                     cyl.pos.x += plane.normal.x * correction;
@@ -1121,11 +1306,47 @@ impl PhysicsSim {
                     let vn = cyl.vel.x * plane.normal.x
                         + cyl.vel.y * plane.normal.y
                         + cyl.vel.z * plane.normal.z;
+
+                    // Restitution
                     if vn < 0.0 {
-                        cyl.vel.x -= vn * plane.normal.x;
-                        cyl.vel.y -= vn * plane.normal.y;
-                        cyl.vel.z -= vn * plane.normal.z;
+                        let new_vn        = -vn * cyl.material.restitution;
+                        let velocity_diff = new_vn - vn;
+                        cyl.vel.x += velocity_diff * plane.normal.x;
+                        cyl.vel.y += velocity_diff * plane.normal.y;
+                        cyl.vel.z += velocity_diff * plane.normal.z;
                     }
+
+                    // Friction
+                    let friction       = cyl.material.friction;
+                    let vel_normal     = cyl.vel.x * plane.normal.x + cyl.vel.y * plane.normal.y + cyl.vel.z * plane.normal.z;
+                    let tangent_vel_x  = cyl.vel.x - vel_normal * plane.normal.x;
+                    let tangent_vel_y  = cyl.vel.y - vel_normal * plane.normal.y;
+                    let tangent_vel_z  = cyl.vel.z - vel_normal * plane.normal.z;
+                    let tangent_speed  = (tangent_vel_x*tangent_vel_x + tangent_vel_y*tangent_vel_y + tangent_vel_z*tangent_vel_z).sqrt();
+
+                    // Static threshold
+                    if tangent_speed < 0.05 {
+                        // Stop
+                        cyl.vel.x = vel_normal * plane.normal.x;
+                        cyl.vel.y = vel_normal * plane.normal.y;
+                        cyl.vel.z = vel_normal * plane.normal.z;
+                    } else if tangent_speed > 1e-6 {
+                        let cyl_mass = 1.0; // Placeholder until mass added
+                        let normal_force = cyl_mass * (-self.params.gravity.x * plane.normal.x - self.params.gravity.y * plane.normal.y - self.params.gravity.z * plane.normal.z).max(0.0);
+                        let max_friction_force = friction * normal_force;
+                        let required = tangent_speed * cyl_mass / dt;
+                        let applied  = max_friction_force.min(required);
+                        let factor   = 1.0 - applied / required;
+                        cyl.vel.x = vel_normal * plane.normal.x + tangent_vel_x * factor;
+                        cyl.vel.y = vel_normal * plane.normal.y + tangent_vel_y * factor;
+                        cyl.vel.z = vel_normal * plane.normal.z + tangent_vel_z * factor;
+                    }
+
+                    // Rolling resistance
+                    let rolling_resistance = 0.01;
+                    cyl.vel.x *= (1.0 - rolling_resistance * dt * 60.0).max(0.0);
+                    cyl.vel.y *= (1.0 - rolling_resistance * dt * 60.0).max(0.0);
+                    cyl.vel.z *= (1.0 - rolling_resistance * dt * 60.0).max(0.0);
                 }
             }
         }

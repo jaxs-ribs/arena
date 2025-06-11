@@ -104,7 +104,7 @@ impl Material {
 
     /// Default material with moderate friction and some bounce.
     pub const fn default() -> Self {
-        Self::new(0.5, 0.3)
+        Self::new(0.2, 0.3)
     }
 
     /// Bouncy ball material.
