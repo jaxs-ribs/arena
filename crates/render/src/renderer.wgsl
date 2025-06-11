@@ -175,27 +175,39 @@ struct RayResult {
 
 // Ray marching with object tracking
 fn ray_march_detailed(ray_origin: vec3<f32>, ray_dir: vec3<f32>) -> RayResult {
-    var t = 0.01;  // Start very close to camera
+    // Start just in front of the camera near-plane
+    var t = 0.01;
     let max_steps = 128;
-    let min_dist = 0.001;
-    let max_dist = 100.0;
-    
+    let max_dist  = 100.0;
+
+    // March the ray through the scene SDF
     for (var i = 0; i < max_steps; i++) {
         let p = ray_origin + t * ray_dir;
         let scene_result = scene_sdf_detailed(p);
-        
+
+        // Adaptive convergence threshold – scales with travelled distance
+        let min_dist = 0.0005 * t + 0.0005; // keeps precision near and far
+
         if (scene_result.distance < min_dist) {
-            return RayResult(t, scene_result.object_type, scene_result.object_index);
+            // --- Binary refinement to reduce overshoot --------------------
+            var refine_t   = t;
+            var refine_res = scene_result;
+            for (var k = 0; k < 2; k++) {
+                refine_t  -= refine_res.distance * 0.5;
+                refine_res = scene_sdf_detailed(ray_origin + refine_t * ray_dir);
+            }
+            return RayResult(refine_t, refine_res.object_type, refine_res.object_index);
         }
-        
-        t += scene_result.distance;  // Full step marching
-        
+
+        // Advance by full SDF distance
+        t += scene_result.distance;
         if (t > max_dist) {
             break;
         }
     }
-    
-    return RayResult(-1.0, 0u, 0u); // No hit
+
+    // No hit
+    return RayResult(-1.0, 0u, 0u);
 }
 
 // Simple ray marching for compatibility
