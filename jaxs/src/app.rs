@@ -30,8 +30,7 @@ use std::time::{Duration, Instant};
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
 
-#[cfg(feature = "render")]
-use render::Renderer;
+// render module used in conditional compilation below
 
 use crate::watcher;
 
@@ -158,7 +157,8 @@ fn add_misc_objects(sim: &mut PhysicsSim) {
 /// Run the simulation with rendering enabled
 #[cfg(feature = "render")]
 fn run_with_rendering(mut sim: PhysicsSim) -> Result<()> {
-    let (mut renderer, event_loop) = Renderer::new()?;
+    let renderer_config = render::RendererConfig::default();
+    let (mut renderer, event_loop) = render::Renderer::new(renderer_config)?;
     
     tracing::info!("Starting simulation loop with dt = {}...", SIMULATION_TIMESTEP);
     
@@ -240,7 +240,7 @@ fn advance_simulation(sim: &mut PhysicsSim, frame: usize) {
 #[cfg(feature = "render")]
 fn update_and_render(renderer: &mut render::Renderer, sim: &PhysicsSim) -> Result<()> {
     renderer.update_scene(&sim.spheres, &sim.boxes, &sim.cylinders, &sim.planes);
-    renderer.render()
+    renderer.render(SIMULATION_TIMESTEP)
 }
 
 /// Log simulation progress at regular intervals
