@@ -52,13 +52,48 @@ JAXS (Just Another Exploration Substrate) is a Rust-based differentiable physics
 - Should be removed to avoid confusion
 
 ### 2. Empty/Placeholder Files
-- `/benches/empty.rs` - Dummy benchmark (already removed)
+- `/benches/empty.rs` - Dummy benchmark (✅ REMOVED)
 - Multiple joint solver implementations are placeholders
 
 ### 3. TODO Comments
 - `physics/src/simulation.rs:510` - Contact information collection
 - `physics/src/simulation.rs:978` - Cylinder mass calculation
 - `physics/src/simulation.rs:1245` - Box mass calculation
+
+## Recent Refactoring (Completed)
+
+### Modularization of `jaxs/src/app.rs`
+- Extracted constants for simulation parameters
+- Split monolithic `run()` function into focused sub-functions:
+  - `initialize_logging()` - Logging setup
+  - `initialize_shader_watcher()` - Shader hot-reload setup
+  - `create_test_scene()` - Scene initialization
+  - `configure_world_physics()` - Physics parameters
+  - `add_static_environment()` - Static objects
+  - `add_test_objects()` - Dynamic test objects
+  - `run_with_rendering()` - Windowed mode execution
+  - `run_headless()` - Non-visual execution
+- Added descriptive comments for each major section
+
+### Improved `jaxs/src/watcher.rs`
+- Introduced configuration constants
+- Created `ShaderChangeHandler` struct for better organization
+- Split file watching logic into smaller functions:
+  - `create_file_watcher()` - Watcher creation
+  - `start_watching_shaders()` - Directory monitoring setup
+  - `handle_file_event()` - Event processing
+  - `process_file_event()` - Event filtering
+- Added better error handling and logging
+
+### Enhanced `jaxs/src/main.rs`
+- Introduced `ExecutionMode` enum for clarity
+- Created `determine_execution_mode()` helper function
+- Improved documentation and code organization
+
+### Test Fixes
+- Fixed compilation errors in physics tests
+- Updated `add_plane()` calls to include required `Vec2` extents parameter
+- All tests now pass consistently
 
 ## Priority Recommendations
 

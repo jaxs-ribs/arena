@@ -1,10 +1,11 @@
 use physics::{Material, PhysicsSim, Vec3};
+use physics::types::Vec2;
 
 #[test]
 fn test_restitution_bouncy_vs_damped() {
     // Test bouncy material
     let mut sim_bouncy = PhysicsSim::new();
-    sim_bouncy.add_plane(Vec3::new(0.0, 1.0, 0.0), 0.0); // Ground plane at y=0
+    sim_bouncy.add_plane(Vec3::new(0.0, 1.0, 0.0), 0.0, Vec2::new(25.0, 25.0)); // Ground plane at y=0
     let bouncy_material = Material::bouncy(); // High restitution
     sim_bouncy.add_sphere_with_material(
         Vec3::new(0.0, 5.0, 0.0), 
@@ -15,7 +16,7 @@ fn test_restitution_bouncy_vs_damped() {
     
     // Test damped material
     let mut sim_damped = PhysicsSim::new();
-    sim_damped.add_plane(Vec3::new(0.0, 1.0, 0.0), 0.0); // Ground plane at y=0
+    sim_damped.add_plane(Vec3::new(0.0, 1.0, 0.0), 0.0, Vec2::new(25.0, 25.0)); // Ground plane at y=0
     let damped_material = Material::new(0.5, 0.1); // Low restitution
     sim_damped.add_sphere_with_material(
         Vec3::new(0.0, 5.0, 0.0), 
@@ -48,7 +49,7 @@ fn test_friction_slippery_vs_rough() {
     // Test with slippery material (low friction)
     let mut sim_slippery = PhysicsSim::new();
     let ramp_normal = Vec3::new(0.3, 1.0, 0.0).normalize();
-    sim_slippery.add_plane(ramp_normal, -2.0); // Tilted ramp
+    sim_slippery.add_plane(ramp_normal, -2.0, Vec2::new(10.0, 10.0)); // Tilted ramp
     
     let slippery_material = Material::slippery(); // Low friction
     sim_slippery.add_sphere_with_material(
@@ -60,7 +61,7 @@ fn test_friction_slippery_vs_rough() {
     
     // Test with rough material (high friction)
     let mut sim_rough = PhysicsSim::new();
-    sim_rough.add_plane(ramp_normal, -2.0); // Same ramp
+    sim_rough.add_plane(ramp_normal, -2.0, Vec2::new(10.0, 10.0)); // Same ramp
     
     let rough_material = Material::new(0.9, 0.3); // High friction
     sim_rough.add_sphere_with_material(

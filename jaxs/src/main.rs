@@ -12,23 +12,36 @@ mod watcher;
 
 use anyhow::Result;
 
-/// The `main` function is the entry point of the JAXS runtime. It is responsible for:
-///
-/// 1.  **Parsing Command-Line Arguments:** It checks for the presence of the `--draw` flag.
-/// 2.  **Launching the Application:** It calls the `app::run` function, passing a boolean value
-///     that indicates whether rendering should be enabled.
-///
-/// The `--draw` flag enables the visualization of the simulation in a window. If the flag is
-/// not present, the simulation will run in headless mode.
-///
-/// # Returns
-///
-/// This function returns a `Result<()>` which will be `Ok(())` if the simulation runs and
-/// exits successfully. Any errors encountered during the setup or execution of the simulation
-/// will be returned as an `Err`.
+/// Entry point for the JAXS physics simulation runtime
+/// 
+/// Determines execution mode based on compile-time features:
+/// - With `render` feature: Launches windowed simulation with visualization
+/// - Without `render` feature: Runs headless simulation for testing/compute
 fn main() -> Result<()> {
-    // When the `render` feature is enabled, this will be true, and the
-    // simulation will be visualized. Otherwise, it will run in headless mode.
-    let enable_render = cfg!(feature = "render");
-    app::run(enable_render)
+    let execution_mode = determine_execution_mode();
+    app::run(execution_mode.should_render())
+}
+
+/// Execution mode configuration for the simulation
+enum ExecutionMode {
+    /// Run with graphical rendering window
+    Windowed,
+    /// Run without any visual output
+    Headless,
+}
+
+impl ExecutionMode {
+    /// Check if rendering should be enabled for this mode
+    fn should_render(&self) -> bool {
+        matches!(self, ExecutionMode::Windowed)
+    }
+}
+
+/// Determine execution mode based on compile-time features
+fn determine_execution_mode() -> ExecutionMode {
+    if cfg!(feature = "render") {
+        ExecutionMode::Windowed
+    } else {
+        ExecutionMode::Headless
+    }
 } 
