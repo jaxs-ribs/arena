@@ -14,11 +14,9 @@ pub fn integrate_spheres(spheres: &mut [Sphere], gravity: Vec3, dt: f32) {
         // Apply gravity force
         let acceleration = gravity;
         
-        // Verlet integration
-        let new_pos = sphere.pos + sphere.vel * dt + acceleration * (0.5 * dt * dt);
-        sphere.vel = (new_pos - sphere.pos) / dt;
-        sphere.prev_pos = sphere.pos;
-        sphere.pos = new_pos;
+        // Simple Euler integration
+        sphere.vel += acceleration * dt;
+        sphere.pos += sphere.vel * dt;
         
         // Apply damping
         sphere.vel *= DAMPING_FACTOR;

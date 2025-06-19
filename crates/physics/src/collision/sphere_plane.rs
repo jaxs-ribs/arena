@@ -1,6 +1,6 @@
 //! Sphere-plane collision detection and response
 
-use crate::types::{Vec3, Sphere, Plane};
+use crate::types::{Sphere, Plane};
 use super::Contact;
 
 /// Detect collision between a sphere and a plane

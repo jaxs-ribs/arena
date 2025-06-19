@@ -19,7 +19,7 @@ pub fn get_potential_collision_pairs(grid: &SpatialGrid) -> Vec<(usize, usize)> 
     
     for (index_a, cell_indices) in grid.get_all_objects() {
         for cell_index in cell_indices {
-            let neighbors = grid.get_cell_objects(*cell_index);
+            let neighbors = grid.get_cell_objects(cell_index);
             
             for &index_b in neighbors {
                 if index_a < index_b {

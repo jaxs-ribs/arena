@@ -559,7 +559,7 @@ impl Renderer {
             .map(|c| CylinderGpu {
                 pos: c.pos.into(),
                 radius: c.radius,
-                height: c.height,
+                height: c.half_height * 2.0,
                 _pad0: [0.0; 3],
             })
             .collect();

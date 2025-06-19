@@ -59,7 +59,7 @@ impl Vec3 {
     };
 
     pub fn normalize(&self) -> Self {
-        let len = (self.x * self.x + self.y * self.y + self.z * self.z).sqrt();
+        let len = self.length();
         if len > 0.0 {
             Self {
                 x: self.x / len,
@@ -70,11 +70,94 @@ impl Vec3 {
             Self::ZERO
         }
     }
+    
+    /// Calculate the length (magnitude) of the vector
+    pub fn length(&self) -> f32 {
+        (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
+    }
+    
+    /// Calculate the dot product with another vector
+    pub fn dot(&self, other: Self) -> f32 {
+        self.x * other.x + self.y * other.y + self.z * other.z
+    }
 }
 
 impl From<Vec3> for [f32; 3] {
     fn from(val: Vec3) -> Self {
         [val.x, val.y, val.z]
+    }
+}
+
+// Arithmetic operations for Vec3
+impl std::ops::Add for Vec3 {
+    type Output = Self;
+    
+    fn add(self, other: Self) -> Self {
+        Self {
+            x: self.x + other.x,
+            y: self.y + other.y,
+            z: self.z + other.z,
+        }
+    }
+}
+
+impl std::ops::Sub for Vec3 {
+    type Output = Self;
+    
+    fn sub(self, other: Self) -> Self {
+        Self {
+            x: self.x - other.x,
+            y: self.y - other.y,
+            z: self.z - other.z,
+        }
+    }
+}
+
+impl std::ops::Mul<f32> for Vec3 {
+    type Output = Self;
+    
+    fn mul(self, scalar: f32) -> Self {
+        Self {
+            x: self.x * scalar,
+            y: self.y * scalar,
+            z: self.z * scalar,
+        }
+    }
+}
+
+impl std::ops::Div<f32> for Vec3 {
+    type Output = Self;
+    
+    fn div(self, scalar: f32) -> Self {
+        Self {
+            x: self.x / scalar,
+            y: self.y / scalar,
+            z: self.z / scalar,
+        }
+    }
+}
+
+impl std::ops::AddAssign for Vec3 {
+    fn add_assign(&mut self, other: Self) {
+        self.x += other.x;
+        self.y += other.y;
+        self.z += other.z;
+    }
+}
+
+impl std::ops::SubAssign for Vec3 {
+    fn sub_assign(&mut self, other: Self) {
+        self.x -= other.x;
+        self.y -= other.y;
+        self.z -= other.z;
+    }
+}
+
+impl std::ops::MulAssign<f32> for Vec3 {
+    fn mul_assign(&mut self, scalar: f32) {
+        self.x *= scalar;
+        self.y *= scalar;
+        self.z *= scalar;
     }
 }
 
@@ -88,8 +171,10 @@ pub struct Material {
     pub friction: f32,
     /// Restitution coefficient. 0.0 = perfectly inelastic, 1.0 = perfectly elastic.
     pub restitution: f32,
+    /// Density in kg/m^3. Default is 1000 (water density).
+    pub density: f32,
     /// Padding for alignment.
-    _pad: [f32; 2],
+    _pad: f32,
 }
 
 impl Material {
@@ -98,7 +183,8 @@ impl Material {
         Self {
             friction,
             restitution,
-            _pad: [0.0; 2],
+            density: 1000.0, // Default water density
+            _pad: 0.0,
         }
     }
 
@@ -332,6 +418,8 @@ pub struct BoxBody {
     pub half_extents: Vec3,
     /// The linear velocity of the box, measured in meters per second.
     pub vel: Vec3,
+    /// Mass of the box in kilograms.
+    pub mass: f32,
     /// Material properties for collision response.
     pub material: Material,
 }
@@ -345,8 +433,10 @@ pub struct Cylinder {
     pub vel: Vec3,
     /// The radius of the cylinder's circular base.
     pub radius: f32,
-    /// The height of the cylinder.
-    pub height: f32,
+    /// Half the height of the cylinder.
+    pub half_height: f32,
+    /// Mass of the cylinder in kilograms.
+    pub mass: f32,
     /// Material properties for collision response.
     pub material: Material,
 }
@@ -380,7 +470,8 @@ pub struct Plane {
     /// The extents of the plane, for rendering as a finite quad.
     /// If `None` or zero, the plane is treated as infinite.
     pub extents: Vec2,
-    pub _pad: [f32; 2],
+    /// Material properties for the plane.
+    pub material: Material,
 }
 
 /// A uniform spatial grid for broad-phase collision detection.
@@ -411,14 +502,26 @@ pub struct BoundingBox {
 /// Debug information for visualizing physics state.
 #[derive(Clone, Debug)]
 pub struct PhysicsDebugInfo {
-    /// Contact points between objects.
-    pub contacts: Vec<ContactDebugInfo>,
-    /// Velocity vectors for all spheres.
-    pub velocity_vectors: Vec<VelocityDebugInfo>,
-    /// Force vectors applied to spheres.
-    pub force_vectors: Vec<ForceDebugInfo>,
-    /// Spatial grid visualization data.
-    pub spatial_grid_info: SpatialGridDebugInfo,
+    /// Number of spheres in simulation.
+    pub num_spheres: usize,
+    /// Number of boxes in simulation.
+    pub num_boxes: usize,
+    /// Number of cylinders in simulation.
+    pub num_cylinders: usize,
+    /// Number of planes in simulation.
+    pub num_planes: usize,
+    /// Number of joints in simulation.
+    pub num_joints: usize,
+    /// Gravity vector.
+    pub gravity: Vec3,
+    /// Time step.
+    pub dt: f32,
+    /// Spatial grid info.
+    pub spatial_grid: SpatialGridDebugInfo,
+    /// Force information.
+    pub forces: Vec<ForceDebugInfo>,
+    /// Velocity information.
+    pub velocities: Vec<VelocityDebugInfo>,
 }
 
 /// Debug information for a contact point.
@@ -437,23 +540,23 @@ pub struct ContactDebugInfo {
 /// Debug information for visualizing velocity.
 #[derive(Copy, Clone, Debug)]
 pub struct VelocityDebugInfo {
-    /// Starting position of the velocity vector.
-    pub position: Vec3,
-    /// Velocity vector.
-    pub velocity: Vec3,
-    /// Index of the object.
-    pub object_index: usize,
+    /// Index of the body.
+    pub body_index: usize,
+    /// Linear velocity vector.
+    pub linear_velocity: Vec3,
+    /// Speed magnitude.
+    pub speed: f32,
 }
 
 /// Debug information for visualizing forces.
 #[derive(Copy, Clone, Debug)]
 pub struct ForceDebugInfo {
-    /// Starting position of the force vector.
-    pub position: Vec3,
-    /// Force vector.
-    pub force: Vec3,
-    /// Index of the object.
-    pub object_index: usize,
+    /// Index of the body.
+    pub body_index: usize,
+    /// Applied external force.
+    pub applied_force: Vec3,
+    /// Gravity force.
+    pub gravity_force: Vec3,
 }
 
 /// Debug information for spatial grid visualization.
@@ -463,10 +566,12 @@ pub struct SpatialGridDebugInfo {
     pub cell_size: f32,
     /// Grid bounds.
     pub bounds: BoundingBox,
-    /// Grid dimensions.
-    pub dimensions: [usize; 3],
-    /// Occupied cells with their object counts.
-    pub occupied_cells: Vec<(usize, usize)>, // (cell_index, object_count)
+    /// Number of occupied cells.
+    pub occupied_cells: usize,
+    /// Total entries in grid.
+    pub total_entries: usize,
+    /// Average entries per occupied cell.
+    pub average_entries_per_cell: f32,
 }
 
 impl SpatialGrid {
@@ -494,7 +599,7 @@ impl SpatialGrid {
     }
     
     /// Converts a world position to grid coordinates.
-    fn world_to_grid(&self, pos: Vec3) -> [i32; 3] {
+    pub fn world_to_grid(&self, pos: Vec3) -> [i32; 3] {
         [
             ((pos.x - self.bounds.min.x) / self.cell_size).floor() as i32,
             ((pos.y - self.bounds.min.y) / self.cell_size).floor() as i32,
@@ -503,7 +608,7 @@ impl SpatialGrid {
     }
     
     /// Converts grid coordinates to a flat cell index.
-    fn grid_to_index(&self, grid_coords: [i32; 3]) -> Option<usize> {
+    pub fn grid_to_index(&self, grid_coords: [i32; 3]) -> Option<usize> {
         if grid_coords[0] < 0 || grid_coords[1] < 0 || grid_coords[2] < 0 ||
            grid_coords[0] >= self.dimensions[0] as i32 ||
            grid_coords[1] >= self.dimensions[1] as i32 ||

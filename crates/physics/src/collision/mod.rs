@@ -8,12 +8,14 @@ mod sphere_plane;
 mod sphere_box;
 mod sphere_cylinder;
 mod broad_phase;
+mod stubs;
 
 pub use sphere_sphere::*;
 pub use sphere_plane::*;
 pub use sphere_box::*;
 pub use sphere_cylinder::*;
 pub use broad_phase::*;
+// pub use stubs::*; // Don't re-export to avoid ambiguity
 
 use crate::types::{Vec3, Material};
 

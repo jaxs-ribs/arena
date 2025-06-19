@@ -47,10 +47,10 @@ pub mod types;
 pub mod simulation;
 
 // Internal implementation modules
-mod builder;
 mod collision;
 mod gpu_executor;
 mod integrator;
+mod spatial_grid_ext;
 
 // Re-export main types for convenient access
 pub use simulation::{PhysicsError, PhysicsSim, SphereState};

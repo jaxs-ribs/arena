@@ -7,7 +7,7 @@
 use crate::types::{
     BoundingBox, BoxBody, Cylinder, Joint, JointParams, RevoluteJoint,
     PrismaticJoint, BallJoint, FixedJoint, PhysParams, Plane,
-    Sphere, SpatialGrid, Vec3, PhysicsDebugInfo, SpatialGridDebugInfo,
+    Sphere, SpatialGrid, Vec3, Vec2, Material, PhysicsDebugInfo, SpatialGridDebugInfo,
     ForceDebugInfo, VelocityDebugInfo,
 };
 use crate::collision::{
@@ -293,11 +293,15 @@ impl PhysicsSim {
     fn solve_constraints_cpu(&mut self) {
         // Solve simple distance constraints
         for joint in &self.joints {
-            if let (Some(sphere_a), Some(sphere_b)) = (
-                self.spheres.get_mut(joint.body_a as usize),
-                self.spheres.get(joint.body_b as usize).cloned(),
-            ) {
-                solve_distance_constraint(sphere_a, &sphere_b, joint.rest_length);
+            let (body_a, body_b) = (joint.body_a as usize, joint.body_b as usize);
+            if body_a < self.spheres.len() && body_b < self.spheres.len() {
+                // Get positions first to avoid borrow issues
+                let pos_b = self.spheres[body_b].pos;
+                let mass_b = self.spheres[body_b].mass;
+                
+                if let Some(sphere_a) = self.spheres.get_mut(body_a) {
+                    solve_distance_constraint_one_sided(sphere_a, pos_b, mass_b, joint.rest_length);
+                }
             }
         }
         
@@ -305,14 +309,19 @@ impl PhysicsSim {
     }
 }
 
-/// Solve a distance constraint between two spheres
-fn solve_distance_constraint(sphere_a: &mut Sphere, sphere_b: &Sphere, rest_length: f32) {
-    let delta = sphere_b.pos - sphere_a.pos;
+/// Solve a distance constraint by moving only sphere_a
+fn solve_distance_constraint_one_sided(
+    sphere_a: &mut Sphere, 
+    pos_b: Vec3, 
+    mass_b: f32, 
+    rest_length: f32
+) {
+    let delta = pos_b - sphere_a.pos;
     let current_length = delta.length();
     
     if current_length > 0.0001 {
         let correction = delta * ((rest_length - current_length) / current_length);
-        let mass_ratio = sphere_a.mass / (sphere_a.mass + sphere_b.mass);
+        let mass_ratio = sphere_a.mass / (sphere_a.mass + mass_b);
         
         // Only move sphere_a (simplified for now)
         sphere_a.pos -= correction * (1.0 - mass_ratio);
@@ -323,4 +332,215 @@ impl Default for PhysicsSim {
     fn default() -> Self {
         Self::new()
     }
+}
+
+// ==================== Builder Methods ====================
+// Methods for adding rigid bodies and constraints to the simulation
+
+impl PhysicsSim {
+    /// Add a sphere with default material properties
+    pub fn add_sphere(&mut self, pos: Vec3, vel: Vec3, radius: f32) -> usize {
+        self.add_sphere_with_material(pos, vel, radius, Material::default())
+    }
+
+    /// Add a sphere with custom material properties
+    pub fn add_sphere_with_material(
+        &mut self, 
+        pos: Vec3, 
+        vel: Vec3, 
+        radius: f32, 
+        material: Material
+    ) -> usize {
+        let mass = calculate_sphere_mass(radius, material.density);
+        self.add_sphere_with_mass_and_material(pos, vel, radius, mass, material)
+    }
+
+    /// Add a sphere with explicit mass and material
+    pub fn add_sphere_with_mass_and_material(
+        &mut self,
+        pos: Vec3,
+        vel: Vec3,
+        radius: f32,
+        mass: f32,
+        material: Material,
+    ) -> usize {
+        let sphere = Sphere::with_mass_and_material(pos, vel, radius, mass, material);
+        self.spheres.push(sphere);
+        self.params.forces.push([0.0, 0.0]);
+        self.spheres.len() - 1
+    }
+
+    /// Add a box-shaped rigid body
+    pub fn add_box(&mut self, pos: Vec3, half_extents: Vec3, vel: Vec3) -> usize {
+        let mass = calculate_box_mass(half_extents, 1.0); // Default density
+        let box_body = BoxBody {
+            pos,
+            half_extents,
+            vel,
+            mass,
+            material: Material::default(),
+        };
+        self.boxes.push(box_body);
+        self.boxes.len() - 1
+    }
+
+    /// Add a cylindrical rigid body
+    pub fn add_cylinder(
+        &mut self,
+        pos: Vec3,
+        radius: f32,
+        half_height: f32,
+        vel: Vec3,
+    ) -> usize {
+        let mass = calculate_cylinder_mass(radius, half_height * 2.0, 1.0); // Default density
+        let cylinder = Cylinder {
+            pos,
+            vel,
+            radius,
+            half_height,
+            mass,
+            material: Material::default(),
+        };
+        self.cylinders.push(cylinder);
+        self.cylinders.len() - 1
+    }
+
+    /// Add a static plane for collision
+    pub fn add_plane(&mut self, normal: Vec3, d: f32, extents: Vec2) -> usize {
+        let plane = Plane {
+            normal,
+            d,
+            extents,
+            material: Material::default(),
+        };
+        self.planes.push(plane);
+        self.planes.len() - 1
+    }
+}
+
+// ==================== Joint Builder Methods ====================
+
+impl PhysicsSim {
+    /// Add a simple distance constraint between two spheres
+    pub fn add_joint(&mut self, body_a: u32, body_b: u32, rest_length: f32) {
+        self.joints.push(Joint {
+            body_a,
+            body_b,
+            rest_length,
+            _padding: 0,
+        });
+    }
+
+    /// Add a revolute (hinge) joint between two bodies
+    pub fn add_revolute_joint(
+        &mut self,
+        body_a_type: u32,
+        body_a_index: u32,
+        body_b_type: u32,
+        body_b_index: u32,
+        anchor: Vec3,
+        axis: Vec3,
+    ) -> usize {
+        let joint = RevoluteJoint {
+            body_a: body_a_index,
+            body_b: body_b_index,
+            anchor_a: anchor,
+            anchor_b: anchor,
+            axis,
+            lower_limit: -std::f32::consts::PI,
+            upper_limit: std::f32::consts::PI,
+            motor_speed: 0.0,
+            motor_max_force: 0.0,
+            enable_motor: 0,
+            enable_limit: 0,
+            _pad: 0.0,
+        };
+        self.revolute_joints.push(joint);
+        self.revolute_joints.len() - 1
+    }
+
+    /// Add a prismatic (sliding) joint between two bodies
+    pub fn add_prismatic_joint(
+        &mut self,
+        body_a_type: u32,
+        body_a_index: u32,
+        body_b_type: u32,
+        body_b_index: u32,
+        anchor: Vec3,
+        axis: Vec3,
+    ) -> usize {
+        let joint = PrismaticJoint {
+            body_a: body_a_index,
+            body_b: body_b_index,
+            anchor_a: anchor,
+            anchor_b: anchor,
+            axis,
+            lower_limit: -1.0,
+            upper_limit: 1.0,
+            motor_speed: 0.0,
+            motor_max_force: 0.0,
+            enable_motor: 0,
+            enable_limit: 0,
+            _pad: 0.0,
+        };
+        self.prismatic_joints.push(joint);
+        self.prismatic_joints.len() - 1
+    }
+
+    /// Add a ball joint (3DOF rotation) between two bodies
+    pub fn add_ball_joint(
+        &mut self,
+        body_a_type: u32,
+        body_a_index: u32,
+        body_b_type: u32,
+        body_b_index: u32,
+        anchor: Vec3,
+    ) -> usize {
+        let joint = BallJoint {
+            body_a: body_a_index,
+            body_b: body_b_index,
+            anchor_a: anchor,
+            anchor_b: anchor,
+            _pad: [0.0; 2],
+        };
+        self.ball_joints.push(joint);
+        self.ball_joints.len() - 1
+    }
+
+    /// Add a fixed joint (no relative motion) between two bodies
+    pub fn add_fixed_joint(
+        &mut self,
+        body_a_type: u32,
+        body_a_index: u32,
+        body_b_type: u32,
+        body_b_index: u32,
+        relative_position: Vec3,
+        relative_orientation: [f32; 4], // Quaternion
+    ) -> usize {
+        let joint = FixedJoint {
+            body_a: body_a_index,
+            body_b: body_b_index,
+            anchor_a: relative_position,
+            anchor_b: Vec3::ZERO,
+            relative_rotation: relative_orientation,
+        };
+        self.fixed_joints.push(joint);
+        self.fixed_joints.len() - 1
+    }
+}
+
+// Helper functions for mass calculations
+fn calculate_sphere_mass(radius: f32, density: f32) -> f32 {
+    let volume = (4.0 / 3.0) * std::f32::consts::PI * radius.powi(3);
+    volume * density
+}
+
+fn calculate_box_mass(half_extents: Vec3, density: f32) -> f32 {
+    let volume = 8.0 * half_extents.x * half_extents.y * half_extents.z;
+    volume * density
+}
+
+fn calculate_cylinder_mass(radius: f32, height: f32, density: f32) -> f32 {
+    let volume = std::f32::consts::PI * radius.powi(2) * height;
+    volume * density
 }
