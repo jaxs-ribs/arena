@@ -289,9 +289,12 @@ fn test_spatial_grid_performance() {
             sim.spheres.len(), duration.as_millis());
     
     // Check spatial grid utilization
-    let (total_cells, occupied_cells, occupancy_ratio) = sim.spatial_grid_stats();
-    println!("Spatial grid: {}/{} cells occupied ({:.1}%)", 
-             occupied_cells, total_cells, occupancy_ratio * 100.0);
+    let (occupied_cells, total_entries, avg_entries_per_cell) = sim.spatial_grid_stats();
+    let total_cells = sim.spatial_grid.cells.len();
+    let occupancy_ratio = occupied_cells as f32 / total_cells as f32;
+    
+    println!("Spatial grid: {}/{} cells occupied ({:.1}%), avg entries per cell: {:.1}", 
+             occupied_cells, total_cells, occupancy_ratio * 100.0, avg_entries_per_cell);
     
     assert!(occupied_cells > 0, "Spatial grid should have occupied cells");
     assert!(occupancy_ratio < 0.5, "Spatial grid should not be overly dense");

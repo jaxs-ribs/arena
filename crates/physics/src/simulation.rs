@@ -243,21 +243,19 @@ impl PhysicsSim {
 
     /// Detect and resolve all collisions
     fn detect_and_resolve_collisions_cpu(&mut self) {
-        // Get potential collision pairs from spatial grid
-        let potential_pairs = get_potential_collision_pairs(&self.spatial_grid);
-        
-        // Check sphere-sphere collisions
-        for (i, j) in potential_pairs {
-            let (spheres_before, spheres_after) = self.spheres.split_at_mut(j);
-            if let Some(contact) = detect_sphere_sphere_collision(
-                &spheres_before[i],
-                &spheres_after[0],
-            ) {
-                resolve_sphere_sphere_collision(
-                    &mut spheres_before[i],
-                    &mut spheres_after[0],
-                    &contact,
-                );
+        // For now, use brute force collision detection for spheres
+        // TODO: Use spatial grid when it's properly implemented
+        let num_spheres = self.spheres.len();
+        for i in 0..num_spheres {
+            for j in (i + 1)..num_spheres {
+                // Split the slice to get mutable references to both spheres
+                let (first_part, second_part) = self.spheres.split_at_mut(j);
+                let sphere_a = &mut first_part[i];
+                let sphere_b = &mut second_part[0];
+                
+                if let Some(contact) = detect_sphere_sphere_collision(sphere_a, sphere_b) {
+                    resolve_sphere_sphere_collision(sphere_a, sphere_b, &contact);
+                }
             }
         }
         
