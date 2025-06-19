@@ -42,12 +42,22 @@
 //! sim.run(dt, num_steps)?;
 //! ```
 
+// Public API modules
 pub mod types;
 pub mod simulation;
 
+// Internal implementation modules
+mod builder;
+mod collision;
+mod gpu_executor;
+mod integrator;
+
+// Re-export main types for convenient access
 pub use simulation::{PhysicsError, PhysicsSim, SphereState};
 pub use types::{
     BoxBody, BoundingBox, ContactDebugInfo, Cylinder, ForceDebugInfo, Joint, JointParams, 
     Material, PhysicsDebugInfo, PhysParams, Plane, Sphere, SpatialGrid, SpatialGridDebugInfo, 
-    Vec3, VelocityDebugInfo,
+    Vec3, Vec2, VelocityDebugInfo,
+    // Joint types
+    RevoluteJoint, PrismaticJoint, BallJoint, FixedJoint,
 };
