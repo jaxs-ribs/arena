@@ -1,8 +1,14 @@
 //! # Collision Detection and Response
 //! 
-//! This module handles collision detection between different primitive types
-//! and computes collision response using impulse-based methods.
+//! This module provides a unified collision detection and response system
+//! with a dispatcher pattern for maintainability and extensibility.
 
+// Core collision system
+mod primitives;
+mod dispatcher;
+mod response;
+
+// Individual collision algorithms
 mod sphere_sphere;
 mod sphere_plane;
 mod sphere_box;
@@ -12,6 +18,12 @@ mod cylinder_plane;
 mod broad_phase;
 mod stubs;
 
+// Export new unified API
+pub use primitives::{Collider, PrimitiveType, Primitive, PrimitiveMut};
+pub use dispatcher::CollisionDispatcher;
+pub use response::{CollisionResponder, CollisionSolver};
+
+// Keep exporting individual functions for backward compatibility
 pub use sphere_sphere::*;
 pub use sphere_plane::*;
 pub use sphere_box::*;

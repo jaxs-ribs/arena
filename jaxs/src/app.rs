@@ -143,7 +143,10 @@ fn add_ground_plane(simulation: &mut PhysicsSim) {
     let distance_from_origin = GROUND_PLANE_HEIGHT;
     let visible_area = Vec2::new(GROUND_PLANE_SIZE, GROUND_PLANE_SIZE);
     
-    simulation.add_plane(upward_normal, distance_from_origin, visible_area);
+    let plane_idx = simulation.add_plane(upward_normal, distance_from_origin, visible_area);
+    // Add high friction to prevent sliding
+    simulation.planes[plane_idx].material.friction = 0.8;
+    simulation.planes[plane_idx].material.restitution = 0.0; // No bounce
 }
 
 /// Add three falling spheres to demonstrate physics.
