@@ -113,45 +113,42 @@ fn configure_world_physics(sim: &mut PhysicsSim) {
     sim.params.gravity = Vec3::new(0.0, -9.81, 0.0);
 }
 
-/// Add static environment objects (planes, walls, etc)
+/// Add static environment objects
 fn add_static_environment(sim: &mut PhysicsSim) {
     // Ground plane at y=0
-    sim.add_plane(Vec3::new(0.0, 1.0, 0.0), 0.0, Vec2::new(25.0, 25.0));
-
-    // Tilted ramp plane for testing rolling/sliding
-    let ramp_normal = Vec3::new(0.3, 1.0, 0.0).normalize();
-    sim.add_plane(ramp_normal, -2.0, Vec2::new(0.0, 0.0));
+    // This serves as both visual ground and collision surface
+    sim.add_plane(
+        Vec3::new(0.0, 1.0, 0.0),       // normal vector (pointing up)
+        0.0,                             // distance from origin
+        Vec2::new(5.0, 5.0)              // 10x10 meter visible area
+    );
 }
 
 /// Add dynamic test objects to the scene
 fn add_test_objects(sim: &mut PhysicsSim) {
-    // Test sphere-sphere collisions with stacked spheres
-    add_stacked_spheres(sim);
+    // Add 3 falling spheres at different positions
+    // All start at height y=10 with radius 0.5
     
-    // Test lateral sphere collisions
-    add_collision_test_spheres(sim);
+    // Sphere 1: Center
+    sim.add_sphere(
+        Vec3::new(0.0, 10.0, 0.0),      // position
+        Vec3::ZERO,                      // initial velocity
+        0.5                              // radius
+    );
     
-    // Add other object types for visual variety
-    add_misc_objects(sim);
-}
-
-/// Add stacked spheres to test resting contact
-fn add_stacked_spheres(sim: &mut PhysicsSim) {
-    sim.add_sphere(Vec3::new(0.0, 3.0, 0.0), Vec3::ZERO, 1.0); // Bottom sphere on ground
-    sim.add_sphere(Vec3::new(0.0, 5.5, 0.0), Vec3::ZERO, 1.0); // Middle sphere (should rest on bottom)
-    sim.add_sphere(Vec3::new(0.0, 8.0, 0.0), Vec3::ZERO, 1.0); // Top sphere (should fall and bounce)
-}
-
-/// Add spheres for lateral collision testing
-fn add_collision_test_spheres(sim: &mut PhysicsSim) {
-    sim.add_sphere(Vec3::new(-3.0, 8.0, 0.0), Vec3::new(2.0, 0.0, 0.0), 1.0); // Moving sphere
-    sim.add_sphere(Vec3::new(3.0, 4.0, 0.0), Vec3::ZERO, 1.0); // Stationary target
-}
-
-/// Add miscellaneous objects (currently no collision detection for these)
-fn add_misc_objects(sim: &mut PhysicsSim) {
-    sim.add_box(Vec3::new(-5.0, 5.0, 0.0), Vec3::new(0.5, 0.5, 0.5), Vec3::ZERO);
-    sim.add_cylinder(Vec3::new(5.0, 3.0, 0.0), 0.5, 1.0, Vec3::ZERO);
+    // Sphere 2: Left side
+    sim.add_sphere(
+        Vec3::new(-1.5, 10.0, 0.0),     // position
+        Vec3::ZERO,                      // initial velocity
+        0.5                              // radius
+    );
+    
+    // Sphere 3: Right side
+    sim.add_sphere(
+        Vec3::new(1.5, 10.0, 0.0),      // position
+        Vec3::ZERO,                      // initial velocity
+        0.5                              // radius
+    );
 }
 
 /// Run the simulation with rendering enabled
