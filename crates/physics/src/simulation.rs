@@ -15,6 +15,7 @@ use crate::collision::{
     detect_sphere_plane_collision, resolve_sphere_plane_collision,
     detect_sphere_box_collision, resolve_sphere_box_collision,
     detect_sphere_cylinder_collision, resolve_sphere_cylinder_collision,
+    detect_box_plane_collision, resolve_box_plane_collision,
 };
 use crate::integrator::{
     integrate_spheres, integrate_boxes, integrate_cylinders,
@@ -263,10 +264,20 @@ impl PhysicsSim {
     }
     
     fn resolve_sphere_static_collisions(&mut self) {
+        // Sphere-plane collisions
         for sphere in &mut self.spheres {
             for plane in &self.planes {
                 if let Some(contact) = detect_sphere_plane_collision(sphere, plane) {
                     resolve_sphere_plane_collision(sphere, plane, &contact);
+                }
+            }
+        }
+        
+        // Box-plane collisions
+        for box_body in &mut self.boxes {
+            for plane in &self.planes {
+                if let Some(contact) = detect_box_plane_collision(box_body, plane) {
+                    resolve_box_plane_collision(box_body, plane, &contact, self.params.dt);
                 }
             }
         }
