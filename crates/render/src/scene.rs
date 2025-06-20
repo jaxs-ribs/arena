@@ -54,6 +54,12 @@ impl SceneManager {
         // Convert and upload cylinders
         if !cylinders.is_empty() {
             let cylinder_data: Vec<CylinderGpu> = cylinders.iter().map(CylinderGpu::from).collect();
+            
+            // DEBUG: Log what orientation data we're uploading to GPU
+            let gpu_orientation = cylinder_data[0].orientation;
+            tracing::debug!("🔍 GPU upload: cylinder orientation=[{:.3}, {:.3}, {:.3}, {:.3}]", 
+                           gpu_orientation[0], gpu_orientation[1], gpu_orientation[2], gpu_orientation[3]);
+            
             queue.write_buffer(
                 &self.cylinders_buffer,
                 0,

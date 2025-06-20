@@ -11,3 +11,4 @@ mod renderer;
 mod scene;
 
 pub use renderer::{Renderer, RendererConfig};
+pub use gpu_types::CylinderGpu;  // Export for testing

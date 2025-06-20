@@ -99,6 +99,17 @@ impl CartPole {
         );
         sim.cylinders[pole_idx].mass = config.pole_mass;
         
+        // CRITICAL FIX: Set initial orientation to match the initial angle
+        let half_angle = config.initial_angle * 0.5;
+        let sin_half = half_angle.sin();
+        let cos_half = half_angle.cos();
+        sim.cylinders[pole_idx].orientation = [
+            0.0,         // x
+            0.0,         // y
+            sin_half,    // z (rotation around z-axis)
+            cos_half,    // w
+        ];
+        
         // Create revolute joint
         let joint_idx = sim.add_revolute_joint(
             0, cart_idx as u32,  // Box type
@@ -198,6 +209,17 @@ impl CartPole {
         sim.cylinders[self.pole_idx].pos = pole_pos;
         sim.cylinders[self.pole_idx].vel = Vec3::ZERO;
         sim.cylinders[self.pole_idx].angular_vel = Vec3::ZERO;
+        
+        // CRITICAL FIX: Reset orientation to match initial angle
+        let half_angle = self.config.initial_angle * 0.5;
+        let sin_half = half_angle.sin();
+        let cos_half = half_angle.cos();
+        sim.cylinders[self.pole_idx].orientation = [
+            0.0,         // x
+            0.0,         // y
+            sin_half,    // z (rotation around z-axis)
+            cos_half,    // w
+        ];
         
         // Clear any applied forces
         sim.set_force(self.cart_idx, [0.0, 0.0]);

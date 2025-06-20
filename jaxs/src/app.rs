@@ -340,6 +340,13 @@ fn advance_physics_one_step(simulation: &mut PhysicsSim, frame_number: usize) {
     simulation.params.dt = PHYSICS_TIMESTEP_SECONDS;
     simulation.step_cpu();
     
+    // DEBUG: Log cylinder orientation every few frames
+    if frame_number % 30 == 0 && !simulation.cylinders.is_empty() {
+        let orientation = simulation.cylinders[0].orientation;
+        tracing::info!("🔍 Frame {}: cylinder orientation=[{:.3}, {:.3}, {:.3}, {:.3}]", 
+                      frame_number, orientation[0], orientation[1], orientation[2], orientation[3]);
+    }
+    
     log_progress_if_interval_reached(simulation, frame_number);
 }
 
@@ -351,6 +358,13 @@ fn render_frame(renderer: &mut render::Renderer, simulation: &PhysicsSim) -> Res
 }
 
 fn update_renderer_scene_data(renderer: &mut render::Renderer, simulation: &PhysicsSim) {
+    // DEBUG: Log what data we're sending to renderer
+    if !simulation.cylinders.is_empty() {
+        let orientation = simulation.cylinders[0].orientation;
+        tracing::debug!("🔍 Sending to renderer: cylinder orientation=[{:.3}, {:.3}, {:.3}, {:.3}]", 
+                       orientation[0], orientation[1], orientation[2], orientation[3]);
+    }
+    
     renderer.update_scene(
         &simulation.spheres,
         &simulation.boxes,
