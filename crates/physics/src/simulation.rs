@@ -18,7 +18,7 @@ use crate::collision::{
 };
 use crate::integrator::{
     integrate_spheres, integrate_boxes, integrate_cylinders,
-    apply_forces_to_spheres,
+    apply_forces_to_spheres, apply_forces_to_boxes,
 };
 use crate::gpu_executor::execute_gpu_step;
 use compute::ComputeBackend;
@@ -225,6 +225,7 @@ impl PhysicsSim {
 impl PhysicsSim {
     fn apply_forces_and_integrate(&mut self, timestep: f32) {
         apply_forces_to_spheres(&mut self.spheres, &self.params.forces, timestep);
+        apply_forces_to_boxes(&mut self.boxes, &self.params.forces, timestep);
         
         integrate_spheres(&mut self.spheres, self.params.gravity, timestep);
         integrate_boxes(&mut self.boxes, self.params.gravity, timestep);
@@ -289,7 +290,8 @@ impl PhysicsSim {
 
     fn solve_physical_constraints(&mut self) {
         self.solve_distance_joint_constraints();
-        // Future: Add other constraint types
+        self.solve_revolute_joint_constraints();
+        // Future: Add prismatic and other constraint types
     }
     
     fn solve_distance_joint_constraints(&mut self) {
@@ -314,6 +316,54 @@ impl PhysicsSim {
         
         if let Some(sphere_a) = self.spheres.get_mut(body_a_index) {
             solve_distance_constraint_one_sided(sphere_a, sphere_b_position, sphere_b_mass, rest_length);
+        }
+    }
+    
+    fn solve_revolute_joint_constraints(&mut self) {
+        // For now, implement a simple version that maintains the anchor points together
+        // Full angular constraints will be added next
+        let joints = self.revolute_joints.clone();
+        
+        for joint in &joints {
+            let body_a_idx = joint.body_a as usize;
+            let body_b_idx = joint.body_b as usize;
+            
+            // For now, only support box-cylinder connections
+            if body_a_idx < self.boxes.len() && body_b_idx < self.cylinders.len() {
+                self.solve_revolute_constraint_box_cylinder(body_a_idx, body_b_idx, joint);
+            }
+        }
+    }
+    
+    fn solve_revolute_constraint_box_cylinder(
+        &mut self, 
+        box_idx: usize, 
+        cylinder_idx: usize, 
+        joint: &RevoluteJoint
+    ) {
+        // Get current world positions of anchor points
+        let box_anchor_world = self.boxes[box_idx].pos + joint.anchor_a;
+        let cylinder_anchor_world = self.cylinders[cylinder_idx].pos + joint.anchor_b;
+        
+        // Calculate error
+        let error = cylinder_anchor_world - box_anchor_world;
+        let distance = error.length();
+        
+        if distance > 0.0001 {
+            // Calculate mass ratio for distribution of correction
+            let box_mass = self.boxes[box_idx].mass;
+            let cylinder_mass = self.cylinders[cylinder_idx].mass;
+            let total_mass = box_mass + cylinder_mass;
+            
+            let box_ratio = cylinder_mass / total_mass;
+            let cylinder_ratio = box_mass / total_mass;
+            
+            // Apply position correction
+            self.boxes[box_idx].pos += error * box_ratio * 0.5;
+            self.cylinders[cylinder_idx].pos -= error * cylinder_ratio * 0.5;
+            
+            // TODO: Add angular constraints to limit rotation to the joint axis
+            // TODO: Add joint limits (min/max angle)
         }
     }
 }
@@ -390,6 +440,7 @@ impl PhysicsSim {
             material: Material::default(),
         };
         self.boxes.push(box_body);
+        self.params.forces.push([0.0, 0.0]);
         self.boxes.len() - 1
     }
 
@@ -446,7 +497,37 @@ impl PhysicsSim {
         anchor: Vec3,
         axis: Vec3,
     ) -> usize {
-        let joint = create_revolute_joint(body_a_index, body_b_index, anchor, axis);
+        // Calculate anchor points in local coordinates for each body
+        let body_a_idx = body_a_index as usize;
+        let body_b_idx = body_b_index as usize;
+        
+        // Assuming box-cylinder connection for now
+        let anchor_a = if body_a_idx < self.boxes.len() {
+            anchor - self.boxes[body_a_idx].pos
+        } else {
+            anchor
+        };
+        
+        let anchor_b = if body_b_idx < self.cylinders.len() {
+            anchor - self.cylinders[body_b_idx].pos
+        } else {
+            anchor
+        };
+        
+        let joint = RevoluteJoint {
+            body_a: body_a_index,
+            body_b: body_b_index,
+            anchor_a,
+            anchor_b,
+            axis,
+            lower_limit: -std::f32::consts::PI,
+            upper_limit: std::f32::consts::PI,
+            motor_speed: 0.0,
+            motor_max_force: 0.0,
+            enable_motor: 0,
+            enable_limit: 0,
+            _pad: 0.0,
+        };
         self.revolute_joints.push(joint);
         self.revolute_joints.len() - 1
     }
@@ -548,27 +629,6 @@ fn create_distance_joint(body_a: u32, body_b: u32, rest_length: f32) -> Joint {
     }
 }
 
-fn create_revolute_joint(
-    body_a: u32,
-    body_b: u32,
-    anchor: Vec3,
-    axis: Vec3,
-) -> RevoluteJoint {
-    RevoluteJoint {
-        body_a,
-        body_b,
-        anchor_a: anchor,
-        anchor_b: anchor,
-        axis,
-        lower_limit: -std::f32::consts::PI,
-        upper_limit: std::f32::consts::PI,
-        motor_speed: 0.0,
-        motor_max_force: 0.0,
-        enable_motor: 0,
-        enable_limit: 0,
-        _pad: 0.0,
-    }
-}
 
 fn create_prismatic_joint(
     body_a: u32,

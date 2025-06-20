@@ -63,3 +63,14 @@ pub fn apply_forces_to_spheres(spheres: &mut [Sphere], forces: &[[f32; 2]], dt: 
         }
     }
 }
+
+/// Apply external forces to boxes
+pub fn apply_forces_to_boxes(boxes: &mut [BoxBody], forces: &[[f32; 2]], dt: f32) {
+    for (i, box_body) in boxes.iter_mut().enumerate() {
+        if i < forces.len() {
+            let force = Vec3::new(forces[i][0], 0.0, forces[i][1]);
+            let acceleration = force / box_body.mass;
+            box_body.vel += acceleration * dt;
+        }
+    }
+}

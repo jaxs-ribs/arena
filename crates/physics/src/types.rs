@@ -420,6 +420,10 @@ pub struct BoxBody {
     pub vel: Vec3,
     /// Mass of the box in kilograms.
     pub mass: f32,
+    /// The orientation of the box, represented as a quaternion in `[x, y, z, w]` format.
+    pub orientation: [f32; 4],
+    /// The angular velocity of the box, measured in radians per second.
+    pub angular_vel: Vec3,
     /// Material properties for collision response.
     pub material: Material,
 }
