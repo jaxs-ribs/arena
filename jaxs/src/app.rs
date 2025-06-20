@@ -120,32 +120,32 @@ fn add_static_environment(sim: &mut PhysicsSim) {
     sim.add_plane(
         Vec3::new(0.0, 1.0, 0.0),       // normal vector (pointing up)
         0.0,                             // distance from origin
-        Vec2::new(5.0, 5.0)              // 10x10 meter visible area
+        Vec2::new(15.0, 15.0)            // 30x30 meter visible area
     );
 }
 
 /// Add dynamic test objects to the scene
 fn add_test_objects(sim: &mut PhysicsSim) {
     // Add 3 falling spheres at different positions
-    // All start at height y=10 with radius 0.5
+    // All start at height y=5 with radius 0.5
     
     // Sphere 1: Center
     sim.add_sphere(
-        Vec3::new(0.0, 10.0, 0.0),      // position
+        Vec3::new(0.0, 5.0, 0.0),        // position
         Vec3::ZERO,                      // initial velocity
         0.5                              // radius
     );
     
     // Sphere 2: Left side
     sim.add_sphere(
-        Vec3::new(-1.5, 10.0, 0.0),     // position
+        Vec3::new(-1.5, 5.0, 0.0),       // position
         Vec3::ZERO,                      // initial velocity
         0.5                              // radius
     );
     
     // Sphere 3: Right side
     sim.add_sphere(
-        Vec3::new(1.5, 10.0, 0.0),      // position
+        Vec3::new(1.5, 5.0, 0.0),        // position
         Vec3::ZERO,                      // initial velocity
         0.5                              // radius
     );
