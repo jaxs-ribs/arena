@@ -11,7 +11,6 @@ use crate::types::{
     ForceDebugInfo, VelocityDebugInfo,
 };
 use crate::collision::{
-    update_spatial_grid, get_potential_collision_pairs,
     detect_sphere_sphere_collision, resolve_sphere_sphere_collision,
     detect_sphere_plane_collision, resolve_sphere_plane_collision,
     detect_sphere_box_collision, resolve_sphere_box_collision,
@@ -25,12 +24,12 @@ use crate::gpu_executor::execute_gpu_step;
 use compute::ComputeBackend;
 use std::sync::Arc;
 
-/// Simulation error types
+/// Physics simulation error types.
 #[derive(Debug)]
 pub enum PhysicsError {
-    /// GPU backend error
+    /// GPU computation backend failed
     BackendError(compute::ComputeError),
-    /// No spheres in simulation
+    /// Attempted to run simulation without any spheres
     NoSpheres,
 }
 
@@ -40,24 +39,26 @@ impl From<compute::ComputeError> for PhysicsError {
     }
 }
 
-/// Final simulation state (for testing)
+/// Snapshot of sphere position after simulation run.
 #[derive(Clone, Copy, Debug)]
 pub struct SphereState {
     pub pos: Vec3,
 }
 
-/// Main physics simulation container
+/// Physics simulation orchestrator managing bodies, constraints, and spatial data.
 pub struct PhysicsSim {
-    // Rigid bodies
+    // Dynamic rigid bodies
     pub spheres: Vec<Sphere>,
     pub boxes: Vec<BoxBody>,
     pub cylinders: Vec<Cylinder>,
+    
+    // Static collision geometry
     pub planes: Vec<Plane>,
     
-    // Simulation parameters
+    // Simulation configuration
     pub params: PhysParams,
     
-    // Constraints
+    // Physical constraints
     pub joints: Vec<Joint>,
     pub revolute_joints: Vec<RevoluteJoint>,
     pub prismatic_joints: Vec<PrismaticJoint>,
@@ -65,21 +66,18 @@ pub struct PhysicsSim {
     pub fixed_joints: Vec<FixedJoint>,
     pub joint_params: JointParams,
     
-    // Spatial acceleration
+    // Spatial acceleration structure
     pub spatial_grid: SpatialGrid,
     
-    // Compute backend
+    // GPU computation backend
     pub(crate) backend: Arc<dyn ComputeBackend>,
 }
 
 impl PhysicsSim {
-    /// Create a new empty simulation
+    /// Create empty physics simulation with default parameters.
     pub fn new() -> Self {
-        let bounds = BoundingBox {
-            min: Vec3::new(-50.0, -10.0, -50.0),
-            max: Vec3::new(50.0, 90.0, 50.0),
-        };
-        let spatial_grid = SpatialGrid::new(4.0, bounds);
+        let simulation_bounds = create_default_simulation_bounds();
+        let spatial_grid = create_spatial_grid_with_bounds(simulation_bounds);
         
         Self {
             spheres: Vec::new(),
@@ -105,18 +103,25 @@ impl PhysicsSim {
         }
     }
 
-    /// Create simulation with single sphere (for testing)
+    /// Create test simulation with single falling sphere.
     pub fn new_single_sphere(initial_height: f32) -> Self {
-        let mut sim = Self::new();
-        sim.add_sphere(Vec3::new(0.0, initial_height, 0.0), Vec3::ZERO, 1.0);
-        sim
+        let mut simulation = Self::new();
+        let position = Vec3::new(0.0, initial_height, 0.0);
+        let velocity = Vec3::ZERO;
+        let radius = 1.0;
+        simulation.add_sphere(position, velocity, radius);
+        simulation
     }
 
-    /// Set external force on a body
+    /// Apply external force to specific body.
     pub fn set_force(&mut self, body_index: usize, force: [f32; 2]) {
-        if body_index < self.params.forces.len() {
+        if self.is_valid_body_index(body_index) {
             self.params.forces[body_index] = force;
         }
+    }
+    
+    fn is_valid_body_index(&self, index: usize) -> bool {
+        index < self.params.forces.len()
     }
 
     /// Set compute backend
@@ -124,7 +129,7 @@ impl PhysicsSim {
         self.backend = backend;
     }
 
-    /// Configure spatial grid parameters
+    /// Configure spatial acceleration structure.
     pub fn configure_spatial_grid(&mut self, cell_size: f32, bounds: BoundingBox) {
         self.spatial_grid = SpatialGrid::new(cell_size, bounds);
     }
@@ -175,27 +180,20 @@ impl PhysicsSim {
         }
     }
 
-    /// Execute one physics step on GPU
+    /// Execute single physics timestep on GPU.
     pub fn step_gpu(&mut self) -> Result<(), PhysicsError> {
         execute_gpu_step(self)?;
         Ok(())
     }
 
-    /// Execute one physics step on CPU
+    /// Execute single physics timestep on CPU.
     pub fn step_cpu(&mut self) {
-        let dt = self.params.dt;
+        let timestep = self.params.dt;
         
-        // 1. Apply forces and integrate positions
-        self.integrate_bodies_cpu(dt);
-        
-        // 2. Update spatial grid
-        self.update_broad_phase();
-        
-        // 3. Detect and resolve collisions
-        self.detect_and_resolve_collisions_cpu();
-        
-        // 4. Solve constraints
-        self.solve_constraints_cpu();
+        self.apply_forces_and_integrate(timestep);
+        self.update_spatial_acceleration_structure();
+        self.detect_and_resolve_all_collisions();
+        self.solve_physical_constraints();
     }
 
     /// Run simulation for multiple steps (GPU)
@@ -225,41 +223,45 @@ impl PhysicsSim {
 
 // CPU simulation implementation
 impl PhysicsSim {
-    /// Integrate all rigid body positions and velocities
-    fn integrate_bodies_cpu(&mut self, dt: f32) {
-        // Apply external forces to spheres
-        apply_forces_to_spheres(&mut self.spheres, &self.params.forces, dt);
+    fn apply_forces_and_integrate(&mut self, timestep: f32) {
+        apply_forces_to_spheres(&mut self.spheres, &self.params.forces, timestep);
         
-        // Integrate each body type
-        integrate_spheres(&mut self.spheres, self.params.gravity, dt);
-        integrate_boxes(&mut self.boxes, self.params.gravity, dt);
-        integrate_cylinders(&mut self.cylinders, self.params.gravity, dt);
+        integrate_spheres(&mut self.spheres, self.params.gravity, timestep);
+        integrate_boxes(&mut self.boxes, self.params.gravity, timestep);
+        integrate_cylinders(&mut self.cylinders, self.params.gravity, timestep);
     }
 
-    /// Update spatial partitioning for broad-phase collision detection
-    fn update_broad_phase(&mut self) {
-        update_spatial_grid(&mut self.spatial_grid, &self.spheres);
+    fn update_spatial_acceleration_structure(&mut self) {
+        self.spatial_grid.update(&self.spheres);
     }
 
-    /// Detect and resolve all collisions
-    fn detect_and_resolve_collisions_cpu(&mut self) {
-        // For now, use brute force collision detection for spheres
-        // TODO: Use spatial grid when it's properly implemented
-        let num_spheres = self.spheres.len();
-        for i in 0..num_spheres {
-            for j in (i + 1)..num_spheres {
-                // Split the slice to get mutable references to both spheres
-                let (first_part, second_part) = self.spheres.split_at_mut(j);
-                let sphere_a = &mut first_part[i];
-                let sphere_b = &mut second_part[0];
-                
-                if let Some(contact) = detect_sphere_sphere_collision(sphere_a, sphere_b) {
-                    resolve_sphere_sphere_collision(sphere_a, sphere_b, &contact);
-                }
+    fn detect_and_resolve_all_collisions(&mut self) {
+        self.resolve_sphere_sphere_collisions();
+        self.resolve_sphere_static_collisions();
+        self.resolve_sphere_dynamic_collisions();
+    }
+    
+    fn resolve_sphere_sphere_collisions(&mut self) {
+        let sphere_count = self.spheres.len();
+        
+        for i in 0..sphere_count {
+            for j in (i + 1)..sphere_count {
+                self.check_and_resolve_sphere_pair(i, j);
             }
         }
+    }
+    
+    fn check_and_resolve_sphere_pair(&mut self, index_a: usize, index_b: usize) {
+        let (first_part, second_part) = self.spheres.split_at_mut(index_b);
+        let sphere_a = &mut first_part[index_a];
+        let sphere_b = &mut second_part[0];
         
-        // Check sphere-plane collisions
+        if let Some(contact) = detect_sphere_sphere_collision(sphere_a, sphere_b) {
+            resolve_sphere_sphere_collision(sphere_a, sphere_b, &contact);
+        }
+    }
+    
+    fn resolve_sphere_static_collisions(&mut self) {
         for sphere in &mut self.spheres {
             for plane in &self.planes {
                 if let Some(contact) = detect_sphere_plane_collision(sphere, plane) {
@@ -267,18 +269,16 @@ impl PhysicsSim {
                 }
             }
         }
-        
-        // Check sphere-box collisions
+    }
+    
+    fn resolve_sphere_dynamic_collisions(&mut self) {
         for sphere in &mut self.spheres {
             for box_body in &mut self.boxes {
                 if let Some(contact) = detect_sphere_box_collision(sphere, box_body) {
                     resolve_sphere_box_collision(sphere, box_body, &contact);
                 }
             }
-        }
-        
-        // Check sphere-cylinder collisions
-        for sphere in &mut self.spheres {
+            
             for cylinder in &mut self.cylinders {
                 if let Some(contact) = detect_sphere_cylinder_collision(sphere, cylinder) {
                     resolve_sphere_cylinder_collision(sphere, cylinder, &contact);
@@ -287,23 +287,34 @@ impl PhysicsSim {
         }
     }
 
-    /// Solve joint constraints
-    fn solve_constraints_cpu(&mut self) {
-        // Solve simple distance constraints
-        for joint in &self.joints {
-            let (body_a, body_b) = (joint.body_a as usize, joint.body_b as usize);
-            if body_a < self.spheres.len() && body_b < self.spheres.len() {
-                // Get positions first to avoid borrow issues
-                let pos_b = self.spheres[body_b].pos;
-                let mass_b = self.spheres[body_b].mass;
-                
-                if let Some(sphere_a) = self.spheres.get_mut(body_a) {
-                    solve_distance_constraint_one_sided(sphere_a, pos_b, mass_b, joint.rest_length);
-                }
+    fn solve_physical_constraints(&mut self) {
+        self.solve_distance_joint_constraints();
+        // Future: Add other constraint types
+    }
+    
+    fn solve_distance_joint_constraints(&mut self) {
+        let joints = self.joints.clone();
+        for joint in &joints {
+            let body_a_index = joint.body_a as usize;
+            let body_b_index = joint.body_b as usize;
+            
+            if self.are_valid_sphere_indices(body_a_index, body_b_index) {
+                self.apply_distance_constraint(body_a_index, body_b_index, joint.rest_length);
             }
         }
+    }
+    
+    fn are_valid_sphere_indices(&self, index_a: usize, index_b: usize) -> bool {
+        index_a < self.spheres.len() && index_b < self.spheres.len()
+    }
+    
+    fn apply_distance_constraint(&mut self, body_a_index: usize, body_b_index: usize, rest_length: f32) {
+        let sphere_b_position = self.spheres[body_b_index].pos;
+        let sphere_b_mass = self.spheres[body_b_index].mass;
         
-        // TODO: Implement other joint types when ready
+        if let Some(sphere_a) = self.spheres.get_mut(body_a_index) {
+            solve_distance_constraint_one_sided(sphere_a, sphere_b_position, sphere_b_mass, rest_length);
+        }
     }
 }
 
@@ -419,109 +430,72 @@ impl PhysicsSim {
 // ==================== Joint Builder Methods ====================
 
 impl PhysicsSim {
-    /// Add a simple distance constraint between two spheres
+    /// Add distance constraint between two spheres.
     pub fn add_joint(&mut self, body_a: u32, body_b: u32, rest_length: f32) {
-        self.joints.push(Joint {
-            body_a,
-            body_b,
-            rest_length,
-            _padding: 0,
-        });
+        let joint = create_distance_joint(body_a, body_b, rest_length);
+        self.joints.push(joint);
     }
 
-    /// Add a revolute (hinge) joint between two bodies
+    /// Add revolute (hinge) joint between two bodies.
     pub fn add_revolute_joint(
         &mut self,
-        body_a_type: u32,
+        _body_a_type: u32,
         body_a_index: u32,
-        body_b_type: u32,
+        _body_b_type: u32,
         body_b_index: u32,
         anchor: Vec3,
         axis: Vec3,
     ) -> usize {
-        let joint = RevoluteJoint {
-            body_a: body_a_index,
-            body_b: body_b_index,
-            anchor_a: anchor,
-            anchor_b: anchor,
-            axis,
-            lower_limit: -std::f32::consts::PI,
-            upper_limit: std::f32::consts::PI,
-            motor_speed: 0.0,
-            motor_max_force: 0.0,
-            enable_motor: 0,
-            enable_limit: 0,
-            _pad: 0.0,
-        };
+        let joint = create_revolute_joint(body_a_index, body_b_index, anchor, axis);
         self.revolute_joints.push(joint);
         self.revolute_joints.len() - 1
     }
 
-    /// Add a prismatic (sliding) joint between two bodies
+    /// Add prismatic (sliding) joint between two bodies.
     pub fn add_prismatic_joint(
         &mut self,
-        body_a_type: u32,
+        _body_a_type: u32,
         body_a_index: u32,
-        body_b_type: u32,
+        _body_b_type: u32,
         body_b_index: u32,
         anchor: Vec3,
         axis: Vec3,
     ) -> usize {
-        let joint = PrismaticJoint {
-            body_a: body_a_index,
-            body_b: body_b_index,
-            anchor_a: anchor,
-            anchor_b: anchor,
-            axis,
-            lower_limit: -1.0,
-            upper_limit: 1.0,
-            motor_speed: 0.0,
-            motor_max_force: 0.0,
-            enable_motor: 0,
-            enable_limit: 0,
-            _pad: 0.0,
-        };
+        let joint = create_prismatic_joint(body_a_index, body_b_index, anchor, axis);
         self.prismatic_joints.push(joint);
         self.prismatic_joints.len() - 1
     }
 
-    /// Add a ball joint (3DOF rotation) between two bodies
+    /// Add ball joint (3DOF rotation) between two bodies.
     pub fn add_ball_joint(
         &mut self,
-        body_a_type: u32,
+        _body_a_type: u32,
         body_a_index: u32,
-        body_b_type: u32,
+        _body_b_type: u32,
         body_b_index: u32,
         anchor: Vec3,
     ) -> usize {
-        let joint = BallJoint {
-            body_a: body_a_index,
-            body_b: body_b_index,
-            anchor_a: anchor,
-            anchor_b: anchor,
-            _pad: [0.0; 2],
-        };
+        let joint = create_ball_joint(body_a_index, body_b_index, anchor);
         self.ball_joints.push(joint);
         self.ball_joints.len() - 1
     }
 
-    /// Add a fixed joint (no relative motion) between two bodies
+    /// Add fixed joint (no relative motion) between two bodies.
     pub fn add_fixed_joint(
         &mut self,
-        body_a_type: u32,
+        _body_a_type: u32,
         body_a_index: u32,
-        body_b_type: u32,
+        _body_b_type: u32,
         body_b_index: u32,
         relative_position: Vec3,
-        relative_orientation: [f32; 4], // Quaternion
+        relative_orientation: [f32; 4],
     ) -> usize {
-        let joint = FixedJoint {
-            body_a: body_a_index,
-            body_b: body_b_index,
-            anchor_a: relative_position,
-            anchor_b: Vec3::ZERO,
-            relative_rotation: relative_orientation,
-        };
+        let joint = create_fixed_joint(
+            body_a_index,
+            body_b_index,
+            relative_position,
+            relative_orientation
+        );
         self.fixed_joints.push(joint);
         self.fixed_joints.len() - 1
     }
@@ -541,4 +515,104 @@ fn calculate_box_mass(half_extents: Vec3, density: f32) -> f32 {
 fn calculate_cylinder_mass(radius: f32, height: f32, density: f32) -> f32 {
     let volume = std::f32::consts::PI * radius.powi(2) * height;
     volume * density
+}
+
+// Simulation configuration helpers
+fn create_default_simulation_bounds() -> BoundingBox {
+    BoundingBox {
+        min: Vec3::new(-50.0, -10.0, -50.0),
+        max: Vec3::new(50.0, 90.0, 50.0),
+    }
+}
+
+fn create_spatial_grid_with_bounds(bounds: BoundingBox) -> SpatialGrid {
+    const DEFAULT_CELL_SIZE: f32 = 4.0;
+    SpatialGrid::new(DEFAULT_CELL_SIZE, bounds)
+}
+
+fn create_default_physics_parameters() -> PhysParams {
+    PhysParams {
+        gravity: Vec3::new(0.0, -9.81, 0.0),
+        dt: 0.01,
+        forces: Vec::new(),
+    }
+}
+
+// Joint creation helpers
+fn create_distance_joint(body_a: u32, body_b: u32, rest_length: f32) -> Joint {
+    Joint {
+        body_a,
+        body_b,
+        rest_length,
+        _padding: 0,
+    }
+}
+
+fn create_revolute_joint(
+    body_a: u32,
+    body_b: u32,
+    anchor: Vec3,
+    axis: Vec3,
+) -> RevoluteJoint {
+    RevoluteJoint {
+        body_a,
+        body_b,
+        anchor_a: anchor,
+        anchor_b: anchor,
+        axis,
+        lower_limit: -std::f32::consts::PI,
+        upper_limit: std::f32::consts::PI,
+        motor_speed: 0.0,
+        motor_max_force: 0.0,
+        enable_motor: 0,
+        enable_limit: 0,
+        _pad: 0.0,
+    }
+}
+
+fn create_prismatic_joint(
+    body_a: u32,
+    body_b: u32,
+    anchor: Vec3,
+    axis: Vec3,
+) -> PrismaticJoint {
+    PrismaticJoint {
+        body_a,
+        body_b,
+        anchor_a: anchor,
+        anchor_b: anchor,
+        axis,
+        lower_limit: -1.0,
+        upper_limit: 1.0,
+        motor_speed: 0.0,
+        motor_max_force: 0.0,
+        enable_motor: 0,
+        enable_limit: 0,
+        _pad: 0.0,
+    }
+}
+
+fn create_ball_joint(body_a: u32, body_b: u32, anchor: Vec3) -> BallJoint {
+    BallJoint {
+        body_a,
+        body_b,
+        anchor_a: anchor,
+        anchor_b: anchor,
+        _pad: [0.0; 2],
+    }
+}
+
+fn create_fixed_joint(
+    body_a: u32,
+    body_b: u32,
+    relative_position: Vec3,
+    relative_orientation: [f32; 4],
+) -> FixedJoint {
+    FixedJoint {
+        body_a,
+        body_b,
+        anchor_a: relative_position,
+        anchor_b: Vec3::ZERO,
+        relative_rotation: relative_orientation,
+    }
 }

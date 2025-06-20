@@ -17,15 +17,18 @@ use crate::gpu_types::{CameraUniform, SceneCounts};
 use crate::pipeline::{create_bind_group_layout, create_fullscreen_quad, create_render_pipeline, create_storage_buffer, BufferConfig};
 use crate::scene::SceneManager;
 
-/// Configuration for the renderer
+// Screenshot constants
+const SCREENSHOT_DIRECTORY: &str = "screenshots";
+const SCREENSHOT_INDICATOR_DURATION_SECONDS: f32 = 2.0;
+
+// Rendering constants
+const MINIMUM_WINDOW_SIZE: u32 = 1;
+
+/// Renderer configuration parameters.
 pub struct RendererConfig {
-    /// Window title
     pub title: String,
-    /// Initial window width
     pub width: u32,
-    /// Initial window height
     pub height: u32,
-    /// Enable vsync
     pub vsync: bool,
 }
 
@@ -40,9 +43,9 @@ impl Default for RendererConfig {
     }
 }
 
-/// A simple ray-marched renderer used for visualising signed distance fields
+/// Ray-marched SDF renderer for physics visualization.
 pub struct Renderer {
-    // Window and surface
+    // Window system
     window: Window,
     surface: wgpu::Surface<'static>,
     surface_config: wgpu::SurfaceConfiguration,
@@ -52,7 +55,7 @@ pub struct Renderer {
     device: wgpu::Device,
     queue: wgpu::Queue,
     
-    // Pipeline and rendering
+    // Rendering pipeline
     pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
@@ -63,31 +66,20 @@ pub struct Renderer {
     camera_buffer: wgpu::Buffer,
     controller: CameraController,
     
-    // Scene management
+    // Scene data
     scene_manager: SceneManager,
     
-    // UI state
+    // UI feedback
     screenshot_indicator: f32,
 }
 
 impl Renderer {
-    /// Create a new renderer with the given configuration
+    /// Create renderer with specified configuration.
     pub fn new(config: RendererConfig) -> Result<(Self, EventLoop<()>)> {
-        // Create window and event loop
-        let event_loop = EventLoop::new().context("Failed to create event loop")?;
-        let window = WindowBuilder::new()
-            .with_title(&config.title)
-            .with_inner_size(winit::dpi::LogicalSize::new(config.width, config.height))
-            .with_visible(true)
-            .with_resizable(true)
-            .build(&event_loop)
-            .context("Failed to create window")?;
+        let event_loop = create_event_loop()?;
+        let window = create_window(&event_loop, &config)?;
         
-        // Setup mouse capture for FPS controls
-        window.set_visible(true);
-        window.request_redraw();
-        let _ = window.set_cursor_grab(winit::window::CursorGrabMode::Locked);
-        let _ = window.set_cursor_visible(false);
+        configure_window_for_fps_controls(&window);
         
         // Initialize GPU
         let (surface, adapter, device, queue) = pollster::block_on(Self::init_gpu(&window))?;
@@ -257,41 +249,49 @@ impl Renderer {
         }
     }
     
-    /// Handle window-specific events
     fn handle_window_event(&mut self, event: &WindowEvent) {
         match event {
             WindowEvent::Resized(physical_size) => {
-                self.resize(physical_size.width, physical_size.height);
+                self.handle_window_resize(physical_size.width, physical_size.height);
             }
             WindowEvent::KeyboardInput { event, .. } => {
-                if let PhysicalKey::Code(keycode) = event.physical_key {
-                    self.controller.process_keyboard(keycode, event.state);
-                    
-                    // Special key handling
-                    if event.state == ElementState::Pressed {
-                        match keycode {
-                            KeyCode::Escape => {
-                                // Release mouse capture
-                                let _ = self.window.set_cursor_grab(winit::window::CursorGrabMode::None);
-                                let _ = self.window.set_cursor_visible(true);
-                            }
-                            KeyCode::KeyF => {
-                                // Toggle fullscreen
-                                self.window.set_fullscreen(
-                                    Some(winit::window::Fullscreen::Borderless(None))
-                                );
-                            }
-                            KeyCode::KeyP => {
-                                // Take screenshot
-                                self.take_screenshot();
-                            }
-                            _ => (),
-                        }
-                    }
-                }
+                self.handle_keyboard_input(event);
             }
             _ => (),
         }
+    }
+    
+    fn handle_keyboard_input(&mut self, event: &winit::event::KeyEvent) {
+        if let PhysicalKey::Code(keycode) = event.physical_key {
+            self.controller.process_keyboard(keycode, event.state);
+            
+            if event.state == ElementState::Pressed {
+                self.handle_special_key_press(keycode);
+            }
+        }
+    }
+    
+    fn handle_special_key_press(&mut self, keycode: KeyCode) {
+        match keycode {
+            KeyCode::Escape => self.release_mouse_capture(),
+            KeyCode::KeyF => self.toggle_fullscreen(),
+            KeyCode::KeyP => self.take_screenshot(),
+            _ => (),
+        }
+    }
+    
+    fn release_mouse_capture(&mut self) {
+        let _ = self.window.set_cursor_grab(winit::window::CursorGrabMode::None);
+        let _ = self.window.set_cursor_visible(true);
+    }
+    
+    fn toggle_fullscreen(&mut self) {
+        let fullscreen_mode = if self.window.fullscreen().is_some() {
+            None
+        } else {
+            Some(winit::window::Fullscreen::Borderless(None))
+        };
+        self.window.set_fullscreen(fullscreen_mode);
     }
     
     /// Handle device events (mouse motion)
@@ -301,33 +301,47 @@ impl Renderer {
         }
     }
     
-    /// Resize the rendering surface
-    fn resize(&mut self, width: u32, height: u32) {
-        if width > 0 && height > 0 {
-            self.surface_config.width = width;
-            self.surface_config.height = height;
-            self.surface.configure(&self.device, &self.surface_config);
+    fn handle_window_resize(&mut self, width: u32, height: u32) {
+        if self.is_valid_window_size(width, height) {
+            self.update_surface_size(width, height);
             self.camera.resize(width, height);
         }
     }
     
-    /// Update camera position and matrices
-    fn update_camera(&mut self, dt: f32) {
-        // Update camera position based on input
-        self.controller.update_camera(&mut self.camera, dt);
+    fn is_valid_window_size(&self, width: u32, height: u32) -> bool {
+        width >= MINIMUM_WINDOW_SIZE && height >= MINIMUM_WINDOW_SIZE
+    }
+    
+    fn update_surface_size(&mut self, width: u32, height: u32) {
+        self.surface_config.width = width;
+        self.surface_config.height = height;
+        self.surface.configure(&self.device, &self.surface_config);
+    }
+    
+    fn update_camera_system(&mut self, delta_time: f32) {
+        self.update_camera_position(delta_time);
+        self.update_camera_matrices();
+        self.upload_camera_data_to_gpu();
+    }
+    
+    fn update_camera_position(&mut self, delta_time: f32) {
+        self.controller.update_camera(&mut self.camera, delta_time);
+    }
+    
+    fn update_camera_matrices(&mut self) {
+        let view_projection = self.camera.build_view_projection_matrix();
+        let inverse_view_projection = view_projection.inverse();
         
-        // Update camera uniform buffer
-        let view_proj = self.camera.build_view_projection_matrix();
-        let view_proj_inv = view_proj.inverse();
-        self.camera_uniform.view_proj = view_proj.to_cols_array_2d();
-        self.camera_uniform.view_proj_inv = view_proj_inv.to_cols_array_2d();
-        self.camera_uniform.eye = [
-            self.camera.eye.x,
-            self.camera.eye.y,
-            self.camera.eye.z,
-            0.0,
-        ];
-        
+        self.camera_uniform.view_proj = view_projection.to_cols_array_2d();
+        self.camera_uniform.view_proj_inv = inverse_view_projection.to_cols_array_2d();
+        self.camera_uniform.eye = self.create_camera_position_vector();
+    }
+    
+    fn create_camera_position_vector(&self) -> [f32; 4] {
+        [self.camera.eye.x, self.camera.eye.y, self.camera.eye.z, 0.0]
+    }
+    
+    fn upload_camera_data_to_gpu(&self) {
         self.queue.write_buffer(
             &self.camera_buffer,
             0,
@@ -335,7 +349,7 @@ impl Renderer {
         );
     }
     
-    /// Update the scene with new physics data
+    /// Synchronize renderer with physics simulation state.
     pub fn update_scene(
         &mut self,
         spheres: &[physics::Sphere],
@@ -346,10 +360,16 @@ impl Renderer {
         self.scene_manager.update(&self.queue, spheres, boxes, cylinders, planes);
     }
     
-    /// Take a screenshot and save it to the screenshots folder
     fn take_screenshot(&mut self) {
-        // Ensure screenshots directory exists
-        let _ = std::fs::create_dir_all("screenshots");
+        self.ensure_screenshot_directory_exists();
+        self.capture_and_save_current_frame();
+    }
+    
+    fn ensure_screenshot_directory_exists(&self) {
+        let _ = std::fs::create_dir_all(SCREENSHOT_DIRECTORY);
+    }
+    
+    fn capture_and_save_current_frame(&mut self) {
         
         let texture_format = self.surface_config.format;
         let width = self.surface_config.width;
@@ -440,9 +460,8 @@ impl Renderer {
         // Submit the commands
         self.queue.submit(Some(encoder.finish()));
         
-        // Set screenshot indicator
-        self.screenshot_indicator = 2.0; // Show for 2 seconds
-        tracing::info!("Taking screenshot...");
+        self.activate_screenshot_indicator();
+        self.log_screenshot_capture();
         
         // Map the buffer and read the data synchronously
         let buffer_slice = output_buffer.slice(..);
@@ -478,9 +497,7 @@ impl Renderer {
             if let Some(img) = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(width, height, img_data) {
                 // Don't flip - the image is already in the correct orientation
                 
-                // Generate filename with timestamp
-                let timestamp = Local::now().format("%Y%m%d_%H%M%S_%3f");
-                let filename = format!("screenshots/screenshot_{}.png", timestamp);
+                let filename = generate_screenshot_filename();
                 
                 if let Err(e) = img.save(&filename) {
                     tracing::error!("Failed to save screenshot: {}", e);
@@ -493,56 +510,107 @@ impl Renderer {
         });
     }
     
-    /// Render a single frame
-    pub fn render(&mut self, dt: f32) -> Result<()> {
-        // Update camera
-        self.update_camera(dt);
+    /// Render single frame to screen.
+    pub fn render(&mut self, delta_time: f32) -> Result<()> {
+        self.update_camera_system(delta_time);
+        self.update_ui_feedback(delta_time);
         
-        // Update screenshot indicator
-        if self.screenshot_indicator > 0.0 {
-            self.screenshot_indicator -= dt;
-        }
+        let frame = self.acquire_next_frame()?;
+        let view = create_frame_view(&frame);
         
-        // Get next frame
-        let frame = self.surface.get_current_texture()
-            .context("Failed to acquire next swap chain texture")?;
+        self.execute_render_pass(&view);
         
-        let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        
-        // Create command encoder
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Render Encoder"),
-        });
-        
-        // Render pass
-        {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("SDF Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
-            
-            render_pass.set_pipeline(&self.pipeline);
-            render_pass.set_bind_group(0, &self.bind_group, &[]);
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.draw(0..4, 0..1);
-        }
-        
-        // Submit commands
-        self.queue.submit(Some(encoder.finish()));
-        
-        // Present frame
         frame.present();
-        
         Ok(())
     }
+    
+    fn acquire_next_frame(&self) -> Result<wgpu::SurfaceTexture> {
+        self.surface.get_current_texture()
+            .context("Failed to acquire next swap chain texture")
+    }
+    
+    fn execute_render_pass(&self, target_view: &wgpu::TextureView) {
+        let mut encoder = self.create_command_encoder();
+        
+        self.record_render_commands(&mut encoder, target_view);
+        
+        self.queue.submit(Some(encoder.finish()));
+    }
+    
+    fn create_command_encoder(&self) -> wgpu::CommandEncoder {
+        self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Render Encoder"),
+        })
+    }
+    
+    fn record_render_commands(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        target_view: &wgpu::TextureView,
+    ) {
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("SDF Render Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: target_view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+        
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, &self.bind_group, &[]);
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.draw(0..4, 0..1);
+    }
+    
+    fn update_ui_feedback(&mut self, delta_time: f32) {
+        if self.screenshot_indicator > 0.0 {
+            self.screenshot_indicator = (self.screenshot_indicator - delta_time).max(0.0);
+        }
+    }
+    
+    fn activate_screenshot_indicator(&mut self) {
+        self.screenshot_indicator = SCREENSHOT_INDICATOR_DURATION_SECONDS;
+    }
+    
+    fn log_screenshot_capture(&self) {
+        tracing::info!("Taking screenshot...");
+    }
+}
+
+// Helper functions
+fn create_event_loop() -> Result<EventLoop<()>> {
+    EventLoop::new().context("Failed to create event loop")
+}
+
+fn create_window(event_loop: &EventLoop<()>, config: &RendererConfig) -> Result<Window> {
+    WindowBuilder::new()
+        .with_title(&config.title)
+        .with_inner_size(winit::dpi::LogicalSize::new(config.width, config.height))
+        .with_visible(true)
+        .with_resizable(true)
+        .build(event_loop)
+        .context("Failed to create window")
+}
+
+fn configure_window_for_fps_controls(window: &Window) {
+    window.set_visible(true);
+    window.request_redraw();
+    let _ = window.set_cursor_grab(winit::window::CursorGrabMode::Locked);
+    let _ = window.set_cursor_visible(false);
+}
+
+fn create_frame_view(frame: &wgpu::SurfaceTexture) -> wgpu::TextureView {
+    frame.texture.create_view(&wgpu::TextureViewDescriptor::default())
+}
+
+fn generate_screenshot_filename() -> String {
+    let timestamp = Local::now().format("%Y%m%d_%H%M%S_%3f");
+    format!("{}/screenshot_{}.png", SCREENSHOT_DIRECTORY, timestamp)
 }
