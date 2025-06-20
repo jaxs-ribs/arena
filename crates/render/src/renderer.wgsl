@@ -81,23 +81,26 @@ fn sdf_cylinder(p: vec3<f32>, center: vec3<f32>, radius: f32, height: f32) -> f3
     return min(max(d.x, d.y), 0.0) + length(max(d, vec2<f32>(0.0)));
 }
 
-// SDF for plane, constrained to a large box if extents are provided
+// SDF for plane, rendered as a thin box
 fn sdf_plane(p: vec3<f32>, pl: Plane) -> f32 {
-    let plane_dist = dot(p, pl.normal) + pl.d;
-
     // If extents are zero, treat as an infinite plane
     if (pl.extents.x <= 0.0 || pl.extents.y <= 0.0) {
-        return plane_dist;
+        return dot(p, pl.normal) + pl.d;
     }
 
-    // Project point onto plane to check bounds
-    let projected_p = p - pl.normal * plane_dist;
-    let box_dist = max(abs(projected_p.x) - pl.extents.x, abs(projected_p.z) - pl.extents.y);
-
-    if (box_dist > 0.0) {
-        return 1000.0; // Outside the bounds, return a large distance
-    }
-    return plane_dist;
+    // Create a thin box for the plane
+    let thickness = 0.1; // 10cm thick plane
+    
+    // Transform point to plane's local space
+    // For a y-up plane at y=0, this is simple
+    let local_p = vec3<f32>(p.x, p.y - pl.d, p.z);
+    
+    // Box half extents: width, thickness/2, depth
+    let half_extents = vec3<f32>(pl.extents.x, thickness * 0.5, pl.extents.y);
+    
+    // Standard box SDF
+    let q = abs(local_p) - half_extents;
+    return length(max(q, vec3<f32>(0.0))) + min(max(q.x, max(q.y, q.z)), 0.0);
 }
 
 // Smooth minimum function to reduce morphing artifacts

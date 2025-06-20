@@ -29,3 +29,7 @@
 # Misc
 **/.DS_Store
 **/Thumbs.db
+
+# Screenshots
+screenshots/
+*.png

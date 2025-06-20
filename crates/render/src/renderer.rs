@@ -9,6 +9,8 @@ use winit::event::{DeviceEvent, ElementState, Event, WindowEvent};
 use winit::event_loop::EventLoop;
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowBuilder};
+use chrono::Local;
+use image::{ImageBuffer, Rgba};
 
 use crate::camera::{Camera, CameraController};
 use crate::gpu_types::{CameraUniform, SceneCounts};
@@ -63,6 +65,9 @@ pub struct Renderer {
     
     // Scene management
     scene_manager: SceneManager,
+    
+    // UI state
+    screenshot_indicator: f32,
 }
 
 impl Renderer {
@@ -198,6 +203,7 @@ impl Renderer {
                 camera_buffer,
                 controller,
                 scene_manager,
+                screenshot_indicator: 0.0,
             },
             event_loop,
         ))
@@ -275,6 +281,10 @@ impl Renderer {
                                     Some(winit::window::Fullscreen::Borderless(None))
                                 );
                             }
+                            KeyCode::KeyP => {
+                                // Take screenshot
+                                self.take_screenshot();
+                            }
                             _ => (),
                         }
                     }
@@ -336,10 +346,162 @@ impl Renderer {
         self.scene_manager.update(&self.queue, spheres, boxes, cylinders, planes);
     }
     
+    /// Take a screenshot and save it to the screenshots folder
+    fn take_screenshot(&mut self) {
+        // Ensure screenshots directory exists
+        let _ = std::fs::create_dir_all("screenshots");
+        
+        let texture_format = self.surface_config.format;
+        let width = self.surface_config.width;
+        let height = self.surface_config.height;
+        let bytes_per_pixel = 4;
+        let unpadded_bytes_per_row = width * bytes_per_pixel;
+        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let padded_bytes_per_row = (unpadded_bytes_per_row + align - 1) / align * align;
+        let buffer_size = (padded_bytes_per_row * height) as u64;
+        
+        // Create a texture with COPY_SRC usage that we can render to
+        let screenshot_texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Screenshot Texture"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: texture_format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        
+        let screenshot_view = screenshot_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        
+        // Create a buffer to read the texture data
+        let output_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Screenshot Buffer"),
+            size: buffer_size,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        
+        // Create command encoder
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Screenshot Encoder"),
+        });
+        
+        // Render to our screenshot texture
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Screenshot Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &screenshot_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            
+            render_pass.set_pipeline(&self.pipeline);
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_bind_group(0, &self.bind_group, &[]);
+            render_pass.draw(0..4, 0..1);
+        }
+        
+        // Copy texture to buffer
+        encoder.copy_texture_to_buffer(
+            wgpu::ImageCopyTexture {
+                texture: &screenshot_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::ImageCopyBuffer {
+                buffer: &output_buffer,
+                layout: wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded_bytes_per_row),
+                    rows_per_image: Some(height),
+                },
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+        
+        // Submit the commands
+        self.queue.submit(Some(encoder.finish()));
+        
+        // Set screenshot indicator
+        self.screenshot_indicator = 2.0; // Show for 2 seconds
+        tracing::info!("Taking screenshot...");
+        
+        // Map the buffer and read the data synchronously
+        let buffer_slice = output_buffer.slice(..);
+        let (tx, rx) = std::sync::mpsc::channel();
+        buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
+            tx.send(result).unwrap();
+        });
+        self.device.poll(wgpu::Maintain::Wait);
+        rx.recv().unwrap().unwrap();
+        
+        let data = buffer_slice.get_mapped_range();
+        
+        // Create image from buffer data
+        let mut img_data = Vec::with_capacity((width * height * 4) as usize);
+        for row in 0..height {
+            let start = (row * padded_bytes_per_row) as usize;
+            let end = start + (unpadded_bytes_per_row as usize);
+            img_data.extend_from_slice(&data[start..end]);
+        }
+        drop(data);
+        output_buffer.unmap();
+        
+        // Convert BGRA to RGBA if needed (depends on surface format)
+        if texture_format == wgpu::TextureFormat::Bgra8UnormSrgb {
+            for chunk in img_data.chunks_exact_mut(4) {
+                chunk.swap(0, 2); // Swap B and R channels
+            }
+        }
+        
+        // Save screenshot in a separate thread to avoid blocking
+        std::thread::spawn(move || {
+            // Create image and save
+            if let Some(img) = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(width, height, img_data) {
+                // Don't flip - the image is already in the correct orientation
+                
+                // Generate filename with timestamp
+                let timestamp = Local::now().format("%Y%m%d_%H%M%S_%3f");
+                let filename = format!("screenshots/screenshot_{}.png", timestamp);
+                
+                if let Err(e) = img.save(&filename) {
+                    tracing::error!("Failed to save screenshot: {}", e);
+                } else {
+                    tracing::info!("Screenshot saved: {}", filename);
+                }
+            } else {
+                tracing::error!("Failed to create image from buffer data");
+            }
+        });
+    }
+    
     /// Render a single frame
     pub fn render(&mut self, dt: f32) -> Result<()> {
         // Update camera
         self.update_camera(dt);
+        
+        // Update screenshot indicator
+        if self.screenshot_indicator > 0.0 {
+            self.screenshot_indicator -= dt;
+        }
         
         // Get next frame
         let frame = self.surface.get_current_texture()
