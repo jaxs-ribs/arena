@@ -34,10 +34,10 @@ pub struct Camera {
 impl Camera {
     /// Create a new camera with default settings
     pub fn new(width: u32, height: u32) -> Self {
-        // Position camera to view the falling spheres scene
-        // Spheres fall from y=5 to y=0, spread from x=-1.5 to x=1.5
-        let eye = Vec3::new(0.0, 4.0, 12.0);    // Centered, looking at fall area
-        let target = Vec3::new(0.0, 2.0, 0.0);  // Look at lower part of fall path
+        // Position camera to view the CartPole scene
+        // CartPoles are at y=0, spread from x=-2 to x=2, z=-1 to z=1
+        let eye = Vec3::new(5.0, 3.0, 8.0);     // Offset to see the scene at an angle
+        let target = Vec3::new(0.0, 1.0, 0.0);  // Look at the middle of the CartPoles
         let forward = (target - eye).normalize();
         let yaw = forward.x.atan2(forward.z);
         let pitch = forward.y.asin();

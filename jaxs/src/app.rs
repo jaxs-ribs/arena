@@ -180,7 +180,7 @@ fn create_cartpole_scene(simulation: &mut PhysicsSim) -> CartPoleGrid {
         cart_size: Vec3::new(0.4, 0.2, 0.2),
         cart_mass: 1.0,
         pole_length: 1.5,
-        pole_radius: 0.05,
+        pole_radius: 0.1,  // Increased from 0.05 for better visibility
         pole_mass: 0.1,
         initial_angle: 0.05, // Small random perturbation
         force_magnitude: 10.0,

@@ -16,6 +16,7 @@ use crate::collision::{
     detect_sphere_box_collision, resolve_sphere_box_collision,
     detect_sphere_cylinder_collision, resolve_sphere_cylinder_collision,
     detect_box_plane_collision, resolve_box_plane_collision,
+    detect_cylinder_plane_collision, resolve_cylinder_plane_collision,
 };
 use crate::integrator::{
     integrate_spheres, integrate_boxes, integrate_cylinders,
@@ -281,6 +282,15 @@ impl PhysicsSim {
                 }
             }
         }
+        
+        // Cylinder-plane collisions
+        for cylinder in &mut self.cylinders {
+            for plane in &self.planes {
+                if let Some(contact) = detect_cylinder_plane_collision(cylinder, plane) {
+                    resolve_cylinder_plane_collision(cylinder, plane, &contact, self.params.dt);
+                }
+            }
+        }
     }
     
     fn resolve_sphere_dynamic_collisions(&mut self) {
@@ -352,7 +362,36 @@ impl PhysicsSim {
         cylinder_idx: usize, 
         joint: &RevoluteJoint
     ) {
-        // Get joint position in world space
+        // Get world positions of anchor points
+        let anchor_world_a = self.boxes[box_idx].pos + joint.anchor_a;
+        let anchor_world_b = self.cylinders[cylinder_idx].pos + joint.anchor_b;
+        
+        // First, enforce position constraint - anchors should coincide
+        let position_error = anchor_world_a - anchor_world_b;
+        let position_error_length = position_error.length();
+        
+        if position_error_length > 0.01 {  // Increased tolerance for softer constraint
+            // Apply position correction with lower stiffness
+            let total_mass = self.boxes[box_idx].mass + self.cylinders[cylinder_idx].mass;
+            let box_ratio = self.cylinders[cylinder_idx].mass / total_mass;
+            let cylinder_ratio = self.boxes[box_idx].mass / total_mass;
+            
+            // Move bodies to satisfy constraint (reduced from 0.5 to 0.2 for softer correction)
+            self.boxes[box_idx].pos -= position_error * (box_ratio * 0.2);
+            self.cylinders[cylinder_idx].pos += position_error * (cylinder_ratio * 0.2);
+            
+            // Update velocities to prevent separation
+            let relative_vel = self.cylinders[cylinder_idx].vel - self.boxes[box_idx].vel;
+            let vel_along_error = relative_vel.dot(position_error.normalize());
+            
+            if vel_along_error < 0.0 {
+                let impulse = position_error.normalize() * vel_along_error;
+                self.boxes[box_idx].vel += impulse * (box_ratio * 0.2);
+                self.cylinders[cylinder_idx].vel -= impulse * (cylinder_ratio * 0.2);
+            }
+        }
+        
+        // Get updated joint position
         let joint_pos_world = self.boxes[box_idx].pos + joint.anchor_a;
         
         // Calculate vector from joint to cylinder center
@@ -367,34 +406,24 @@ impl PhysicsSim {
             // Project torque onto joint axis to get scalar angular acceleration
             let torque_magnitude = torque.dot(joint.axis);
             
-            // Moment of inertia for point mass at distance r
+            // Moment of inertia for cylinder rotating around joint
             let moment_of_inertia = self.cylinders[cylinder_idx].mass * r_length * r_length;
             
             // Angular acceleration = torque / moment of inertia
             let angular_accel = torque_magnitude / moment_of_inertia;
             
-            // Update angular velocity (scalar rotation rate around axis)
+            // Update angular velocity
             let current_angular_speed = self.cylinders[cylinder_idx].angular_vel.dot(joint.axis);
             let new_angular_speed = current_angular_speed + angular_accel * self.params.dt;
             
+            // Apply some damping
+            let damped_angular_speed = new_angular_speed * 0.995;
+            
             // Set angular velocity to be only around joint axis
-            self.cylinders[cylinder_idx].angular_vel = joint.axis * new_angular_speed;
+            self.cylinders[cylinder_idx].angular_vel = joint.axis * damped_angular_speed;
             
-            // Calculate linear velocity from angular velocity
-            // v = ω × r
-            let angular_vel_vec = joint.axis * new_angular_speed;
-            let linear_vel_from_rotation = angular_vel_vec.cross(r);
-            
-            // Update cylinder velocity to match rotation
-            self.cylinders[cylinder_idx].vel = self.boxes[box_idx].vel + linear_vel_from_rotation;
-            
-            // Constrain position: keep cylinder at fixed distance from joint
-            let r_normalized = r.normalize();
-            let target_pos = joint_pos_world + r_normalized * r_length;
-            
-            // Soft constraint - gradually move toward target
-            let pos_error = target_pos - self.cylinders[cylinder_idx].pos;
-            self.cylinders[cylinder_idx].pos += pos_error * 0.8; // 80% correction per frame
+            // Don't force cylinder velocity - let physics handle it naturally
+            // This was preventing the pole from falling properly
         }
     }
 }

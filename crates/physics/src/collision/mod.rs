@@ -8,6 +8,7 @@ mod sphere_plane;
 mod sphere_box;
 mod sphere_cylinder;
 mod box_plane;
+mod cylinder_plane;
 mod broad_phase;
 mod stubs;
 
@@ -16,6 +17,7 @@ pub use sphere_plane::*;
 pub use sphere_box::*;
 pub use sphere_cylinder::*;
 pub use box_plane::*;
+pub use cylinder_plane::*;
 pub use broad_phase::*;
 // pub use stubs::*; // Don't re-export to avoid ambiguity
 
