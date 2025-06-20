@@ -27,7 +27,7 @@
 //! acceleration for the simulation loop.
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 /// Three dimensional vector used by the physics engine.
 ///
 /// This simple data structure is shared by all bodies to represent
@@ -79,6 +79,15 @@ impl Vec3 {
     /// Calculate the dot product with another vector
     pub fn dot(&self, other: Self) -> f32 {
         self.x * other.x + self.y * other.y + self.z * other.z
+    }
+    
+    /// Calculate the cross product with another vector
+    pub fn cross(&self, other: Self) -> Self {
+        Self {
+            x: self.y * other.z - self.z * other.y,
+            y: self.z * other.x - self.x * other.z,
+            z: self.x * other.y - self.y * other.x,
+        }
     }
 }
 
@@ -441,6 +450,10 @@ pub struct Cylinder {
     pub half_height: f32,
     /// Mass of the cylinder in kilograms.
     pub mass: f32,
+    /// The orientation of the cylinder, represented as a quaternion in `[x, y, z, w]` format.
+    pub orientation: [f32; 4],
+    /// The angular velocity of the cylinder, measured in radians per second.
+    pub angular_vel: Vec3,
     /// Material properties for collision response.
     pub material: Material,
 }

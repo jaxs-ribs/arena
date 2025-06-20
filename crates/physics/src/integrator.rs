@@ -33,8 +33,18 @@ pub fn integrate_boxes(boxes: &mut [BoxBody], gravity: Vec3, dt: f32) {
         box_body.vel += acceleration * dt;
         box_body.pos += box_body.vel * dt;
         
+        // Integrate angular velocity
+        if box_body.angular_vel.length() > 0.0 {
+            let angle = box_body.angular_vel.length() * dt;
+            let axis = box_body.angular_vel.normalize();
+            let delta_quat = quaternion_from_axis_angle(axis, angle);
+            box_body.orientation = quaternion_multiply(delta_quat, box_body.orientation);
+            normalize_quaternion(&mut box_body.orientation);
+        }
+        
         // Apply damping (disabled for now)
         // box_body.vel *= DAMPING_FACTOR;
+        // box_body.angular_vel *= DAMPING_FACTOR;
     }
 }
 
@@ -48,8 +58,18 @@ pub fn integrate_cylinders(cylinders: &mut [Cylinder], gravity: Vec3, dt: f32) {
         cylinder.vel += acceleration * dt;
         cylinder.pos += cylinder.vel * dt;
         
+        // Integrate angular velocity
+        if cylinder.angular_vel.length() > 0.0 {
+            let angle = cylinder.angular_vel.length() * dt;
+            let axis = cylinder.angular_vel.normalize();
+            let delta_quat = quaternion_from_axis_angle(axis, angle);
+            cylinder.orientation = quaternion_multiply(delta_quat, cylinder.orientation);
+            normalize_quaternion(&mut cylinder.orientation);
+        }
+        
         // Apply damping (disabled for now)  
         // cylinder.vel *= DAMPING_FACTOR;
+        // cylinder.angular_vel *= DAMPING_FACTOR;
     }
 }
 
@@ -72,5 +92,36 @@ pub fn apply_forces_to_boxes(boxes: &mut [BoxBody], forces: &[[f32; 2]], dt: f32
             let acceleration = force / box_body.mass;
             box_body.vel += acceleration * dt;
         }
+    }
+}
+
+// Quaternion helper functions
+fn quaternion_from_axis_angle(axis: Vec3, angle: f32) -> [f32; 4] {
+    let half_angle = angle * 0.5;
+    let s = half_angle.sin();
+    [
+        axis.x * s,
+        axis.y * s,
+        axis.z * s,
+        half_angle.cos(),
+    ]
+}
+
+fn quaternion_multiply(q1: [f32; 4], q2: [f32; 4]) -> [f32; 4] {
+    [
+        q1[3] * q2[0] + q1[0] * q2[3] + q1[1] * q2[2] - q1[2] * q2[1],
+        q1[3] * q2[1] - q1[0] * q2[2] + q1[1] * q2[3] + q1[2] * q2[0],
+        q1[3] * q2[2] + q1[0] * q2[1] - q1[1] * q2[0] + q1[2] * q2[3],
+        q1[3] * q2[3] - q1[0] * q2[0] - q1[1] * q2[1] - q1[2] * q2[2],
+    ]
+}
+
+fn normalize_quaternion(q: &mut [f32; 4]) {
+    let mag = (q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]).sqrt();
+    if mag > 0.0 {
+        q[0] /= mag;
+        q[1] /= mag;
+        q[2] /= mag;
+        q[3] /= mag;
     }
 }

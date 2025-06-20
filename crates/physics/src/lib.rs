@@ -43,6 +43,7 @@
 //! ```
 
 // Public API modules
+pub mod cartpole;
 pub mod types;
 pub mod simulation;
 
@@ -53,6 +54,7 @@ mod integrator;
 mod spatial_grid_ext;
 
 // Re-export main types for convenient access
+pub use cartpole::{CartPole, CartPoleConfig, CartPoleGrid};
 pub use simulation::{PhysicsError, PhysicsSim, SphereState};
 pub use types::{
     BoxBody, BoundingBox, ContactDebugInfo, Cylinder, ForceDebugInfo, Joint, JointParams, 

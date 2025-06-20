@@ -341,29 +341,49 @@ impl PhysicsSim {
         cylinder_idx: usize, 
         joint: &RevoluteJoint
     ) {
-        // Get current world positions of anchor points
-        let box_anchor_world = self.boxes[box_idx].pos + joint.anchor_a;
-        let cylinder_anchor_world = self.cylinders[cylinder_idx].pos + joint.anchor_b;
+        // Get joint position in world space
+        let joint_pos_world = self.boxes[box_idx].pos + joint.anchor_a;
         
-        // Calculate error
-        let error = cylinder_anchor_world - box_anchor_world;
-        let distance = error.length();
+        // Calculate vector from joint to cylinder center
+        let r = self.cylinders[cylinder_idx].pos - joint_pos_world;
+        let r_length = r.length();
         
-        if distance > 0.0001 {
-            // Calculate mass ratio for distribution of correction
-            let box_mass = self.boxes[box_idx].mass;
-            let cylinder_mass = self.cylinders[cylinder_idx].mass;
-            let total_mass = box_mass + cylinder_mass;
+        if r_length > 0.001 {
+            // Apply torque from gravity
+            let gravity_force = self.params.gravity * self.cylinders[cylinder_idx].mass;
+            let torque = r.cross(gravity_force);
             
-            let box_ratio = cylinder_mass / total_mass;
-            let cylinder_ratio = box_mass / total_mass;
+            // Project torque onto joint axis to get scalar angular acceleration
+            let torque_magnitude = torque.dot(joint.axis);
             
-            // Apply position correction
-            self.boxes[box_idx].pos += error * box_ratio * 0.5;
-            self.cylinders[cylinder_idx].pos -= error * cylinder_ratio * 0.5;
+            // Moment of inertia for point mass at distance r
+            let moment_of_inertia = self.cylinders[cylinder_idx].mass * r_length * r_length;
             
-            // TODO: Add angular constraints to limit rotation to the joint axis
-            // TODO: Add joint limits (min/max angle)
+            // Angular acceleration = torque / moment of inertia
+            let angular_accel = torque_magnitude / moment_of_inertia;
+            
+            // Update angular velocity (scalar rotation rate around axis)
+            let current_angular_speed = self.cylinders[cylinder_idx].angular_vel.dot(joint.axis);
+            let new_angular_speed = current_angular_speed + angular_accel * self.params.dt;
+            
+            // Set angular velocity to be only around joint axis
+            self.cylinders[cylinder_idx].angular_vel = joint.axis * new_angular_speed;
+            
+            // Calculate linear velocity from angular velocity
+            // v = ω × r
+            let angular_vel_vec = joint.axis * new_angular_speed;
+            let linear_vel_from_rotation = angular_vel_vec.cross(r);
+            
+            // Update cylinder velocity to match rotation
+            self.cylinders[cylinder_idx].vel = self.boxes[box_idx].vel + linear_vel_from_rotation;
+            
+            // Constrain position: keep cylinder at fixed distance from joint
+            let r_normalized = r.normalize();
+            let target_pos = joint_pos_world + r_normalized * r_length;
+            
+            // Soft constraint - gradually move toward target
+            let pos_error = target_pos - self.cylinders[cylinder_idx].pos;
+            self.cylinders[cylinder_idx].pos += pos_error * 0.8; // 80% correction per frame
         }
     }
 }
@@ -437,6 +457,8 @@ impl PhysicsSim {
             half_extents,
             vel,
             mass,
+            orientation: [0.0, 0.0, 0.0, 1.0], // Identity quaternion
+            angular_vel: Vec3::ZERO,
             material: Material::default(),
         };
         self.boxes.push(box_body);
@@ -459,6 +481,8 @@ impl PhysicsSim {
             radius,
             half_height,
             mass,
+            orientation: [0.0, 0.0, 0.0, 1.0], // Identity quaternion
+            angular_vel: Vec3::ZERO,
             material: Material::default(),
         };
         self.cylinders.push(cylinder);
