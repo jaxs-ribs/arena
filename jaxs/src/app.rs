@@ -172,6 +172,9 @@ fn add_sphere_at_position(simulation: &mut PhysicsSim, position: Vec3) {
 fn create_cartpole_scene(simulation: &mut PhysicsSim) -> CartPoleGrid {
     tracing::info!("Creating CartPole gym scene...");
     
+    // Add ground plane first
+    add_ground_plane(simulation);
+    
     // Configure cartpoles
     let config = CartPoleConfig {
         cart_size: Vec3::new(0.4, 0.2, 0.2),
@@ -185,11 +188,29 @@ fn create_cartpole_scene(simulation: &mut PhysicsSim) -> CartPoleGrid {
         position_limit: 3.0,
     };
     
-    // Create a 2x3 grid of cartpoles
-    let grid = CartPoleGrid::new(simulation, 2, 3, 4.0, config);
+    // Create a 2x3 grid of cartpoles with 2.0 spacing (within 3.0 position limit)
+    let grid = CartPoleGrid::new(simulation, 2, 3, 2.0, config);
     
     tracing::info!("Created {} cartpoles in {}x{} grid", 
                   grid.cartpoles.len(), grid.grid_size.0, grid.grid_size.1);
+    
+    // Log initial physics state
+    tracing::info!("Initial physics state:");
+    tracing::info!("  - {} boxes (carts)", simulation.boxes.len());
+    tracing::info!("  - {} cylinders (poles)", simulation.cylinders.len());
+    tracing::info!("  - {} revolute joints", simulation.revolute_joints.len());
+    tracing::info!("  - Gravity: ({:.2}, {:.2}, {:.2})", 
+                  simulation.params.gravity.x, 
+                  simulation.params.gravity.y, 
+                  simulation.params.gravity.z);
+    
+    // Log initial cartpole states
+    let states = grid.get_all_states(simulation);
+    tracing::info!("Initial CartPole positions:");
+    for (i, state) in states.iter().enumerate() {
+        tracing::info!("  CartPole {}: x={:.2}, θ={:.3} rad ({:.1}°)", 
+                     i, state[0], state[2], state[2].to_degrees());
+    }
     
     grid
 }
@@ -202,6 +223,18 @@ fn run_with_rendering(sim_and_grid: (PhysicsSim, Option<CartPoleGrid>)) -> Resul
     let (mut renderer, event_loop) = render::Renderer::new(renderer_config)?;
     
     tracing::info!("Starting simulation loop with dt = {}...", PHYSICS_TIMESTEP_SECONDS);
+    
+    if cartpole_grid.is_some() {
+        tracing::info!("=== CartPole Demo Controls ===");
+        tracing::info!("Press 'M' to toggle manual control mode");
+        tracing::info!("When manual control is active:");
+        tracing::info!("  - Number keys 1-6: Select cartpole");
+        tracing::info!("  - Left/Right arrows: Apply force");
+        tracing::info!("  - Space: Stop force");
+        tracing::info!("  - R: Reset all cartpoles");
+        tracing::info!("Camera controls: WASD to move, mouse to look");
+        tracing::info!("Other: P=screenshot, F=fullscreen, ESC=release mouse");
+    }
     
     let mut frame_counter = 0;
     let frame_duration = calculate_frame_duration();
@@ -510,27 +543,40 @@ fn update_cartpole_demo(grid: &mut CartPoleGrid, sim: &mut PhysicsSim, time: f32
     // Check and reset failures
     let failed_indices = grid.check_and_reset_failures(sim);
     
-    // Log failures every 5 seconds
-    if !failed_indices.is_empty() && (time * 1000.0) as i32 % 5000 < 16 {
-        tracing::info!("CartPoles failed and reset: {:?}", failed_indices);
-        
-        // Log states of all cartpoles
-        let states = grid.get_all_states(sim);
-        for (i, state) in states.iter().enumerate() {
-            if failed_indices.contains(&i) {
-                tracing::info!("  CartPole {}: RESET - x={:.2}, v={:.2}, θ={:.2}°, ω={:.2}", 
-                             i, state[0], state[1], state[2].to_degrees(), state[3]);
-            }
+    // Log failures  
+    if !failed_indices.is_empty() {
+        for idx in &failed_indices {
+            // Get state before reset to see why it failed
+            let cart_pos = sim.boxes[grid.cartpoles[*idx].cart_idx].pos;
+            let pole_angle = grid.cartpoles[*idx].get_pole_angle(sim);
+            tracing::info!("CartPole {} failed - x={:.2} (limit: {:.1}), θ={:.3} rad/{:.1}° (limit: {:.1}°)", 
+                         idx, cart_pos.x, grid.cartpoles[*idx].config.position_limit,
+                         pole_angle, pole_angle.to_degrees(), 
+                         grid.cartpoles[*idx].config.failure_angle.to_degrees());
         }
     }
     
-    // Periodic status update
-    if (time * 1000.0) as i32 % 2000 < 16 {
+    // More frequent status updates for first 10 seconds
+    let update_interval = if time < 10.0 { 1000 } else { 5000 };
+    if (time * 1000.0) as i32 % update_interval < 16 {
+        tracing::info!("=== CartPole Demo Status at t={:.1}s ===", time);
         let states = grid.get_all_states(sim);
-        tracing::info!("CartPole states at t={:.1}s:", time);
         for (i, state) in states.iter().enumerate() {
-            tracing::info!("  CartPole {}: x={:.2}, θ={:.1}°", 
-                         i, state[0], state[2].to_degrees());
+            let control_desc = match i {
+                0 => "Oscillating control",
+                1 => "Bang-bang control",
+                2 => "No control (falling)",
+                3 => "Slow oscillation",
+                4 => "Simple feedback",
+                5 => "Complex pattern",
+                _ => "Unknown",
+            };
+            tracing::info!("  CartPole {}: {} - x={:.2}, θ={:.1}°, action={:.2}", 
+                         i, control_desc, state[0], state[2].to_degrees(), actions[i]);
         }
+        
+        // Show physics stats
+        tracing::info!("Physics stats: {} boxes, {} cylinders, {} revolute joints",
+                     sim.boxes.len(), sim.cylinders.len(), sim.revolute_joints.len());
     }
 } 
