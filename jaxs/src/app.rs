@@ -24,11 +24,12 @@
 use anyhow::Result;
 use physics::{
     types::{Vec2, Vec3},
-    PhysicsSim,
+    PhysicsSim, CartPoleGrid, CartPoleConfig,
 };
 use std::time::{Duration, Instant};
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
+use winit::keyboard::KeyCode;
 
 use crate::watcher;
 
@@ -98,16 +99,33 @@ fn initialize_shader_watcher() -> Option<notify::RecommendedWatcher> {
     }
 }
 
-/// Create demonstration scene with falling spheres.
-fn create_test_scene() -> Result<PhysicsSim> {
+/// Demo scene type
+enum DemoScene {
+    FallingSpheres,
+    CartPoleGym,
+}
+
+// Set the demo scene to use
+const ACTIVE_DEMO: DemoScene = DemoScene::CartPoleGym;
+
+/// Create demonstration scene based on active demo type.
+fn create_test_scene() -> Result<(PhysicsSim, Option<CartPoleGrid>)> {
     tracing::info!("Initializing physics simulation...");
     let mut simulation = PhysicsSim::new();
 
     configure_world_physics(&mut simulation);
-    add_ground_plane(&mut simulation);
-    add_falling_spheres(&mut simulation);
-
-    Ok(simulation)
+    
+    match ACTIVE_DEMO {
+        DemoScene::FallingSpheres => {
+            add_ground_plane(&mut simulation);
+            add_falling_spheres(&mut simulation);
+            Ok((simulation, None))
+        }
+        DemoScene::CartPoleGym => {
+            let grid = create_cartpole_scene(&mut simulation);
+            Ok((simulation, Some(grid)))
+        }
+    }
 }
 
 /// Configure global physics parameters.
@@ -150,9 +168,36 @@ fn add_sphere_at_position(simulation: &mut PhysicsSim, position: Vec3) {
     simulation.add_sphere(position, initial_velocity, SPHERE_RADIUS);
 }
 
+/// Create CartPole gym scene with multiple cartpoles
+fn create_cartpole_scene(simulation: &mut PhysicsSim) -> CartPoleGrid {
+    tracing::info!("Creating CartPole gym scene...");
+    
+    // Configure cartpoles
+    let config = CartPoleConfig {
+        cart_size: Vec3::new(0.4, 0.2, 0.2),
+        cart_mass: 1.0,
+        pole_length: 1.5,
+        pole_radius: 0.05,
+        pole_mass: 0.1,
+        initial_angle: 0.05, // Small random perturbation
+        force_magnitude: 10.0,
+        failure_angle: 0.5, // ~28 degrees
+        position_limit: 3.0,
+    };
+    
+    // Create a 2x3 grid of cartpoles
+    let grid = CartPoleGrid::new(simulation, 2, 3, 4.0, config);
+    
+    tracing::info!("Created {} cartpoles in {}x{} grid", 
+                  grid.cartpoles.len(), grid.grid_size.0, grid.grid_size.1);
+    
+    grid
+}
+
 /// Run the simulation with rendering enabled
 #[cfg(feature = "render")]
-fn run_with_rendering(mut sim: PhysicsSim) -> Result<()> {
+fn run_with_rendering(sim_and_grid: (PhysicsSim, Option<CartPoleGrid>)) -> Result<()> {
+    let (mut sim, mut cartpole_grid) = sim_and_grid;
     let renderer_config = render::RendererConfig::default();
     let (mut renderer, event_loop) = render::Renderer::new(renderer_config)?;
     
@@ -160,12 +205,18 @@ fn run_with_rendering(mut sim: PhysicsSim) -> Result<()> {
     
     let mut frame_counter = 0;
     let frame_duration = calculate_frame_duration();
+    let mut demo_timer = 0.0;
+    let mut manual_control = ManualControl::new();
 
     event_loop.run(move |event, elwt| {
         elwt.set_control_flow(ControlFlow::Poll);
         
-        // Let renderer handle input events
-        renderer.handle_event(&event);
+        // Let renderer handle input events and get key presses
+        if let Some(keycode) = renderer.handle_event(&event) {
+            if let Some(ref mut grid) = cartpole_grid {
+                manual_control.handle_key(keycode, grid, &mut sim);
+            }
+        }
 
         match event {
             Event::WindowEvent {
@@ -176,6 +227,16 @@ fn run_with_rendering(mut sim: PhysicsSim) -> Result<()> {
             }
             Event::AboutToWait => {
                 let frame_start = Instant::now();
+                
+                // Update CartPole demo if active
+                if let Some(ref mut grid) = cartpole_grid {
+                    if manual_control.is_active() {
+                        manual_control.update(grid, &mut sim);
+                    } else {
+                        update_cartpole_demo(grid, &mut sim, demo_timer);
+                    }
+                    demo_timer += PHYSICS_TIMESTEP_SECONDS;
+                }
                 
                 advance_physics_one_step(&mut sim, frame_counter);
                 
@@ -195,16 +256,23 @@ fn run_with_rendering(mut sim: PhysicsSim) -> Result<()> {
 
 /// Run the simulation in headless mode (no rendering)
 #[cfg(not(feature = "render"))]
-fn run_with_rendering(_sim: PhysicsSim) -> Result<()> {
+fn run_with_rendering(_sim_and_grid: (PhysicsSim, Option<CartPoleGrid>)) -> Result<()> {
     tracing::error!("Rendering requested but 'render' feature not enabled");
     Ok(())
 }
 
 /// Run physics simulation without graphical output.
-fn run_headless(mut simulation: PhysicsSim) -> Result<()> {
+fn run_headless(sim_and_grid: (PhysicsSim, Option<CartPoleGrid>)) -> Result<()> {
+    let (mut simulation, mut cartpole_grid) = sim_and_grid;
     log_headless_startup();
     
     for frame_number in 0..HEADLESS_SIMULATION_STEP_COUNT {
+        // Update CartPole demo if active
+        if let Some(ref mut grid) = cartpole_grid {
+            let time = frame_number as f32 * PHYSICS_TIMESTEP_SECONDS;
+            update_cartpole_demo(grid, &mut simulation, time);
+        }
+        
         if let Err(error) = run_single_physics_step(&mut simulation) {
             log_simulation_error(frame_number, error);
             break;
@@ -307,4 +375,162 @@ fn sleep_for_remaining_frame_time(elapsed: Duration, target: Duration) {
 
 fn calculate_frame_duration() -> Duration {
     Duration::from_secs_f32(1.0 / TARGET_FRAMES_PER_SECOND)
+}
+
+/// Manual control state for CartPoles
+struct ManualControl {
+    active: bool,
+    selected_cartpole: usize,
+    action: f32,
+}
+
+impl ManualControl {
+    fn new() -> Self {
+        Self {
+            active: false,
+            selected_cartpole: 0,
+            action: 0.0,
+        }
+    }
+    
+    fn is_active(&self) -> bool {
+        self.active
+    }
+    
+    fn handle_key(&mut self, keycode: KeyCode, grid: &mut CartPoleGrid, sim: &mut PhysicsSim) {
+        match keycode {
+            // Toggle manual control
+            KeyCode::KeyM => {
+                self.active = !self.active;
+                self.action = 0.0;
+                tracing::info!("Manual control: {}", if self.active { "ON" } else { "OFF" });
+                if self.active {
+                    tracing::info!("Use number keys 1-6 to select cartpole, arrow keys to control");
+                }
+            }
+            
+            // Select cartpole
+            KeyCode::Digit1 => self.select_cartpole(0, grid.cartpoles.len()),
+            KeyCode::Digit2 => self.select_cartpole(1, grid.cartpoles.len()),
+            KeyCode::Digit3 => self.select_cartpole(2, grid.cartpoles.len()),
+            KeyCode::Digit4 => self.select_cartpole(3, grid.cartpoles.len()),
+            KeyCode::Digit5 => self.select_cartpole(4, grid.cartpoles.len()),
+            KeyCode::Digit6 => self.select_cartpole(5, grid.cartpoles.len()),
+            
+            // Control actions
+            KeyCode::ArrowLeft => {
+                if self.active {
+                    self.action = -1.0;
+                    tracing::info!("CartPole {}: Force LEFT", self.selected_cartpole);
+                }
+            }
+            KeyCode::ArrowRight => {
+                if self.active {
+                    self.action = 1.0;
+                    tracing::info!("CartPole {}: Force RIGHT", self.selected_cartpole);
+                }
+            }
+            KeyCode::Space => {
+                if self.active {
+                    self.action = 0.0;
+                    tracing::info!("CartPole {}: Force STOP", self.selected_cartpole);
+                }
+            }
+            
+            // Reset all
+            KeyCode::KeyR => {
+                tracing::info!("Resetting all cartpoles");
+                for cartpole in grid.cartpoles.iter_mut() {
+                    cartpole.reset(sim);
+                }
+            }
+            
+            _ => {}
+        }
+    }
+    
+    fn select_cartpole(&mut self, index: usize, max: usize) {
+        if self.active && index < max {
+            self.selected_cartpole = index;
+            tracing::info!("Selected CartPole {}", index);
+        }
+    }
+    
+    fn update(&self, grid: &mut CartPoleGrid, sim: &mut PhysicsSim) {
+        if !self.active {
+            return;
+        }
+        
+        // Apply manual control to selected cartpole
+        let mut actions = vec![0.0; grid.cartpoles.len()];
+        if self.selected_cartpole < actions.len() {
+            actions[self.selected_cartpole] = self.action;
+        }
+        
+        grid.apply_actions(sim, &actions);
+        
+        // Check and reset failures
+        let failed_indices = grid.check_and_reset_failures(sim);
+        if !failed_indices.is_empty() {
+            tracing::info!("CartPoles failed and reset: {:?}", failed_indices);
+        }
+        
+        // Show selected cartpole state
+        if self.selected_cartpole < grid.cartpoles.len() {
+            let state = grid.cartpoles[self.selected_cartpole].get_state(sim);
+            tracing::debug!("CartPole {}: x={:.2}, v={:.2}, θ={:.1}°, ω={:.2}", 
+                          self.selected_cartpole, state[0], state[1], 
+                          state[2].to_degrees(), state[3]);
+        }
+    }
+}
+
+/// Update CartPole demo with test actions
+fn update_cartpole_demo(grid: &mut CartPoleGrid, sim: &mut PhysicsSim, time: f32) {
+    // Create test actions for each cartpole
+    let mut actions = Vec::new();
+    
+    for (i, cartpole) in grid.cartpoles.iter().enumerate() {
+        // Different test patterns for each cartpole
+        let action = match i {
+            0 => (time * 2.0).sin(),           // Oscillating
+            1 => if time.sin() > 0.0 { 1.0 } else { -1.0 }, // Bang-bang control
+            2 => 0.0,                          // No control (should fall)
+            3 => (time * 0.5).cos() * 0.5,    // Slow oscillation
+            4 => if cartpole.get_pole_angle(sim) > 0.0 { -0.8 } else { 0.8 }, // Simple feedback
+            5 => ((time * 3.0).sin() + (time * 1.5).cos()) * 0.7, // Complex pattern
+            _ => 0.0,
+        };
+        actions.push(action);
+    }
+    
+    // Apply actions
+    grid.apply_actions(sim, &actions);
+    
+    // Check and reset failures
+    let failed_indices = grid.check_and_reset_failures(sim);
+    
+    // Log failures every 5 seconds
+    if !failed_indices.is_empty() && (time * 1000.0) as i32 % 5000 < 16 {
+        tracing::info!("CartPoles failed and reset: {:?}", failed_indices);
+        
+        // Log states of all cartpoles
+        let states = grid.get_all_states(sim);
+        for (i, state) in states.iter().enumerate() {
+            if failed_indices.contains(&i) {
+                tracing::info!("  CartPole {}: RESET - x={:.2}, v={:.2}, θ={:.2}°, ω={:.2}", 
+                             i, state[0], state[1], state[2].to_degrees(), state[3]);
+            }
+        }
+    }
+    
+    // Periodic status update
+    if (time * 1000.0) as i32 % 2000 < 16 {
+        let states = grid.get_all_states(sim);
+        tracing::info!("CartPole states at t={:.1}s:", time);
+        for (i, state) in states.iter().enumerate() {
+            tracing::info!("  CartPole {}: x={:.2}, θ={:.1}°", 
+                         i, state[0], state[2].to_degrees());
+        }
+    }
 } 

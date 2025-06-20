@@ -241,33 +241,43 @@ impl Renderer {
     }
     
     /// Handle window and input events
-    pub fn handle_event(&mut self, event: &Event<()>) {
+    pub fn handle_event(&mut self, event: &Event<()>) -> Option<KeyCode> {
         match event {
             Event::WindowEvent { event, .. } => self.handle_window_event(event),
-            Event::DeviceEvent { event, .. } => self.handle_device_event(event),
-            _ => (),
+            Event::DeviceEvent { event, .. } => {
+                self.handle_device_event(event);
+                None
+            },
+            _ => None,
         }
     }
     
-    fn handle_window_event(&mut self, event: &WindowEvent) {
+    fn handle_window_event(&mut self, event: &WindowEvent) -> Option<KeyCode> {
         match event {
             WindowEvent::Resized(physical_size) => {
                 self.handle_window_resize(physical_size.width, physical_size.height);
+                None
             }
             WindowEvent::KeyboardInput { event, .. } => {
-                self.handle_keyboard_input(event);
+                self.handle_keyboard_input(event)
             }
-            _ => (),
+            _ => None,
         }
     }
     
-    fn handle_keyboard_input(&mut self, event: &winit::event::KeyEvent) {
+    fn handle_keyboard_input(&mut self, event: &winit::event::KeyEvent) -> Option<KeyCode> {
         if let PhysicalKey::Code(keycode) = event.physical_key {
             self.controller.process_keyboard(keycode, event.state);
             
             if event.state == ElementState::Pressed {
                 self.handle_special_key_press(keycode);
+                // Return key for external handling (e.g., CartPole controls)
+                Some(keycode)
+            } else {
+                None
             }
+        } else {
+            None
         }
     }
     
