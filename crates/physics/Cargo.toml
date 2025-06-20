@@ -11,3 +11,4 @@ bytemuck = { version = "1.15", features = ["derive"] }
 anyhow = "1.0"
 criterion = "0.5"
 ml = { path = "../ml" }
+approx = "0.5"

@@ -25,13 +25,19 @@ pub fn integrate_spheres(spheres: &mut [Sphere], gravity: Vec3, dt: f32) {
 
 /// Integrate box positions and velocities
 pub fn integrate_boxes(boxes: &mut [BoxBody], gravity: Vec3, dt: f32) {
+    use crate::types::BodyType;
+    
     for box_body in boxes.iter_mut() {
-        // Apply gravity force
-        let acceleration = gravity;
+        // Only apply gravity to dynamic bodies
+        if box_body.body_type == BodyType::Dynamic {
+            let acceleration = gravity;
+            box_body.vel += acceleration * dt;
+        }
         
-        // Simple Euler integration for now
-        box_body.vel += acceleration * dt;
-        box_body.pos += box_body.vel * dt;
+        // Update position for dynamic and kinematic bodies (static bodies don't move)
+        if box_body.body_type != BodyType::Static {
+            box_body.pos += box_body.vel * dt;
+        }
         
         // Integrate angular velocity
         if box_body.angular_vel.length() > 0.0 {
@@ -50,15 +56,19 @@ pub fn integrate_boxes(boxes: &mut [BoxBody], gravity: Vec3, dt: f32) {
 
 /// Integrate cylinder positions and velocities
 pub fn integrate_cylinders(cylinders: &mut [Cylinder], gravity: Vec3, dt: f32) {
+    use crate::types::BodyType;
+    
     for cylinder in cylinders.iter_mut() {
-        // Apply gravity force
-        let acceleration = gravity;
+        // SKIP gravity for dynamic cylinders - let the constraint solver handle forces
+        // This prevents joint drift in CartPole systems
+        // (Direct gravity application conflicts with rigid joint constraints)
         
-        // Simple Euler integration for now
-        cylinder.vel += acceleration * dt;
-        cylinder.pos += cylinder.vel * dt;
+        // Update position for dynamic and kinematic bodies (static bodies don't move)
+        if cylinder.body_type != BodyType::Static {
+            cylinder.pos += cylinder.vel * dt;
+        }
         
-        // Integrate angular velocity
+        // Integrate angular velocity and update orientation
         if cylinder.angular_vel.length() > 0.0 {
             let angle = cylinder.angular_vel.length() * dt;
             let axis = cylinder.angular_vel.normalize();

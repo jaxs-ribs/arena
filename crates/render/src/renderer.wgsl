@@ -32,6 +32,7 @@ struct Cylinder {
     radius: f32,
     height: f32,
     _pad0: vec3<f32>,
+    orientation: vec4<f32>,
 }
 
 struct Plane {
@@ -74,10 +75,25 @@ fn sdf_box(p: vec3<f32>, center: vec3<f32>, half_extents: vec3<f32>) -> f32 {
     return length(max(q, vec3<f32>(0.0))) + min(max(q.x, max(q.y, q.z)), 0.0);
 }
 
-// SDF for cylinder - fixed formula
-fn sdf_cylinder(p: vec3<f32>, center: vec3<f32>, radius: f32, height: f32) -> f32 {
+// Quaternion utility functions
+fn quaternion_conjugate(q: vec4<f32>) -> vec4<f32> {
+    return vec4<f32>(-q.x, -q.y, -q.z, q.w);
+}
+
+fn quaternion_rotate_point(p: vec3<f32>, q: vec4<f32>) -> vec3<f32> {
+    let qv = q.xyz;
+    let qw = q.w;
+    return p + 2.0 * cross(qv, cross(qv, p) + qw * p);
+}
+
+// SDF for cylinder with orientation support
+fn sdf_cylinder(p: vec3<f32>, center: vec3<f32>, radius: f32, height: f32, orientation: vec4<f32>) -> f32 {
+    // Transform point to cylinder's local space by applying inverse rotation
     let offset = p - center;
-    let d = vec2<f32>(length(offset.xz), abs(offset.y)) - vec2<f32>(radius, height * 0.5);
+    let local_p = quaternion_rotate_point(offset, quaternion_conjugate(orientation));
+    
+    // Standard cylinder SDF in local space (cylinder aligned with Y-axis)
+    let d = vec2<f32>(length(local_p.xz), abs(local_p.y)) - vec2<f32>(radius, height * 0.5);
     return min(max(d.x, d.y), 0.0) + length(max(d, vec2<f32>(0.0)));
 }
 
@@ -142,7 +158,7 @@ fn scene_sdf_detailed(p: vec3<f32>) -> SceneResult {
     
     // Cylinders
     for (var i = 0u; i < counts.cylinders; i++) {
-        let cylinder_dist = sdf_cylinder(p, cylinders[i].pos, cylinders[i].radius, cylinders[i].height);
+        let cylinder_dist = sdf_cylinder(p, cylinders[i].pos, cylinders[i].radius, cylinders[i].height, cylinders[i].orientation);
         if (cylinder_dist < result.distance) {
             result.distance = cylinder_dist;
             result.object_type = 2u;

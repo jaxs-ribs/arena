@@ -34,12 +34,14 @@ pub struct Camera {
 impl Camera {
     /// Create a new camera with default settings
     pub fn new(width: u32, height: u32) -> Self {
-        // Position camera to view the CartPole scene
-        // CartPoles are at y=0, spread from x=-2 to x=2, z=-1 to z=1
-        let eye = Vec3::new(5.0, 3.0, 8.0);     // Offset to see the scene at an angle
-        let target = Vec3::new(0.0, 1.0, 0.0);  // Look at the middle of the CartPoles
+        // Position camera to view the single CartPole scene
+        // CartPole is at position (0, 0, 0) with cart at y=0.2, pole extending upward
+        let eye = Vec3::new(3.0, 2.0, 3.0);     // Position to see CartPole from an angle
+        let target = Vec3::new(0.0, 1.0, 0.0);  // Look at the CartPole (cart + pole)
         let forward = (target - eye).normalize();
-        let yaw = forward.x.atan2(forward.z);
+        
+        // Calculate yaw and pitch from forward direction
+        let yaw = (-forward.x).atan2(-forward.z);  // Corrected calculation
         let pitch = forward.y.asin();
 
         Self {

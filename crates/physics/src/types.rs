@@ -429,6 +429,17 @@ pub struct JointParams {
     pub _pad: [f32; 3],
 }
 
+/// Body type determines how physics affects the body
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum BodyType {
+    /// Dynamic body affected by gravity and forces
+    Dynamic,
+    /// Kinematic body controlled by user, not affected by gravity
+    Kinematic,
+    /// Static body that never moves
+    Static,
+}
+
 #[derive(Copy, Clone, Debug)]
 /// A dynamic, axis-aligned bounding box (AABB) used for simplified
 /// collision detection.
@@ -447,6 +458,8 @@ pub struct BoxBody {
     pub angular_vel: Vec3,
     /// Material properties for collision response.
     pub material: Material,
+    /// Body type (Dynamic, Kinematic, Static)
+    pub body_type: BodyType,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -468,6 +481,8 @@ pub struct Cylinder {
     pub angular_vel: Vec3,
     /// Material properties for collision response.
     pub material: Material,
+    /// Body type (Dynamic, Kinematic, Static)
+    pub body_type: BodyType,
 }
 
 #[repr(C)]

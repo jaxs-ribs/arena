@@ -81,7 +81,10 @@ pub struct CylinderGpu {
     pub radius: f32,
     /// Height of the cylinder
     pub height: f32,
+    /// Padding for alignment
     pub _pad0: [f32; 3],
+    /// Orientation quaternion (x, y, z, w)
+    pub orientation: [f32; 4],
 }
 
 impl From<&Cylinder> for CylinderGpu {
@@ -91,6 +94,7 @@ impl From<&Cylinder> for CylinderGpu {
             radius: cylinder.radius,
             height: cylinder.half_height * 2.0,
             _pad0: [0.0; 3],
+            orientation: cylinder.orientation,
         }
     }
 }

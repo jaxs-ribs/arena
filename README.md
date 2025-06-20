@@ -69,16 +69,15 @@ cargo doc --workspace --no-deps && open target/doc/jaxs/index.html
 
 ## Visualizing the simulation
 
-The project includes a minimal renderer based on `wgpu`. To see a live sphere
-falling under gravity, build the `jaxs` crate with the `render` feature and
-pass the `--draw` flag to the binary:
+The project includes a renderer based on `wgpu` for visualizing physics simulations. 
+By default, it runs the CartPole gym demo. To run with rendering:
 
 ```bash
-cargo run -p jaxs --features render -- --draw
+cargo run --release --features render
 ```
 
-This will open a window and draw the sphere positions after each simulation
-step.
+This will open a window showing the CartPole environment with interactive controls.
+The simulation runs at 60Hz with real-time physics updates.
 
 
 ## JSON Schema
@@ -86,23 +85,43 @@ step.
 The file [docs/README.md](docs/README.md) describes the JSON format used to
 construct creature bodies.
 
-## Stick Balancing Environment (WIP)
+## CartPole Environment
 
-The repository now contains a minimal physics setup for a classic control task:
-balancing a stick on a moving cart. The `StickBalanceEnv` in the `ml` crate
-exposes an `Env` implementation (`ml::env::Env`) backed by the physics engine. A new test file
-exercises this environment by stepping it with zero actions and verifying that
-the episode terminates once the pole falls over. No learning happens yet—this is
-purely a skeleton for future reinforcement learning experiments.
+The repository includes a full CartPole reinforcement learning environment with:
 
-The command `cargo test -p ml --test 07_stick_balance_env` will run this test specifically.
-Another test, `cargo test -p ml --test 08_cart_pole`, starts the pole at a slight angle
-and confirms it falls over when no control is applied.
-`cargo test -p ml --test 09_cart_pole_control` verifies that applying a horizontal
-force moves the cart. Finally the ignored test
-`cargo test -p ml --test 10_cart_pole_train -- --ignored` runs a small PPO
-training loop that learns a policy. The test also verifies the trained policy
-can keep the pole upright for an entire episode.
+- **Physics-based simulation**: Revolute joint constraints connecting carts and poles
+- **2D motion constraints**: CartPoles are constrained to move in the X-Y plane only
+- **Configurable parameters**: Cart mass, pole length/mass, failure angles, position limits
+- **Grid layout**: Create multiple CartPoles for parallel training
+- **Interactive demo**: Press 'M' to enable manual control, use arrow keys to balance poles
+
+### Running the CartPole Demo
+
+```bash
+# Run the interactive CartPole gym with 6 CartPoles
+cargo run --release --features render
+
+# Controls:
+# M - Toggle manual control mode
+# 1-6 - Select CartPole (when manual control is active)
+# Left/Right arrows - Apply force to selected CartPole
+# Space - Stop applying force
+# R - Reset all CartPoles
+# WASD - Move camera
+# Mouse - Look around
+```
+
+### Testing CartPole Physics
+
+```bash
+# Run CartPole-specific tests
+cargo test -p physics cartpole
+
+# Run ML environment tests
+cargo test -p ml --test 07_stick_balance_env
+cargo test -p ml --test 08_cart_pole
+cargo test -p ml --test 09_cart_pole_control
+cargo test -p ml --test 10_cart_pole_train -- --ignored  # PPO training
 
 ## Status
 

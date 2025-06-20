@@ -175,24 +175,23 @@ fn add_sphere_at_position(simulation: &mut PhysicsSim, position: Vec3) {
 fn create_cartpole_scene(simulation: &mut PhysicsSim) -> CartPoleGrid {
     tracing::info!("Creating CartPole gym scene...");
     
-    // Add ground plane first
-    add_ground_plane(simulation);
+    // No ground plane - carts will be kinematic (controlled, not falling)
     
     // Configure cartpoles
     let config = CartPoleConfig {
         cart_size: Vec3::new(0.4, 0.2, 0.2),
         cart_mass: 1.0,
         pole_length: 1.5,
-        pole_radius: 0.1,  // Increased from 0.05 for better visibility
+        pole_radius: 0.05,  // Thinner pole as requested
         pole_mass: 0.1,
-        initial_angle: 0.05, // Small random perturbation
+        initial_angle: 0.1, // ~5.7 degrees initial angle to ensure falling
         force_magnitude: 10.0,
         failure_angle: 0.5, // ~28 degrees
         position_limit: 3.0,
     };
     
-    // Create a 2x3 grid of cartpoles with 2.0 spacing (within 3.0 position limit)
-    let grid = CartPoleGrid::new(simulation, 2, 3, 2.0, config);
+    // Create a single CartPole for debugging and isolation
+    let grid = CartPoleGrid::new(simulation, 1, 1, 1.0, config);
     
     tracing::info!("Created {} cartpoles in {}x{} grid", 
                   grid.cartpoles.len(), grid.grid_size.0, grid.grid_size.1);
@@ -521,26 +520,12 @@ impl ManualControl {
     }
 }
 
-/// Update CartPole demo with test actions
+/// Update CartPole demo with NO automatic actions - only manual control
 fn update_cartpole_demo(grid: &mut CartPoleGrid, sim: &mut PhysicsSim, time: f32) {
-    // Create test actions for each cartpole
-    let mut actions = Vec::new();
+    // NO automatic actions - carts should be static unless user provides input
+    let actions = vec![0.0; grid.cartpoles.len()];
     
-    for (i, cartpole) in grid.cartpoles.iter().enumerate() {
-        // Different test patterns for each cartpole
-        let action = match i {
-            0 => (time * 2.0).sin(),           // Oscillating
-            1 => if time.sin() > 0.0 { 1.0 } else { -1.0 }, // Bang-bang control
-            2 => 0.0,                          // No control (should fall)
-            3 => (time * 0.5).cos() * 0.5,    // Slow oscillation
-            4 => if cartpole.get_pole_angle(sim) > 0.0 { -0.8 } else { 0.8 }, // Simple feedback
-            5 => ((time * 3.0).sin() + (time * 1.5).cos()) * 0.7, // Complex pattern
-            _ => 0.0,
-        };
-        actions.push(action);
-    }
-    
-    // Apply actions
+    // Apply zero actions (no forces)
     grid.apply_actions(sim, &actions);
     
     // Check and reset failures

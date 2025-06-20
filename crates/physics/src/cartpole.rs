@@ -32,14 +32,14 @@ pub struct CartPoleConfig {
 impl Default for CartPoleConfig {
     fn default() -> Self {
         Self {
-            cart_size: Vec3::new(0.5, 0.25, 0.25),
+            cart_size: Vec3::new(0.6, 0.1, 0.3),  // Much thinner cart: wider but lower height
             cart_mass: 1.0,
             pole_length: 2.0,
             pole_radius: 0.05,
             pole_mass: 0.1,
             initial_angle: 0.05, // Small initial perturbation
             force_magnitude: 10.0,
-            failure_angle: 0.5, // ~28.6 degrees
+            failure_angle: 1.4, // ~80 degrees (close to horizontal)
             position_limit: 4.0, // 4 meters from center
         }
     }
@@ -57,6 +57,8 @@ pub struct CartPole {
     pub config: CartPoleConfig,
     /// Initial position for reset
     initial_position: Vec3,
+    /// Initial Z position for 2D constraints (preserve grid layout)
+    pub initial_z: f32,
     /// Whether the cartpole has failed (fallen over or out of bounds)
     pub failed: bool,
 }
@@ -64,30 +66,36 @@ pub struct CartPole {
 impl CartPole {
     /// Create a new CartPole entity in the simulation
     pub fn new(sim: &mut PhysicsSim, position: Vec3, config: CartPoleConfig) -> Self {
-        // Create cart
+        // Create cart as kinematic body - preserve Z position for grid layout
         let cart_pos = Vec3::new(position.x, position.y + config.cart_size.y, position.z);
-        let cart_idx = sim.add_box(cart_pos, config.cart_size, Vec3::ZERO);
+        let cart_idx = sim.add_box_with_type(cart_pos, config.cart_size, Vec3::ZERO, crate::types::BodyType::Kinematic);
         sim.boxes[cart_idx].mass = config.cart_mass;
+        
+        // Set cart material properties
+        sim.boxes[cart_idx].material.friction = 0.8;
+        sim.boxes[cart_idx].material.restitution = 0.0;
         
         // Calculate joint position (top of cart)
         let joint_anchor_on_cart = Vec3::new(0.0, config.cart_size.y, 0.0);
         let joint_world_pos = cart_pos + joint_anchor_on_cart;
         
-        // Position pole with initial angle
+        // Position pole with initial angle (in X-Y plane only)
         let pole_half_height = config.pole_length / 2.0;
         let pole_offset_x = config.initial_angle.sin() * pole_half_height;
         let pole_offset_y = config.initial_angle.cos() * pole_half_height;
         let pole_pos = Vec3::new(
             joint_world_pos.x + pole_offset_x,
             joint_world_pos.y + pole_offset_y,
-            joint_world_pos.z
+            0.0  // Always at z=0 for 2D constraint
         );
         
-        let pole_idx = sim.add_cylinder(
+        // Create pole as dynamic body (affected by gravity)
+        let pole_idx = sim.add_cylinder_with_type(
             pole_pos,
             config.pole_radius,
             pole_half_height,
-            Vec3::ZERO
+            Vec3::ZERO,
+            crate::types::BodyType::Dynamic
         );
         sim.cylinders[pole_idx].mass = config.pole_mass;
         
@@ -96,7 +104,7 @@ impl CartPole {
             0, cart_idx as u32,  // Box type
             2, pole_idx as u32,  // Cylinder type
             joint_world_pos,
-            Vec3::new(0.0, 0.0, 1.0) // Rotate around Z axis
+            Vec3::new(0.0, 0.0, 1.0) // Rotate around Z axis (perpendicular to X-Y plane)
         );
         
         Self {
@@ -105,6 +113,7 @@ impl CartPole {
             joint_idx,
             config,
             initial_position: position,
+            initial_z: position.z,  // Store initial Z for 2D constraints
             failed: false,
         }
     }
@@ -216,25 +225,43 @@ impl CartPoleGrid {
     ) -> Self {
         let mut cartpoles = Vec::new();
         
-        // Add ground plane
-        sim.add_plane(Vec3::new(0.0, 1.0, 0.0), 0.0, Vec2::new(50.0, 50.0));
-        
-        // Calculate grid offsets to center it
+        // Calculate grid offsets to center it, ensuring we stay within position limits
         let grid_width = (cols as f32 - 1.0) * spacing;
         let grid_depth = (rows as f32 - 1.0) * spacing;
+        
+        // Ensure grid doesn't exceed position limits with safety margin
+        let safety_margin = 0.5;
+        let max_allowed_width = (config.position_limit - safety_margin) * 2.0;
+        
+        if grid_width > max_allowed_width {
+            panic!("Grid too wide for position limits: width={:.2}, max_allowed={:.2}. Reduce spacing or number of columns.", 
+                   grid_width, max_allowed_width);
+        }
+        
         let start_x = -grid_width / 2.0;
         let start_z = -grid_depth / 2.0;
         
-        // Create cartpoles in grid
-        for row in 0..rows {
-            for col in 0..cols {
-                let x = start_x + col as f32 * spacing;
-                let z = start_z + row as f32 * spacing;
-                let position = Vec3::new(x, 0.0, z);
-                
-                let cartpole = CartPole::new(sim, position, config.clone());
-                cartpoles.push(cartpole);
-            }
+        // Create cartpoles in a single line (Z=0) to respect 2D constraints
+        // Total count = rows * cols, arrange in a line along X axis
+        let total_count = rows * cols;
+        let total_width = (total_count as f32 - 1.0) * spacing;
+        let line_start_x = -total_width / 2.0;
+        
+        // Ensure line fits within position limits
+        let safety_margin = 0.5;
+        let max_allowed_width = (config.position_limit - safety_margin) * 2.0;
+        
+        if total_width > max_allowed_width {
+            panic!("Line of CartPoles too wide for position limits: width={:.2}, max_allowed={:.2}. Reduce spacing or total count.", 
+                   total_width, max_allowed_width);
+        }
+        
+        for i in 0..total_count {
+            let x = line_start_x + i as f32 * spacing;
+            let position = Vec3::new(x, 0.0, 0.0);
+            
+            let cartpole = CartPole::new(sim, position, config.clone());
+            cartpoles.push(cartpole);
         }
         
         Self {

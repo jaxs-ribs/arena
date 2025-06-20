@@ -107,6 +107,7 @@ mod tests {
             orientation: [0.0, 0.0, 0.0, 1.0],
             angular_vel: Vec3::ZERO,
             material: Material::default(),
+            body_type: crate::types::BodyType::Dynamic,
         };
         
         let plane = Plane {

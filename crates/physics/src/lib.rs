@@ -47,6 +47,9 @@ pub mod cartpole;
 pub mod types;
 pub mod simulation;
 
+#[cfg(test)]
+mod cartpole_test;
+
 // Internal implementation modules
 mod collision;
 mod gpu_executor;
