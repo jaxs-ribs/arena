@@ -32,15 +32,15 @@ pub struct CartPoleConfig {
 impl Default for CartPoleConfig {
     fn default() -> Self {
         Self {
-            cart_size: Vec3::new(0.6, 0.1, 0.3),  // Much thinner cart: wider but lower height
+            cart_size: Vec3::new(0.4, 0.08, 0.2),  // Smaller, more nimble cart
             cart_mass: 1.0,
-            pole_length: 2.0,
-            pole_radius: 0.05,
-            pole_mass: 0.1,
-            initial_angle: 0.05, // Small initial perturbation
-            force_magnitude: 10.0,
-            failure_angle: 1.4, // ~80 degrees (close to horizontal)
-            position_limit: 4.0, // 4 meters from center
+            pole_length: 3.0,    // Longer pole - easier to balance
+            pole_radius: 0.04,   // Slightly thinner
+            pole_mass: 0.05,     // Much lighter - less inertia, easier to control
+            initial_angle: 0.02, // Very small initial perturbation
+            force_magnitude: 15.0, // More force available
+            failure_angle: 1.57, // 90 degrees - only fail when completely horizontal
+            position_limit: 8.0, // Much more room to move
         }
     }
 }
@@ -61,6 +61,10 @@ pub struct CartPole {
     pub initial_z: f32,
     /// Whether the cartpole has failed (fallen over or out of bounds)
     pub failed: bool,
+    /// Target velocity for smooth control (m/s)
+    target_velocity: f32,
+    /// Current velocity for smooth transitions
+    current_velocity: f32,
 }
 
 impl CartPole {
@@ -126,13 +130,38 @@ impl CartPole {
             initial_position: position,
             initial_z: position.z,  // Store initial Z for 2D constraints
             failed: false,
+            target_velocity: 0.0,
+            current_velocity: 0.0,
         }
     }
     
     /// Apply force to the cart (-1.0 = left, 0.0 = none, 1.0 = right)
-    pub fn apply_force(&self, sim: &mut PhysicsSim, action: f32) {
-        let force = action.clamp(-1.0, 1.0) * self.config.force_magnitude;
-        sim.set_force(self.cart_idx, [force, 0.0]);
+    pub fn apply_force(&mut self, sim: &mut PhysicsSim, action: f32) {
+        // For kinematic bodies, we control velocity directly
+        // Map action to target velocity for responsive control
+        let max_speed = 6.0; // m/s - faster for better control with longer pole
+        self.target_velocity = action.clamp(-1.0, 1.0) * max_speed;
+        
+        // Smooth acceleration/deceleration for game-like feel
+        let acceleration = 30.0; // m/s² - very snappy response
+        let dt = sim.params.dt;
+        
+        // Calculate velocity change with acceleration limit
+        let velocity_diff = self.target_velocity - self.current_velocity;
+        let max_velocity_change = acceleration * dt;
+        
+        if velocity_diff.abs() <= max_velocity_change {
+            // Can reach target velocity this frame
+            self.current_velocity = self.target_velocity;
+        } else {
+            // Apply acceleration towards target
+            self.current_velocity += velocity_diff.signum() * max_velocity_change;
+        }
+        
+        // Set the velocity directly on the kinematic cart
+        sim.boxes[self.cart_idx].vel.x = self.current_velocity;
+        sim.boxes[self.cart_idx].vel.y = 0.0;
+        sim.boxes[self.cart_idx].vel.z = 0.0;
     }
     
     /// Check if the cartpole has failed (fallen over or out of bounds)
@@ -184,6 +213,8 @@ impl CartPole {
     /// Reset the cartpole to its initial state
     pub fn reset(&mut self, sim: &mut PhysicsSim) {
         self.failed = false;
+        self.target_velocity = 0.0;
+        self.current_velocity = 0.0;
         
         // Reset cart
         let cart_pos = Vec3::new(
@@ -294,8 +325,8 @@ impl CartPoleGrid {
     }
     
     /// Apply actions to all cartpoles
-    pub fn apply_actions(&self, sim: &mut PhysicsSim, actions: &[f32]) {
-        for (i, cartpole) in self.cartpoles.iter().enumerate() {
+    pub fn apply_actions(&mut self, sim: &mut PhysicsSim, actions: &[f32]) {
+        for (i, cartpole) in self.cartpoles.iter_mut().enumerate() {
             if i < actions.len() {
                 cartpole.apply_force(sim, actions[i]);
             }

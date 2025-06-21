@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 compute = { path = "../compute" }
 bytemuck = { version = "1.15", features = ["derive"] }
+glam = "0.27"
 
 [dev-dependencies]
 anyhow = "1.0"

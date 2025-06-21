@@ -97,6 +97,26 @@ impl From<Vec3> for [f32; 3] {
     }
 }
 
+impl From<glam::Vec3> for Vec3 {
+    fn from(v: glam::Vec3) -> Self {
+        Self {
+            x: v.x,
+            y: v.y,
+            z: v.z,
+        }
+    }
+}
+
+impl From<Vec3> for glam::Vec3 {
+    fn from(v: Vec3) -> Self {
+        Self {
+            x: v.x,
+            y: v.y,
+            z: v.z,
+        }
+    }
+}
+
 // Arithmetic operations for Vec3
 impl std::ops::Add for Vec3 {
     type Output = Self;

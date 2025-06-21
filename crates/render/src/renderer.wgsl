@@ -29,9 +29,10 @@ struct Box {
 
 struct Cylinder {
     pos: vec3<f32>,
+    _pad_pos: f32,
     radius: f32,
     height: f32,
-    _pad0: vec3<f32>,
+    _pad_dims: vec2<f32>,
     orientation: vec4<f32>,
 }
 

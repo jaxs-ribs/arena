@@ -241,7 +241,7 @@ impl Renderer {
     }
     
     /// Handle window and input events
-    pub fn handle_event(&mut self, event: &Event<()>) -> Option<KeyCode> {
+    pub fn handle_event(&mut self, event: &Event<()>) -> Option<(KeyCode, ElementState)> {
         match event {
             Event::WindowEvent { event, .. } => self.handle_window_event(event),
             Event::DeviceEvent { event, .. } => {
@@ -252,10 +252,19 @@ impl Renderer {
         }
     }
     
-    fn handle_window_event(&mut self, event: &WindowEvent) -> Option<KeyCode> {
+    fn handle_window_event(&mut self, event: &WindowEvent) -> Option<(KeyCode, ElementState)> {
         match event {
+            WindowEvent::CloseRequested => {
+                // The window should close. This is handled by the event loop.
+                None
+            }
             WindowEvent::Resized(physical_size) => {
                 self.handle_window_resize(physical_size.width, physical_size.height);
+                None
+            }
+            WindowEvent::ScaleFactorChanged { .. } => {
+                let new_inner_size = self.window.inner_size();
+                self.handle_window_resize(new_inner_size.width, new_inner_size.height);
                 None
             }
             WindowEvent::KeyboardInput { event, .. } => {
@@ -265,17 +274,13 @@ impl Renderer {
         }
     }
     
-    fn handle_keyboard_input(&mut self, event: &winit::event::KeyEvent) -> Option<KeyCode> {
+    fn handle_keyboard_input(&mut self, event: &winit::event::KeyEvent) -> Option<(KeyCode, ElementState)> {
         if let PhysicalKey::Code(keycode) = event.physical_key {
-            self.controller.process_keyboard(keycode, event.state);
-            
             if event.state == ElementState::Pressed {
                 self.handle_special_key_press(keycode);
-                // Return key for external handling (e.g., CartPole controls)
-                Some(keycode)
-            } else {
-                None
             }
+            self.controller.process_keyboard(keycode, event.state);
+            Some((keycode, event.state))
         } else {
             None
         }

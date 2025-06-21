@@ -24,6 +24,7 @@ use crate::integrator::{
 };
 use crate::gpu_executor::execute_gpu_step;
 use compute::ComputeBackend;
+use glam::Quat;
 use std::sync::Arc;
 
 /// Physics simulation error types.
@@ -390,10 +391,10 @@ impl PhysicsSim {
         cylinder_idx: usize, 
         joint: &RevoluteJoint
     ) {
-        // Get the FIXED joint position in world space (from kinematic cart)
+        // Get the joint position in world space
         let joint_world_pos = self.boxes[box_idx].pos + joint.anchor_a;
         
-        // Calculate physics for natural pendulum motion FIRST
+        // Calculate current state
         let joint_to_pole_center = self.cylinders[cylinder_idx].pos - joint_world_pos;
         let distance = joint_to_pole_center.length();
         
@@ -401,31 +402,25 @@ impl PhysicsSim {
             // Current pole angle from vertical (0 = up, π/2 = horizontal)
             let pole_angle = joint_to_pole_center.x.atan2(joint_to_pole_center.y);
             
-            // Apply gravitational torque: τ = m * g * L * sin(θ)
-            // This creates the classic inverted pendulum dynamics
+            // Physics parameters
             let gravity_magnitude = self.params.gravity.length(); // |g| = 9.81
             let mass = self.cylinders[cylinder_idx].mass;
-            let lever_arm = distance; // Distance from joint to center of mass
+            let pole_length = self.cylinders[cylinder_idx].half_height * 2.0;
+            let lever_arm = pole_length / 2.0; // Distance from joint to center of mass
             
-            // Torque magnitude - gravity tries to tip the pole over
-            let torque_magnitude = mass * gravity_magnitude * lever_arm * pole_angle.sin();
-            
-            // Direction: positive torque when pole tilts right (positive x), negative when left
-            let torque_direction = if pole_angle >= 0.0 { 1.0 } else { -1.0 };
-            let applied_torque = torque_magnitude * torque_direction;
+            // Only gravitational torque for now: τ = m * g * L * sin(θ)
+            let gravity_torque = mass * gravity_magnitude * lever_arm * pole_angle.sin();
             
             // Moment of inertia for rod rotating about its end: I = (1/3) * m * L^2
-            let pole_length = self.cylinders[cylinder_idx].half_height * 2.0;
             let moment_of_inertia = (1.0 / 3.0) * mass * pole_length * pole_length;
             
             // Angular acceleration: α = τ / I
-            let angular_acceleration = applied_torque / moment_of_inertia;
+            let angular_acceleration = gravity_torque / moment_of_inertia;
             
             // Update angular velocity around Z-axis (2D rotation)
             self.cylinders[cylinder_idx].angular_vel.z += angular_acceleration * self.params.dt;
             
-            // Calculate linear velocity from angular motion
-            // For rigid body rotation: v = ω × r
+            // Calculate linear velocity from angular motion only
             let angular_velocity = self.cylinders[cylinder_idx].angular_vel.z;
             let tangential_velocity = Vec3::new(
                 -angular_velocity * joint_to_pole_center.y,  // tangent in x direction
@@ -433,17 +428,17 @@ impl PhysicsSim {
                 0.0
             );
             
-            // Set pole's linear velocity to match rotation around joint
+            // Set pole's velocity (pure rotation for now)
             self.cylinders[cylinder_idx].vel = tangential_velocity;
             
-            // Light damping for numerical stability
-            self.cylinders[cylinder_idx].angular_vel.z *= 0.999;
+            // Very light damping for numerical stability
+            self.cylinders[cylinder_idx].angular_vel.z *= 0.9995;
             
-            // Optional: Debug pendulum motion (uncomment for debugging)
-            // if angular_acceleration.abs() > 0.1 {
-            //     println!("🟢 Pendulum: θ={:.3}rad ({:.1}°), τ={:.3}, α={:.3}, ω={:.3}", 
-            //              pole_angle, pole_angle.to_degrees(), applied_torque, 
-            //              angular_acceleration, angular_velocity);
+            // Debug pendulum motion with cart influence
+            // if cart_velocity.x.abs() > 0.1 || angular_acceleration.abs() > 0.5 {
+            //     println!("🎯 CartPole: θ={:.2}° cart_v={:.2} cart_τ={:.3} grav_τ={:.3} total_τ={:.3}", 
+            //              pole_angle.to_degrees(), cart_velocity.x, cart_torque, 
+            //              gravity_torque, total_torque);
             // }
         } else {
             // If pole is too close to joint, stop all motion
@@ -451,30 +446,19 @@ impl PhysicsSim {
             self.cylinders[cylinder_idx].angular_vel = Vec3::ZERO;
         }
         
-        // AFTER physics calculation, enforce the constraint that the joint anchor stays fixed
-        // But PRESERVE the calculated angular position and velocity
-        let current_pole_anchor = self.cylinders[cylinder_idx].pos + joint.anchor_b;
-        let anchor_error = current_pole_anchor - joint_world_pos;
-        let anchor_error_magnitude = anchor_error.length();
-        
-        // If joint has drifted, apply a correction but maintain the rotation
-        if anchor_error_magnitude > 0.0001 {
-            // Store current distance and angle from joint
-            let current_distance = (self.cylinders[cylinder_idx].pos - joint_world_pos).length();
-            let current_angle = {
-                let vec = self.cylinders[cylinder_idx].pos - joint_world_pos;
-                vec.x.atan2(vec.y)
-            };
-            
-            // Place pole at correct distance and angle from joint
-            let corrected_pole_pos = joint_world_pos + Vec3::new(
-                current_distance * current_angle.sin(),
-                current_distance * current_angle.cos(),
-                0.0
-            );
-            
-            self.cylinders[cylinder_idx].pos = corrected_pole_pos;
-        }
+        // AFTER physics calculation, enforce the constraint that the joint anchor stays fixed.
+        // The anchor on the pole (b) is in its local space, so we must rotate it.
+        let pole_orientation = Quat::from_array(self.cylinders[cylinder_idx].orientation);
+        let world_anchor_b =
+            self.cylinders[cylinder_idx].pos + pole_orientation.mul_vec3(joint.anchor_b.into()).into();
+
+        let anchor_error = world_anchor_b - joint_world_pos;
+
+        // Correct pole's position to close the joint gap.
+        self.cylinders[cylinder_idx].pos -= anchor_error;
+
+        // Explicitly constrain the pole to the 2D plane.
+        self.cylinders[cylinder_idx].pos.z = 0.0;
         
         // CRITICAL FIX: Ensure cylinder orientation matches the pole angle
         // Calculate the current pole angle from the position
@@ -483,7 +467,10 @@ impl PhysicsSim {
             let final_pole_angle = final_joint_to_pole.x.atan2(final_joint_to_pole.y);
             
             // Convert pole angle to quaternion rotation around Z-axis
-            let half_angle = final_pole_angle * 0.5;
+            // Note: We need negative angle because positive pole angle (tilting towards +X)
+            // requires negative Z rotation to tilt a Y-aligned cylinder correctly
+            let rotation_angle = -final_pole_angle;
+            let half_angle = rotation_angle * 0.5;
             let sin_half = half_angle.sin();
             let cos_half = half_angle.cos();
             

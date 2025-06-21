@@ -77,12 +77,12 @@ impl From<&BoxBody> for BoxGpu {
 pub struct CylinderGpu {
     /// Cylinder centre position
     pub pos: [f32; 3],
+    pub _pad_pos: f32,
     /// Cylinder radius
     pub radius: f32,
     /// Height of the cylinder
     pub height: f32,
-    /// Padding for alignment
-    pub _pad0: [f32; 3],
+    pub _pad_dims: [f32; 2],
     /// Orientation quaternion (x, y, z, w)
     pub orientation: [f32; 4],
 }
@@ -91,9 +91,10 @@ impl From<&Cylinder> for CylinderGpu {
     fn from(cylinder: &Cylinder) -> Self {
         Self {
             pos: cylinder.pos.into(),
+            _pad_pos: 0.0,
             radius: cylinder.radius,
             height: cylinder.half_height * 2.0,
-            _pad0: [0.0; 3],
+            _pad_dims: [0.0; 2],
             orientation: cylinder.orientation,
         }
     }

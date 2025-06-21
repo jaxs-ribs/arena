@@ -27,7 +27,7 @@ use physics::{
     PhysicsSim, CartPoleGrid, CartPoleConfig,
 };
 use std::time::{Duration, Instant};
-use winit::event::{Event, WindowEvent};
+use winit::event::{Event, WindowEvent, ElementState};
 use winit::event_loop::ControlFlow;
 use winit::keyboard::KeyCode;
 
@@ -39,6 +39,8 @@ const PHYSICS_UPDATE_FREQUENCY: f32 = 60.0;
 
 // Rendering constants
 const TARGET_FRAMES_PER_SECOND: f32 = 60.0;
+
+// Manual control constants
 
 // Logging constants
 const FRAMES_BETWEEN_PROGRESS_LOGS: usize = 50;
@@ -185,12 +187,13 @@ fn create_cartpole_scene(simulation: &mut PhysicsSim) -> CartPoleGrid {
         pole_radius: 0.05,  // Thinner pole as requested
         pole_mass: 0.1,
         initial_angle: 0.1, // ~5.7 degrees initial angle to ensure falling
-        force_magnitude: 10.0,
-        failure_angle: 0.5, // ~28 degrees
+        force_magnitude: 2.0, // Reduced for finer control
+        failure_angle: 1.5, // ~86 degrees, allows falling nearly flat
         position_limit: 3.0,
     };
     
     // Create a single CartPole for debugging and isolation
+    // Single CartPole for easier manual control
     let grid = CartPoleGrid::new(simulation, 1, 1, 1.0, config);
     
     tracing::info!("Created {} cartpoles in {}x{} grid", 
@@ -247,9 +250,9 @@ fn run_with_rendering(sim_and_grid: (PhysicsSim, Option<CartPoleGrid>)) -> Resul
         elwt.set_control_flow(ControlFlow::Poll);
         
         // Let renderer handle input events and get key presses
-        if let Some(keycode) = renderer.handle_event(&event) {
+        if let Some((keycode, state)) = renderer.handle_event(&event) {
             if let Some(ref mut grid) = cartpole_grid {
-                manual_control.handle_key(keycode, grid, &mut sim);
+                manual_control.handle_key(keycode, state, grid, &mut sim);
             }
         }
 
@@ -446,51 +449,54 @@ impl ManualControl {
         self.active
     }
     
-    fn handle_key(&mut self, keycode: KeyCode, grid: &mut CartPoleGrid, sim: &mut PhysicsSim) {
+    fn handle_key(&mut self, keycode: KeyCode, state: ElementState, grid: &mut CartPoleGrid, sim: &mut PhysicsSim) {
+        let is_pressed = state == ElementState::Pressed;
+
         match keycode {
             // Toggle manual control
             KeyCode::KeyM => {
-                self.active = !self.active;
-                self.action = 0.0;
-                tracing::info!("Manual control: {}", if self.active { "ON" } else { "OFF" });
-                if self.active {
-                    tracing::info!("Use number keys 1-6 to select cartpole, arrow keys to control");
+                if is_pressed {
+                    self.active = !self.active;
+                    self.action = 0.0;
+                    tracing::info!("Manual control: {}", if self.active { "ON" } else { "OFF" });
+                    if self.active {
+                        tracing::info!("Use number keys 1-6 to select cartpole, arrow keys to control");
+                    }
                 }
             }
             
             // Select cartpole
-            KeyCode::Digit1 => self.select_cartpole(0, grid.cartpoles.len()),
-            KeyCode::Digit2 => self.select_cartpole(1, grid.cartpoles.len()),
-            KeyCode::Digit3 => self.select_cartpole(2, grid.cartpoles.len()),
-            KeyCode::Digit4 => self.select_cartpole(3, grid.cartpoles.len()),
-            KeyCode::Digit5 => self.select_cartpole(4, grid.cartpoles.len()),
-            KeyCode::Digit6 => self.select_cartpole(5, grid.cartpoles.len()),
+            KeyCode::Digit1 => if is_pressed { self.select_cartpole(0, grid.cartpoles.len()) },
+            KeyCode::Digit2 => if is_pressed { self.select_cartpole(1, grid.cartpoles.len()) },
+            KeyCode::Digit3 => if is_pressed { self.select_cartpole(2, grid.cartpoles.len()) },
+            KeyCode::Digit4 => if is_pressed { self.select_cartpole(3, grid.cartpoles.len()) },
+            KeyCode::Digit5 => if is_pressed { self.select_cartpole(4, grid.cartpoles.len()) },
+            KeyCode::Digit6 => if is_pressed { self.select_cartpole(5, grid.cartpoles.len()) },
             
             // Control actions
             KeyCode::ArrowLeft => {
                 if self.active {
-                    self.action = -1.0;
-                    tracing::info!("CartPole {}: Force LEFT", self.selected_cartpole);
+                    self.action = if is_pressed { -1.0 } else { 0.0 };
                 }
             }
             KeyCode::ArrowRight => {
                 if self.active {
-                    self.action = 1.0;
-                    tracing::info!("CartPole {}: Force RIGHT", self.selected_cartpole);
+                    self.action = if is_pressed { 1.0 } else { 0.0 };
                 }
             }
             KeyCode::Space => {
-                if self.active {
+                if self.active && is_pressed {
                     self.action = 0.0;
-                    tracing::info!("CartPole {}: Force STOP", self.selected_cartpole);
                 }
             }
             
             // Reset all
             KeyCode::KeyR => {
-                tracing::info!("Resetting all cartpoles");
-                for cartpole in grid.cartpoles.iter_mut() {
-                    cartpole.reset(sim);
+                if is_pressed {
+                    tracing::info!("Resetting all cartpoles");
+                    for cartpole in grid.cartpoles.iter_mut() {
+                        cartpole.reset(sim);
+                    }
                 }
             }
             
@@ -510,13 +516,10 @@ impl ManualControl {
             return;
         }
         
-        // Apply manual control to selected cartpole
-        let mut actions = vec![0.0; grid.cartpoles.len()];
-        if self.selected_cartpole < actions.len() {
-            actions[self.selected_cartpole] = self.action;
+        // Use the CartPole's apply_force method for proper velocity control
+        if self.selected_cartpole < grid.cartpoles.len() {
+            grid.cartpoles[self.selected_cartpole].apply_force(sim, self.action);
         }
-        
-        grid.apply_actions(sim, &actions);
         
         // Check and reset failures
         let failed_indices = grid.check_and_reset_failures(sim);
