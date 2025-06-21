@@ -90,7 +90,7 @@ fn test_pole_angle_changes_over_time() {
     };
     
     // Single CartPole at safe position
-    let cartpole = physics::CartPole::new(&mut sim, Vec3::new(0.0, 0.0, 0.0), config);
+    let mut cartpole = physics::CartPole::new(&mut sim, Vec3::new(0.0, 0.0, 0.0), config);
     
     let initial_angle = cartpole.get_pole_angle(&sim);
     
@@ -121,7 +121,7 @@ fn test_cart_position_updates_correctly() {
     let config = CartPoleConfig::default();
     
     // CartPole at origin
-    let cartpole = physics::CartPole::new(&mut sim, Vec3::ZERO, config);
+    let mut cartpole = physics::CartPole::new(&mut sim, Vec3::ZERO, config);
     
     let initial_x = sim.boxes[cartpole.cart_idx].pos.x;
     
@@ -185,7 +185,7 @@ fn test_revolute_joint_is_functioning() {
     sim.add_plane(Vec3::new(0.0, 1.0, 0.0), 0.0, Vec2::new(50.0, 50.0));
     
     let config = CartPoleConfig::default();
-    let cartpole = physics::CartPole::new(&mut sim, Vec3::ZERO, config);
+    let mut cartpole = physics::CartPole::new(&mut sim, Vec3::ZERO, config);
     
     // Get initial joint anchor positions
     let joint = &sim.revolute_joints[cartpole.joint_idx];

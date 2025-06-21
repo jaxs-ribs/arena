@@ -24,7 +24,7 @@ fn test_revolute_joint_rigidity() {
         position_limit: 3.0,
     };
     
-    let cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
+    let mut cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
     
     println!("\n=== Revolute Joint Rigidity Test ===");
     
@@ -100,7 +100,7 @@ fn test_cart_fixed_pole_rotates() {
         position_limit: 3.0,
     };
     
-    let cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
+    let mut cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
     
     println!("\n=== Cart Fixed, Pole Rotates Test ===");
     
@@ -181,7 +181,7 @@ fn test_joint_anchor_calculation() {
         position_limit: 3.0,
     };
     
-    let cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
+    let mut cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
     
     println!("\n=== Joint Anchor Calculation Test ===");
     

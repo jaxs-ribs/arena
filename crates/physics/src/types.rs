@@ -503,6 +503,10 @@ pub struct Cylinder {
     pub material: Material,
     /// Body type (Dynamic, Kinematic, Static)
     pub body_type: BodyType,
+    /// Local transform from body frame (center of mass) to collision shape
+    pub shape_offset: Vec3,
+    /// Local transform from body frame to visual mesh origin
+    pub mesh_offset: Vec3,
 }
 
 #[repr(C)]

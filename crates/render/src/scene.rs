@@ -55,15 +55,6 @@ impl SceneManager {
         if !cylinders.is_empty() {
             let cylinder_data: Vec<CylinderGpu> = cylinders.iter().map(CylinderGpu::from).collect();
             
-            // DEBUG: Log what orientation data we're uploading to GPU
-            if !cylinder_data.is_empty() {
-                let gpu_orientation = cylinder_data[0].orientation;
-                let angle = 2.0 * gpu_orientation[2].asin(); // Extract angle from quaternion
-                tracing::info!("🔍 GPU upload: cylinder orientation=[{:.3}, {:.3}, {:.3}, {:.3}] angle={:.1}°", 
-                               gpu_orientation[0], gpu_orientation[1], gpu_orientation[2], gpu_orientation[3],
-                               angle.to_degrees());
-            }
-            
             queue.write_buffer(
                 &self.cylinders_buffer,
                 0,

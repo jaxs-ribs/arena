@@ -24,7 +24,7 @@ fn test_cart_stays_completely_fixed() {
         position_limit: 3.0,
     };
     
-    let cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
+    let mut cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
     
     let initial_cart_pos = sim.boxes[cartpole.cart_idx].pos;
     let initial_pole_angle = cartpole.get_pole_angle(&sim);
@@ -80,7 +80,7 @@ fn test_cart_moves_only_with_applied_force() {
     sim.planes[plane_idx].material.friction = 0.3;
     
     let config = CartPoleConfig::default();
-    let cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
+    let mut cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
     
     let initial_cart_x = sim.boxes[cartpole.cart_idx].pos.x;
     

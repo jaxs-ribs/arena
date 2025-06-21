@@ -94,12 +94,18 @@ impl CartPole {
         );
         
         // Create pole as dynamic body (affected by gravity)
-        let pole_idx = sim.add_cylinder_with_type(
+        // For CartPole: the mesh origin should be at the bottom for proper rendering
+        let shape_offset = Vec3::ZERO; // Shape stays at center of mass
+        let mesh_offset = Vec3::new(0.0, -pole_half_height, 0.0); // Mesh origin at bottom
+        
+        let pole_idx = sim.add_cylinder_with_offsets(
             pole_pos,
             config.pole_radius,
             pole_half_height,
             Vec3::ZERO,
-            crate::types::BodyType::Dynamic
+            crate::types::BodyType::Dynamic,
+            shape_offset,
+            mesh_offset
         );
         sim.cylinders[pole_idx].mass = config.pole_mass;
         

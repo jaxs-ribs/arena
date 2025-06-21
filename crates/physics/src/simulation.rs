@@ -193,9 +193,12 @@ impl PhysicsSim {
     pub fn step_cpu(&mut self) {
         let timestep = self.params.dt;
         
-        // CRITICAL: Solve constraints BEFORE integration to prevent joint drift
-        self.solve_physical_constraints();
+        // Apply forces and integrate velocities/positions
         self.apply_forces_and_integrate(timestep);
+        
+        // CRITICAL: Enforce constraints AFTER integration to fix any drift
+        self.solve_physical_constraints();
+        
         self.update_spatial_acceleration_structure();
         self.detect_and_resolve_all_collisions();
         self.apply_2d_constraints();
@@ -391,104 +394,84 @@ impl PhysicsSim {
         cylinder_idx: usize, 
         joint: &RevoluteJoint
     ) {
-        // Get the joint position in world space
-        let joint_world_pos = self.boxes[box_idx].pos + joint.anchor_a;
+        // Get cart state
+        let cart_pos = self.boxes[box_idx].pos;
+        let cart_vel = self.boxes[box_idx].vel;
         
-        // Calculate current state
-        let joint_to_pole_center = self.cylinders[cylinder_idx].pos - joint_world_pos;
-        let distance = joint_to_pole_center.length();
+        // Get the joint position in world space (top of cart)
+        let joint_world_pos = cart_pos + joint.anchor_a;
         
-        if distance > 0.001 {
-            // Current pole angle from vertical (0 = up, π/2 = horizontal)
-            let pole_angle = joint_to_pole_center.x.atan2(joint_to_pole_center.y);
-            
-            // Physics parameters
-            let gravity_magnitude = self.params.gravity.length(); // |g| = 9.81
-            let mass = self.cylinders[cylinder_idx].mass;
-            let pole_length = self.cylinders[cylinder_idx].half_height * 2.0;
-            let lever_arm = pole_length / 2.0; // Distance from joint to center of mass
-            
-            // Only gravitational torque for now: τ = m * g * L * sin(θ)
-            let gravity_torque = mass * gravity_magnitude * lever_arm * pole_angle.sin();
-            
-            // Moment of inertia for rod rotating about its end: I = (1/3) * m * L^2
-            let moment_of_inertia = (1.0 / 3.0) * mass * pole_length * pole_length;
-            
-            // Angular acceleration: α = τ / I
-            let angular_acceleration = gravity_torque / moment_of_inertia;
-            
-            // Update angular velocity around Z-axis (2D rotation)
-            self.cylinders[cylinder_idx].angular_vel.z += angular_acceleration * self.params.dt;
-            
-            // Calculate linear velocity from angular motion only
-            let angular_velocity = self.cylinders[cylinder_idx].angular_vel.z;
-            let tangential_velocity = Vec3::new(
-                -angular_velocity * joint_to_pole_center.y,  // tangent in x direction
-                angular_velocity * joint_to_pole_center.x,   // tangent in y direction  
-                0.0
-            );
-            
-            // Set pole's velocity (pure rotation for now)
-            self.cylinders[cylinder_idx].vel = tangential_velocity;
-            
-            // Very light damping for numerical stability
-            self.cylinders[cylinder_idx].angular_vel.z *= 0.9995;
-            
-            // Debug pendulum motion with cart influence
-            // if cart_velocity.x.abs() > 0.1 || angular_acceleration.abs() > 0.5 {
-            //     println!("🎯 CartPole: θ={:.2}° cart_v={:.2} cart_τ={:.3} grav_τ={:.3} total_τ={:.3}", 
-            //              pole_angle.to_degrees(), cart_velocity.x, cart_torque, 
-            //              gravity_torque, total_torque);
-            // }
+        // Physics parameters
+        let gravity_magnitude = self.params.gravity.length();
+        let mass = self.cylinders[cylinder_idx].mass;
+        let pole_length = self.cylinders[cylinder_idx].half_height * 2.0;
+        let lever_arm = pole_length / 2.0; // Distance from joint to center of mass
+        
+        // Get current pole position and calculate angle from it
+        let pole_pos = self.cylinders[cylinder_idx].pos;
+        let pole_offset = pole_pos - joint_world_pos;
+        
+        // Calculate current angle from actual pole position
+        let current_angle = pole_offset.x.atan2(pole_offset.y);
+        
+        // 1. Gravity torque for INVERTED pendulum (pole standing UP)
+        let gravity_torque = mass * gravity_magnitude * lever_arm * current_angle.sin();
+        
+        // 2. Cart acceleration effect
+        let cart_acceleration = if self.boxes[box_idx].body_type == BodyType::Kinematic {
+            cart_vel.x * 5.0
         } else {
-            // If pole is too close to joint, stop all motion
-            self.cylinders[cylinder_idx].vel = Vec3::ZERO;
-            self.cylinders[cylinder_idx].angular_vel = Vec3::ZERO;
-        }
+            0.0
+        };
+        let acceleration_torque = -mass * cart_acceleration * lever_arm * current_angle.cos();
         
-        // AFTER physics calculation, enforce the constraint that the joint anchor stays fixed.
-        // The anchor on the pole (b) is in its local space, so we must rotate it.
-        let pole_orientation = Quat::from_array(self.cylinders[cylinder_idx].orientation);
-        let world_anchor_b =
-            self.cylinders[cylinder_idx].pos + pole_orientation.mul_vec3(joint.anchor_b.into()).into();
-
-        let anchor_error = world_anchor_b - joint_world_pos;
-
-        // Correct pole's position to close the joint gap.
-        self.cylinders[cylinder_idx].pos -= anchor_error;
-
-        // Explicitly constrain the pole to the 2D plane.
+        // 3. Total torque
+        let total_torque = gravity_torque + acceleration_torque;
+        
+        // 4. Moment of inertia for rod about end
+        let moment_of_inertia = (1.0 / 3.0) * mass * pole_length * pole_length;
+        
+        // 5. Angular acceleration
+        let angular_acceleration = total_torque / moment_of_inertia;
+        
+        // 6. Update angular velocity
+        self.cylinders[cylinder_idx].angular_vel.z += angular_acceleration * self.params.dt;
+        
+        // 7. Apply damping
+        self.cylinders[cylinder_idx].angular_vel.z *= 0.998;
+        
+        // 8. Update angle
+        let new_angle = current_angle + self.cylinders[cylinder_idx].angular_vel.z * self.params.dt;
+        
+        // 9. Update orientation quaternion for rendering
+        let half_angle = new_angle * 0.5;
+        self.cylinders[cylinder_idx].orientation = [
+            0.0,
+            0.0,
+            half_angle.sin(),
+            half_angle.cos(),
+        ];
+        
+        // 10. ENFORCE POSITION CONSTRAINT: pole must be attached at joint
+        // Calculate where pole center MUST be based on joint position and angle
+        let direction = Vec3::new(new_angle.sin(), new_angle.cos(), 0.0);
+        let constrained_pole_center = joint_world_pos + direction * lever_arm;
+        
+        // 11. Hard constraint: directly set pole position
+        self.cylinders[cylinder_idx].pos = constrained_pole_center;
+        
+        // 12. Calculate pole velocity consistently with constraint
+        // Velocity at pole center = cart velocity + rotational component
+        let angular_vel_z = self.cylinders[cylinder_idx].angular_vel.z;
+        let tangent = Vec3::new(new_angle.cos(), -new_angle.sin(), 0.0);
+        let rotation_velocity = tangent * (lever_arm * angular_vel_z);
+        self.cylinders[cylinder_idx].vel = cart_vel + rotation_velocity;
+        
+        // 13. Constrain to 2D plane
         self.cylinders[cylinder_idx].pos.z = 0.0;
-        
-        // CRITICAL FIX: Ensure cylinder orientation matches the pole angle
-        // Calculate the current pole angle from the position
-        let final_joint_to_pole = self.cylinders[cylinder_idx].pos - joint_world_pos;
-        if final_joint_to_pole.length() > 0.001 {
-            let final_pole_angle = final_joint_to_pole.x.atan2(final_joint_to_pole.y);
-            
-            // Convert pole angle to quaternion rotation around Z-axis
-            // Note: We need negative angle because positive pole angle (tilting towards +X)
-            // requires negative Z rotation to tilt a Y-aligned cylinder correctly
-            let rotation_angle = -final_pole_angle;
-            let half_angle = rotation_angle * 0.5;
-            let sin_half = half_angle.sin();
-            let cos_half = half_angle.cos();
-            
-            // Set cylinder orientation to match the pole angle
-            self.cylinders[cylinder_idx].orientation = [
-                0.0,         // x
-                0.0,         // y
-                sin_half,    // z (rotation around z-axis)
-                cos_half,    // w
-            ];
-            
-            // DEBUG: Show orientation quaternion
-            if final_pole_angle.abs() > 0.1 {
-                println!("🟡 Orientation: angle={:.3}rad ({:.1}°), quat=[{:.3}, {:.3}, {:.3}, {:.3}]", 
-                         final_pole_angle, final_pole_angle.to_degrees(),
-                         0.0, 0.0, sin_half, cos_half);
-            }
-        }
+        self.cylinders[cylinder_idx].vel.z = 0.0;
+        self.cylinders[cylinder_idx].angular_vel.x = 0.0;
+        self.cylinders[cylinder_idx].angular_vel.y = 0.0;
     }
 }
 
@@ -607,6 +590,37 @@ impl PhysicsSim {
             angular_vel: Vec3::ZERO,
             material: Material::default(),
             body_type,
+            shape_offset: Vec3::ZERO, // Default: shape at center of mass
+            mesh_offset: Vec3::ZERO,  // Default: mesh origin at center of mass
+        };
+        self.cylinders.push(cylinder);
+        self.cylinders.len() - 1
+    }
+    
+    /// Add a cylinder with custom shape and mesh offsets
+    pub fn add_cylinder_with_offsets(
+        &mut self,
+        pos: Vec3,
+        radius: f32,
+        half_height: f32,
+        vel: Vec3,
+        body_type: BodyType,
+        shape_offset: Vec3,
+        mesh_offset: Vec3,
+    ) -> usize {
+        let mass = calculate_cylinder_mass(radius, half_height * 2.0, 1.0); // Default density
+        let cylinder = Cylinder {
+            pos,
+            vel,
+            radius,
+            half_height,
+            mass,
+            orientation: [0.0, 0.0, 0.0, 1.0], // Identity quaternion
+            angular_vel: Vec3::ZERO,
+            material: Material::default(),
+            body_type,
+            shape_offset,
+            mesh_offset,
         };
         self.cylinders.push(cylinder);
         self.cylinders.len() - 1

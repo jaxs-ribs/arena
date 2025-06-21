@@ -74,7 +74,7 @@ fn test_main_app_pipeline_detection() {
     let mut sim = PhysicsSim::new();
     sim.params.gravity = Vec3::new(0.0, -9.81, 0.0);
     
-    let cartpole = CartPole::new(&mut sim, Vec3::ZERO, CartPoleConfig::default());
+    let mut cartpole = CartPole::new(&mut sim, Vec3::ZERO, CartPoleConfig::default());
     
     // Test if GPU pipeline works with CartPole
     println!("🔵 Testing GPU compatibility...");

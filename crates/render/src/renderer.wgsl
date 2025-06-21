@@ -13,27 +13,24 @@ struct SceneCounts {
 }
 
 struct Sphere {
-    pos: vec3<f32>,
+    transform: mat4x4<f32>,
     radius: f32,
     friction: f32,
     restitution: f32,
-    _pad: vec2<f32>,
+    _pad: f32,
 }
 
 struct Box {
-    pos: vec3<f32>,
-    _pad1: f32,
+    transform: mat4x4<f32>,
     half_extents: vec3<f32>,
-    _pad2: f32,
+    _pad: f32,
 }
 
 struct Cylinder {
-    pos: vec3<f32>,
-    _pad_pos: f32,
+    transform: mat4x4<f32>,
     radius: f32,
     height: f32,
-    _pad_dims: vec2<f32>,
-    orientation: vec4<f32>,
+    _pad: vec2<f32>,
 }
 
 struct Plane {
@@ -65,33 +62,29 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> @builtin(position) vec4<
     return vec4<f32>(pos[vertex_index], 0.0, 1.0);
 }
 
+// Transform point from world space to object space
+fn world_to_object(p: vec3<f32>, transform: mat4x4<f32>) -> vec3<f32> {
+    let inv_transform = transpose(transform); // For orthogonal matrices (rotation + translation)
+    let p4 = inv_transform * vec4<f32>(p, 1.0);
+    return p4.xyz;
+}
+
 // SDF for sphere
-fn sdf_sphere(p: vec3<f32>, center: vec3<f32>, radius: f32) -> f32 {
-    return length(p - center) - radius;
+fn sdf_sphere(p: vec3<f32>, transform: mat4x4<f32>, radius: f32) -> f32 {
+    let local_p = world_to_object(p, transform);
+    return length(local_p) - radius;
 }
 
 // SDF for box
-fn sdf_box(p: vec3<f32>, center: vec3<f32>, half_extents: vec3<f32>) -> f32 {
-    let q = abs(p - center) - half_extents;
+fn sdf_box(p: vec3<f32>, transform: mat4x4<f32>, half_extents: vec3<f32>) -> f32 {
+    let local_p = world_to_object(p, transform);
+    let q = abs(local_p) - half_extents;
     return length(max(q, vec3<f32>(0.0))) + min(max(q.x, max(q.y, q.z)), 0.0);
 }
 
-// Quaternion utility functions
-fn quaternion_conjugate(q: vec4<f32>) -> vec4<f32> {
-    return vec4<f32>(-q.x, -q.y, -q.z, q.w);
-}
-
-fn quaternion_rotate_point(p: vec3<f32>, q: vec4<f32>) -> vec3<f32> {
-    let qv = q.xyz;
-    let qw = q.w;
-    return p + 2.0 * cross(qv, cross(qv, p) + qw * p);
-}
-
-// SDF for cylinder with orientation support
-fn sdf_cylinder(p: vec3<f32>, center: vec3<f32>, radius: f32, height: f32, orientation: vec4<f32>) -> f32 {
-    // Transform point to cylinder's local space by applying inverse rotation
-    let offset = p - center;
-    let local_p = quaternion_rotate_point(offset, quaternion_conjugate(orientation));
+// SDF for cylinder
+fn sdf_cylinder(p: vec3<f32>, transform: mat4x4<f32>, radius: f32, height: f32) -> f32 {
+    let local_p = world_to_object(p, transform);
     
     // Standard cylinder SDF in local space (cylinder aligned with Y-axis)
     let d = vec2<f32>(length(local_p.xz), abs(local_p.y)) - vec2<f32>(radius, height * 0.5);
@@ -139,7 +132,7 @@ fn scene_sdf_detailed(p: vec3<f32>) -> SceneResult {
     
     // Spheres
     for (var i = 0u; i < counts.spheres; i++) {
-        let sphere_dist = sdf_sphere(p, spheres[i].pos, spheres[i].radius);
+        let sphere_dist = sdf_sphere(p, spheres[i].transform, spheres[i].radius);
         if (sphere_dist < result.distance) {
             result.distance = sphere_dist;
             result.object_type = 0u;
@@ -149,7 +142,7 @@ fn scene_sdf_detailed(p: vec3<f32>) -> SceneResult {
     
     // Boxes
     for (var i = 0u; i < counts.boxes; i++) {
-        let box_dist = sdf_box(p, boxes[i].pos, boxes[i].half_extents);
+        let box_dist = sdf_box(p, boxes[i].transform, boxes[i].half_extents);
         if (box_dist < result.distance) {
             result.distance = box_dist;
             result.object_type = 1u;
@@ -159,7 +152,7 @@ fn scene_sdf_detailed(p: vec3<f32>) -> SceneResult {
     
     // Cylinders
     for (var i = 0u; i < counts.cylinders; i++) {
-        let cylinder_dist = sdf_cylinder(p, cylinders[i].pos, cylinders[i].radius, cylinders[i].height, cylinders[i].orientation);
+        let cylinder_dist = sdf_cylinder(p, cylinders[i].transform, cylinders[i].radius, cylinders[i].height);
         if (cylinder_dist < result.distance) {
             result.distance = cylinder_dist;
             result.object_type = 2u;

@@ -62,7 +62,7 @@ fn test_pole_should_fall_naturally_without_control() {
         position_limit: 5.0,
     };
     
-    let cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
+    let mut cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
     
     // Record initial pole angle
     let initial_angle = cartpole.get_pole_angle(&sim);

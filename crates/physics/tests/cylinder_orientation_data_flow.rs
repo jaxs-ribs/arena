@@ -11,7 +11,7 @@ fn test_physics_orientation_updates() {
         initial_angle: std::f32::consts::PI / 4.0, // 45 degrees
         ..Default::default()
     };
-    let cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
+    let mut cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
     
     // Initial orientation
     let initial_orientation = sim.cylinders[cartpole.pole_idx].orientation;
@@ -95,7 +95,7 @@ fn test_cartpole_physics_orientation_pipeline() {
         initial_angle: std::f32::consts::PI / 6.0, // 30 degrees
         ..Default::default()
     };
-    let cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
+    let mut cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
     
     // Record initial state
     let initial_physics_orientation = sim.cylinders[cartpole.pole_idx].orientation;

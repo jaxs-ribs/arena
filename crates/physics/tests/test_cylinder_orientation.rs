@@ -1,9 +1,13 @@
 use glam::Quat;
-use physics::{Cylinder, Material, Vec3};
+use physics::{PhysicsSim, Vec3};
+use physics::types::BodyType;
 
 #[test]
 fn test_cylinder_orientation_storage() {
     println!("\n=== Testing Cylinder Orientation Storage ===\n");
+    
+    // Create a physics simulation
+    let mut sim = PhysicsSim::new();
     
     // Create a 45-degree rotation around Y axis
     let test_orientation = Quat::from_rotation_y(std::f32::consts::PI / 4.0);
@@ -11,27 +15,34 @@ fn test_cylinder_orientation_storage() {
     println!("   [{:.3}, {:.3}, {:.3}, {:.3}]", 
              test_orientation.x, test_orientation.y, test_orientation.z, test_orientation.w);
     
-    // Create a cylinder with this orientation
-    let cylinder = Cylinder {
-        center: Vec3::new(0.0, 0.0, 0.0),
-        orientation: test_orientation,
-        radius: 0.5,
-        half_height: 1.0,
-        velocity: Vec3::new(0.0, 0.0, 0.0),
-        angular_velocity: Vec3::new(0.0, 0.0, 0.0),
-        mass: 1.0,
-        moment_of_inertia: Vec3::new(1.0, 1.0, 1.0),
-        material: Material::new(0.2, 0.3),
-        color: [1.0, 0.0, 0.0],
-    };
+    // Create a cylinder
+    let cylinder_idx = sim.add_cylinder_with_type(
+        Vec3::new(0.0, 0.0, 0.0),
+        0.5,  // radius
+        1.0,  // half_height
+        Vec3::new(0.0, 0.0, 0.0),
+        BodyType::Dynamic
+    );
+    
+    // Set the orientation
+    sim.cylinders[cylinder_idx].orientation = [
+        test_orientation.x,
+        test_orientation.y,
+        test_orientation.z,
+        test_orientation.w
+    ];
     
     println!("\n2. Stored in Cylinder struct:");
+    let cylinder = &sim.cylinders[cylinder_idx];
     println!("   [{:.3}, {:.3}, {:.3}, {:.3}]", 
-             cylinder.orientation.x, cylinder.orientation.y, 
-             cylinder.orientation.z, cylinder.orientation.w);
+             cylinder.orientation[0], cylinder.orientation[1], 
+             cylinder.orientation[2], cylinder.orientation[3]);
     
     // Verify the orientation is preserved
-    assert_eq!(cylinder.orientation, test_orientation);
+    assert_eq!(cylinder.orientation[0], test_orientation.x);
+    assert_eq!(cylinder.orientation[1], test_orientation.y);
+    assert_eq!(cylinder.orientation[2], test_orientation.z);
+    assert_eq!(cylinder.orientation[3], test_orientation.w);
     println!("\n✅ Orientation correctly stored in Cylinder struct!");
     
     // Test the expected rotation matrix

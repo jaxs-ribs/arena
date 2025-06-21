@@ -24,7 +24,7 @@ fn test_cartpole_physics_complete_validation() {
         position_limit: 3.0,
     };
     
-    let cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
+    let mut cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
     
     let initial_cart_pos = sim.boxes[cartpole.cart_idx].pos;
     let initial_pole_angle = cartpole.get_pole_angle(&sim);

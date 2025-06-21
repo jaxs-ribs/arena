@@ -64,7 +64,7 @@ fn test_cart_stability_without_force() {
         position_limit: 3.0,
     };
     
-    let cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
+    let mut cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
     
     // Check cart friction is set properly
     let cart_friction = sim.boxes[cartpole.cart_idx].material.friction;
@@ -112,7 +112,7 @@ fn test_pole_falling_dynamics() {
         position_limit: 3.0,
     };
     
-    let cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
+    let mut cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
     
     // Track pole angle over time
     let mut angle_history = Vec::new();
@@ -160,7 +160,7 @@ fn test_revolute_joint_integrity() {
     sim.add_plane(Vec3::new(0.0, 1.0, 0.0), 0.0, Vec2::new(10.0, 10.0));
     
     let config = CartPoleConfig::default();
-    let cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
+    let mut cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
     
     // Track joint separation over time
     let mut max_separation = 0.0f32;
@@ -293,7 +293,7 @@ fn test_2d_motion_constraints() {
     sim.add_plane(Vec3::new(0.0, 1.0, 0.0), 0.0, Vec2::new(10.0, 10.0));
     
     let config = CartPoleConfig::default();
-    let cartpole = CartPole::new(&mut sim, Vec3::new(0.0, 0.0, 1.0), config); // Start off-center in Z
+    let mut cartpole = CartPole::new(&mut sim, Vec3::new(0.0, 0.0, 1.0), config); // Start off-center in Z
     
     // Apply some diagonal force that would cause 3D motion
     sim.set_force(cartpole.cart_idx, [10.0, 10.0]);
@@ -344,7 +344,7 @@ fn test_force_application() {
         position_limit: 3.0,
     };
     
-    let cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
+    let mut cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
     
     let initial_x = sim.boxes[cartpole.cart_idx].pos.x;
     

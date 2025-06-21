@@ -25,7 +25,7 @@ fn test_simple_cartpole_scene() {
         position_limit: 3.0,
     };
     
-    let cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
+    let mut cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
     
     // Print initial state
     println!("\nInitial state:");

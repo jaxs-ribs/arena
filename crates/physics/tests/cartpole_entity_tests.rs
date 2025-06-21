@@ -12,7 +12,7 @@ fn test_cartpole_creation() {
     let mut sim = PhysicsSim::new();
     let config = CartPoleConfig::default();
     
-    let cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
+    let mut cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
     
     // Verify components were created
     assert!(cartpole.cart_idx < sim.boxes.len());
@@ -34,7 +34,7 @@ fn test_cartpole_force_application() {
         ..Default::default()
     };
     
-    let cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
+    let mut cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
     
     // Apply force to the right
     cartpole.apply_force(&mut sim, 1.0);
@@ -115,7 +115,7 @@ fn test_cartpole_state_vector() {
     let mut sim = PhysicsSim::new();
     let config = CartPoleConfig::default();
     
-    let cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
+    let mut cartpole = CartPole::new(&mut sim, Vec3::ZERO, config);
     
     let state = cartpole.get_state(&sim);
     

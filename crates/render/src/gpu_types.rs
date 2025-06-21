@@ -25,25 +25,28 @@ pub struct CameraUniform {
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub struct SphereGpu {
-    /// Sphere position
-    pub pos: [f32; 3],
+    /// Transform matrix (includes position and rotation)
+    pub transform: [[f32; 4]; 4],
     /// Sphere radius
     pub radius: f32,
     /// Material friction coefficient
     pub friction: f32,
     /// Material restitution coefficient
     pub restitution: f32,
-    pub _pad: [f32; 2],
+    pub _pad: f32,
 }
 
 impl From<&Sphere> for SphereGpu {
     fn from(sphere: &Sphere) -> Self {
+        // Get transform matrix from physics module
+        let transform = physics::transform::to_transform_matrix(sphere.pos, sphere.orientation);
+        
         Self {
-            pos: sphere.pos.into(),
+            transform,
             radius: sphere.radius,
             friction: sphere.material.friction,
             restitution: sphere.material.restitution,
-            _pad: [0.0; 2],
+            _pad: 0.0,
         }
     }
 }
@@ -52,21 +55,22 @@ impl From<&Sphere> for SphereGpu {
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub struct BoxGpu {
-    /// Box centre position
-    pub pos: [f32; 3],
-    pub _pad1: f32,
+    /// Transform matrix (includes position and rotation)
+    pub transform: [[f32; 4]; 4],
     /// Half extents of the box
     pub half_extents: [f32; 3],
-    pub _pad2: f32,
+    pub _pad: f32,
 }
 
 impl From<&BoxBody> for BoxGpu {
     fn from(box_body: &BoxBody) -> Self {
+        // Get transform matrix from physics module
+        let transform = physics::transform::to_transform_matrix(box_body.pos, box_body.orientation);
+        
         Self {
-            pos: box_body.pos.into(),
+            transform,
             half_extents: box_body.half_extents.into(),
-            _pad1: 0.0,
-            _pad2: 0.0,
+            _pad: 0.0,
         }
     }
 }
@@ -75,30 +79,33 @@ impl From<&BoxBody> for BoxGpu {
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub struct CylinderGpu {
-    /// Cylinder centre position
-    pub pos: [f32; 3],
-    pub _pad_pos: f32,
+    /// Transform matrix (includes position and rotation)
+    pub transform: [[f32; 4]; 4],
     /// Cylinder radius
     pub radius: f32,
     /// Height of the cylinder
     pub height: f32,
-    pub _pad_dims: [f32; 2],
-    /// Orientation quaternion (x, y, z, w)
-    pub orientation: [f32; 4],
+    pub _pad: [f32; 2],
 }
 
 impl From<&Cylinder> for CylinderGpu {
     fn from(cylinder: &Cylinder) -> Self {
+        // Use mesh offset to properly position the visual representation
+        let transform = physics::transform::to_transform_matrix_with_offset(
+            cylinder.pos, 
+            cylinder.orientation,
+            cylinder.mesh_offset
+        );
+        
         Self {
-            pos: cylinder.pos.into(),
-            _pad_pos: 0.0,
+            transform,
             radius: cylinder.radius,
             height: cylinder.half_height * 2.0,
-            _pad_dims: [0.0; 2],
-            orientation: cylinder.orientation,
+            _pad: [0.0; 2],
         }
     }
 }
+
 
 /// GPU representation of a plane primitive
 #[repr(C)]

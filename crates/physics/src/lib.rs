@@ -55,6 +55,7 @@ mod collision;
 mod gpu_executor;
 mod integrator;
 mod spatial_grid_ext;
+pub mod transform;
 
 // Re-export main types for convenient access
 pub use cartpole::{CartPole, CartPoleConfig, CartPoleGrid};
